@@ -129,7 +129,8 @@ class AdminController extends Controller
                         $pending_activations = DB::table('companies')->where('status', 'pending')->count();
                         $total_virtual_accounts = DB::table('virtual_accounts')->count();
 
-                        $users_info = [
+                        try {
+                            $users_info = [
                             // New payment gateway metrics
                             'total_revenue' => $total_revenue,
                             'total_transactions' => $total_transactions,
@@ -200,7 +201,25 @@ class AdminController extends Controller
                                 DB::table('cable')->where('plan_status', 0)->count() +
                                 DB::table('bill')->where('plan_status', 0)->count() +
                                 DB::table('campaigns')->where('payout_status', 'pending')->where('status', 'closed')->count(),
-                        ];
+                            ];
+                        } catch (\Exception $e) {
+                            // If legacy tables don't exist, return payment gateway metrics only
+                            $users_info = [
+                                'total_revenue' => $total_revenue,
+                                'total_transactions' => $total_transactions,
+                                'successful_transactions' => $successful_transactions,
+                                'failed_transactions' => $failed_transactions,
+                                'pending_settlement' => $pending_settlement,
+                                'active_businesses' => $active_businesses,
+                                'registered_businesses' => $registered_businesses,
+                                'pending_activations' => $pending_activations,
+                                'total_virtual_accounts' => $total_virtual_accounts,
+                                'wallet_balance' => 0,
+                                'ref_balance' => 0,
+                                'all_user' => DB::table('users')->count(),
+                                'total_pending' => 0,
+                            ];
+                        }
 
                         return response()->json([
                             'status' => 'success',
