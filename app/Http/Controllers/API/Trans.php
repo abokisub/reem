@@ -357,8 +357,7 @@ class Trans extends Controller
 
                 $search = strtolower($request->search);
                 $query = DB::table('transactions')
-                    ->where('company_id', $user->active_company_id)
-                    ->where('channel', 'virtual_account');
+                    ->where('company_id', $user->active_company_id);
 
                 if (!empty($search)) {
                     $query->where(function ($q) use ($search) {
