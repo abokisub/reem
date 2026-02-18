@@ -111,6 +111,13 @@ class User extends Authenticatable
     ];
 
     /**
+     * The accessors to append to the model's array form.
+     *
+     * @var array
+     */
+    protected $appends = ['balance'];
+
+    /**
      * Get the company associated with the user
      */
     public function company(): HasOne
@@ -124,5 +131,27 @@ class User extends Authenticatable
     public function hasCompany(): bool
     {
         return $this->company()->exists();
+    }
+
+    /**
+     * Get the user's balance.
+     * For company accounts, returns the company wallet balance.
+     * For individual accounts, returns the user's balance.
+     *
+     * @return float
+     */
+    public function getBalanceAttribute(): float
+    {
+        // Check if user has an active company
+        if ($this->active_company_id) {
+            $wallet = CompanyWallet::where('company_id', $this->active_company_id)
+                ->where('currency', 'NGN')
+                ->first();
+            
+            return $wallet ? (float) $wallet->balance : 0.00;
+        }
+
+        // For individual accounts, return user balance from database
+        return (float) ($this->attributes['balance'] ?? 0.00);
     }
 }
