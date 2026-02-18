@@ -171,13 +171,25 @@ class TransferPurchase extends Controller
                 $charge = $this->calculateTransferCharge($amount, $lockedUser->active_company_id);
                 $total_deduction = $amount + $charge;
 
-                if ($lockedUser->balance < $total_deduction) {
-                    return ['status' => 'fail', 'message' => 'Insufficient Funds', 'code' => 403];
+                // Get company wallet with lock
+                $companyWallet = \App\Models\CompanyWallet::where('company_id', $lockedUser->active_company_id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if (!$companyWallet) {
+                    return ['status' => 'fail', 'message' => 'Company wallet not found', 'code' => 403];
                 }
 
-                // Deduct Balance
-                $new_wallet = $lockedUser->balance - $total_deduction;
-                DB::table('users')->where('id', $lockedUser->id)->update(['balance' => $new_wallet]);
+                if ($companyWallet->balance < $total_deduction) {
+                    return ['status' => 'fail', 'message' => 'Insufficient Funds. Your current wallet balance is ₦' . number_format($companyWallet->balance, 2), 'code' => 403];
+                }
+
+                // Store old balance for transaction record
+                $old_balance = $companyWallet->balance;
+                
+                // Deduct from company wallet
+                $companyWallet->debit($total_deduction);
+                $new_wallet = $companyWallet->balance;
 
                 // Record Transaction (PENDING)
                 \App\Models\Transaction::create([
@@ -194,7 +206,7 @@ class TransferPurchase extends Controller
                     'recipient_account_name' => $request->account_name,
                     'description' => $request->narration,
                     'status' => 'pending',
-                    'balance_before' => $lockedUser->balance,
+                    'balance_before' => $old_balance,
                     'balance_after' => $new_wallet,
                     'metadata' => [
                         'system' => $system,
@@ -210,7 +222,7 @@ class TransferPurchase extends Controller
                     'amount' => $total_deduction,
                     'message' => 'Bank Transfer to ' . $request->account_name . ' (' . $request->account_number . ') - ' . $request->narration,
                     'phone_account' => $request->account_number,
-                    'oldbal' => $lockedUser->balance,
+                    'oldbal' => $old_balance,
                     'newbal' => $new_wallet,
                     'habukhan_date' => $this->system_date(),
                     'plan_status' => 2, // Processing
@@ -290,10 +302,18 @@ class TransferPurchase extends Controller
                 // 3. REFUND ON FAILURE
                 Log::error("TransferPurchase: API Call Failed, refunding user. Error: " . $e->getMessage());
 
-                DB::transaction(function () use ($transactionResult, $transid, $e) {
-                    $u = DB::table('users')->where('id', $transactionResult['user_id'])->lockForUpdate()->first();
-                    $new_bal = $u->balance + $transactionResult['total_deduction'];
-                    DB::table('users')->where('id', $u->id)->update(['balance' => $new_bal]);
+                DB::transaction(function () use ($user, $transactionResult, $transid, $e) {
+                    // Refund to company wallet
+                    $companyWallet = \App\Models\CompanyWallet::where('company_id', $user->active_company_id)
+                        ->lockForUpdate()
+                        ->first();
+                    
+                    if ($companyWallet) {
+                        $companyWallet->credit($transactionResult['total_deduction']);
+                        $new_bal = $companyWallet->balance;
+                    } else {
+                        $new_bal = 0;
+                    }
 
                     DB::table('transactions')->where('reference', $transid)->update([
                         'status' => 'failed',
