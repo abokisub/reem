@@ -161,12 +161,11 @@ class PalmPaySignature
             // Handle arrays/objects
             if (is_array($value) || is_object($value)) {
                 $value = json_encode($value);
-            } else {
-                // Trim leading and trailing spaces from all non-empty parameter values
-                // as required by PalmPay documentation: "Remove any leading and trailing spaces 
-                // from all non-empty parameter values in the request body"
-                $value = trim($value);
             }
+            
+            // Convert value to string and preserve it as-is
+            // PalmPay sends values exactly as they are, including spaces
+            $value = (string) $value;
 
             $parts[] = $key . '=' . $value;
         }
