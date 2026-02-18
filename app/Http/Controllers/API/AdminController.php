@@ -118,7 +118,10 @@ class AdminController extends Controller
                         $total_transactions = DB::table('transactions')->count();
                         $successful_transactions = DB::table('transactions')->where('status', 'success')->count();
                         $failed_transactions = DB::table('transactions')->where('status', 'failed')->count();
-                        $pending_settlement = DB::table('settlement_queue')->where('status', 'pending')->count();
+                        $pending_settlement = 0;
+                        if (Schema::hasTable('settlement_queue')) {
+                            $pending_settlement = DB::table('settlement_queue')->where('status', 'pending')->count();
+                        }
 
                         // Get business statistics
                         $active_businesses = DB::table('companies')->where('status', 'active')->count();
