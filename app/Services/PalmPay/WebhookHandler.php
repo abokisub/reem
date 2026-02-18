@@ -191,21 +191,75 @@ class WebhookHandler
             // Update webhook with transaction
             $webhook->update(['transaction_id' => $transaction->id]);
 
-            // Credit company wallet
-            $wallet = CompanyWallet::where('company_id', $virtualAccount->company_id)
-                ->where('currency', 'NGN')
-                ->lockForUpdate()
-                ->firstOrFail();
+            // Check if settlement is enabled
+            $settings = DB::table('settings')->first();
+            $company = Company::find($virtualAccount->company_id);
+            
+            $settlementEnabled = $settings && $settings->auto_settlement_enabled;
+            $useCustomSettlement = $company && $company->custom_settlement_enabled;
+            
+            if ($settlementEnabled) {
+                // Get settlement configuration
+                $delayHours = $useCustomSettlement ? 
+                    (int) ($company->custom_settlement_delay_hours ?? 24) : 
+                    (int) ($settings->settlement_delay_hours ?? 24);
+                
+                $skipWeekends = (bool) ($settings->settlement_skip_weekends ?? true);
+                $skipHolidays = (bool) ($settings->settlement_skip_holidays ?? true);
+                $settlementTime = $settings->settlement_time ?? '02:00:00';
+                
+                // Calculate settlement date
+                $scheduledDate = \App\Console\Commands\ProcessSettlements::calculateSettlementDate(
+                    now(),
+                    $delayHours,
+                    $skipWeekends,
+                    $skipHolidays,
+                    $settlementTime
+                );
+                
+                // Queue for settlement
+                DB::table('settlement_queue')->insert([
+                    'company_id' => $virtualAccount->company_id,
+                    'transaction_id' => $transaction->id,
+                    'amount' => $amount,
+                    'status' => 'pending',
+                    'transaction_date' => now(),
+                    'scheduled_settlement_date' => $scheduledDate,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                
+                // Update transaction metadata
+                $transaction->update([
+                    'metadata' => array_merge($transaction->metadata ?? [], [
+                        'settlement_status' => 'pending',
+                        'scheduled_settlement_date' => $scheduledDate->toDateTimeString(),
+                        'settlement_delay_hours' => $delayHours,
+                    ]),
+                ]);
+                
+                Log::info('Transaction Queued for Settlement', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'amount' => $amount,
+                    'scheduled_date' => $scheduledDate->toDateTimeString(),
+                ]);
+            } else {
+                // Immediate settlement (old behavior)
+                $wallet = CompanyWallet::where('company_id', $virtualAccount->company_id)
+                    ->where('currency', 'NGN')
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            $balanceBefore = $wallet->balance;
-            $wallet->credit($amount);
-            $wallet->save();
+                $balanceBefore = $wallet->balance;
+                $wallet->credit($amount);
+                $wallet->save();
 
-            // Update transaction balances
-            $transaction->update([
-                'balance_before' => $balanceBefore,
-                'balance_after' => $wallet->balance,
-            ]);
+                // Update transaction balances
+                $transaction->update([
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $wallet->balance,
+                ]);
+            }
 
             Log::info('Virtual Account Credited', [
                 'transaction_id' => $transaction->transaction_id,

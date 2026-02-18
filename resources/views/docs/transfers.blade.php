@@ -22,7 +22,10 @@
     <header>
         <div class="container">
             <h1>Transfers</h1>
-            <p>Send money to bank accounts</p>
+            <p>Send money to bank accounts via PalmPay network</p>
+            <p style="margin-top: 10px; font-size: 0.95rem; opacity: 0.9;">
+                <strong>🏦 Provider:</strong> PalmPay | <strong>💰 Fee:</strong> ₦50 per transfer | <strong>⚡ Speed:</strong> Instant
+            </p>
         </div>
     </header>
 
@@ -34,6 +37,11 @@
 
         <section class="section">
             <h2>Initiate Transfer</h2>
+            
+            <div class="alert info" style="background: #e8f5e9; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #4caf50;">
+                <strong>🏦 PalmPay Network:</strong> All transfers are processed through PalmPay's infrastructure, supporting all Nigerian banks with instant settlement. Transfer fee: ₦50 per transaction.
+            </div>
+            
             <div class="code-block"><code>POST /v1/transfers
 Content-Type: application/json
 Authorization: Bearer YOUR_SECRET_KEY

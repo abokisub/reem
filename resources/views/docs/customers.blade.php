@@ -24,7 +24,10 @@
     <header>
         <div class="container">
             <h1>Customers</h1>
-            <p>Manage your end-users</p>
+            <p>Manage your end-users with PalmPay KYC verification</p>
+            <p style="margin-top: 10px; font-size: 0.95rem; opacity: 0.9;">
+                <strong>🏦 Provider:</strong> PalmPay | <strong>🔐 KYC:</strong> BVN & NIN Verification
+            </p>
         </div>
     </header>
 
@@ -39,8 +42,18 @@
             <p>Customers are automatically created when you create virtual accounts. You can also create customers separately if needed.</p>
 
             <div class="alert info">
-                <strong>💡 Recommended:</strong> Use the Virtual Accounts endpoint directly. It will create customers automatically.
+                <strong>🏦 PalmPay KYC Integration:</strong> All customers are verified using PalmPay's BVN/NIN verification system. This ensures compliance with CBN regulations and enables higher transaction limits.
             </div>
+
+            <div class="alert info">
+                <strong>💡 Recommended:</strong> Use the Virtual Accounts endpoint directly. It will create customers automatically with KYC verification.
+            </div>
+
+            <h3>KYC Tiers</h3>
+            <ul style="margin-left: 20px; margin-top: 10px;">
+                <li><strong>Tier 1 (BVN):</strong> ₦300,000 daily limit - Requires BVN verification</li>
+                <li><strong>Tier 3 (NIN):</strong> ₦5,000,000 daily limit - Requires NIN verification</li>
+            </ul>
         </section>
 
         <section class="section">

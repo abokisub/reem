@@ -167,6 +167,30 @@ class AppController extends Controller
             $cid = $user->active_company_id ?? 1;
             $settings = $this->core($cid);
 
+            // Get company-specific settlement settings (safe check for columns)
+            $company = DB::table('companies')->where('id', $cid)->first();
+            $useCustomSettlement = false;
+            $customDelayHours = 24;
+            $customMinimum = 100.00;
+            
+            // Check if settlement columns exist (after migration)
+            if ($company && property_exists($company, 'custom_settlement_enabled')) {
+                $useCustomSettlement = $company->custom_settlement_enabled;
+                $customDelayHours = $company->custom_settlement_delay_hours ?? 24;
+                $customMinimum = $company->custom_settlement_minimum ?? 100.00;
+            }
+
+            // Build settlement config (safe check for settings columns)
+            $settlementConfig = [
+                'enabled' => property_exists($settings, 'auto_settlement_enabled') ? (bool) $settings->auto_settlement_enabled : true,
+                'delay_hours' => $useCustomSettlement ? (int) $customDelayHours : (property_exists($settings, 'settlement_delay_hours') ? (int) $settings->settlement_delay_hours : 24),
+                'skip_weekends' => property_exists($settings, 'settlement_skip_weekends') ? (bool) $settings->settlement_skip_weekends : true,
+                'skip_holidays' => property_exists($settings, 'settlement_skip_holidays') ? (bool) $settings->settlement_skip_holidays : true,
+                'settlement_time' => property_exists($settings, 'settlement_time') ? $settings->settlement_time : '02:00:00',
+                'minimum_amount' => $useCustomSettlement ? (float) $customMinimum : (property_exists($settings, 'settlement_minimum_amount') ? (float) $settings->settlement_minimum_amount : 100.00),
+                'description' => 'Transactions are visible immediately but funds settle after the configured delay. PalmPay follows T+1 settlement (next business day at 2am, excluding weekends and holidays).',
+            ];
+
             return response()->json([
                 'status' => 'success',
                 'data' => [
@@ -194,6 +218,8 @@ class AppController extends Controller
                         'value' => (float) ($settings->payout_palmpay_charge_value ?? 15),
                         'cap' => $settings->payout_palmpay_charge_cap ? (float) $settings->payout_palmpay_charge_cap : null,
                     ],
+                    // Settlement Rules
+                    'settlement' => $settlementConfig,
                 ]
             ]);
         } else {

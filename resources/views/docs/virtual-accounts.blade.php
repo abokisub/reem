@@ -37,7 +37,10 @@
     <header>
         <div class="container">
             <h1>Virtual Accounts</h1>
-            <p>Create and manage virtual accounts for your customers</p>
+            <p>Create and manage PalmPay virtual accounts for your customers</p>
+            <p style="margin-top: 10px; font-size: 0.95rem; opacity: 0.9;">
+                <strong>🏦 Provider:</strong> PalmPay | <strong>⏰ Settlement:</strong> T+1 (Next business day at 2:00 AM)
+            </p>
         </div>
     </header>
 
@@ -51,15 +54,21 @@
 
         <section class="section">
             <h2>Overview</h2>
-            <p>Virtual accounts allow your customers to receive payments via bank transfer. Each customer gets a unique account number that automatically credits their balance when they receive payments.</p>
+            <p>Virtual accounts allow your customers to receive payments via bank transfer. Each customer gets a unique PalmPay account number that automatically credits their balance when they receive payments.</p>
+
+            <div class="alert info">
+                <strong>🏦 PalmPay Integration:</strong> All virtual accounts are created on PalmPay's infrastructure, providing reliable payment processing with T+1 settlement (funds settle next business day at 2:00 AM, excluding weekends and holidays).
+            </div>
 
             <h3>Key Features</h3>
             <ul style="margin-left: 20px; margin-top: 10px;">
-                <li>✅ Instant account creation</li>
+                <li>✅ Instant PalmPay account creation</li>
                 <li>✅ Real-time payment notifications via webhooks</li>
-                <li>✅ Support for multiple banks (PalmPay, Blooms MFB)</li>
+                <li>✅ T+1 settlement schedule (configurable)</li>
+                <li>✅ BVN/NIN verification for KYC compliance</li>
                 <li>✅ Static and dynamic accounts</li>
                 <li>✅ Automatic customer deduplication</li>
+                <li>✅ Tier 1 (₦300K limit) and Tier 3 (₦5M limit) support</li>
             </ul>
         </section>
 

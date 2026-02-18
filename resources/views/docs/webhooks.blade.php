@@ -30,7 +30,10 @@
     <header>
         <div class="container">
             <h1>Webhooks</h1>
-            <p>Receive real-time notifications for payment events</p>
+            <p>Receive real-time notifications for PalmPay payment events</p>
+            <p style="margin-top: 10px; font-size: 0.95rem; opacity: 0.9;">
+                <strong>🏦 Provider:</strong> PalmPay | <strong>🔔 Events:</strong> Deposits, Transfers, KYC Updates
+            </p>
         </div>
     </header>
 
@@ -46,13 +49,18 @@
             <h2>Overview</h2>
             <p>Webhooks allow you to receive real-time notifications when events occur in your PointPay account. Instead of polling our API, we'll send HTTP POST requests to your server when important events happen.</p>
 
+            <div class="alert info">
+                <strong>🏦 PalmPay Integration:</strong> All webhook events are triggered by PalmPay's real-time payment processing system. This ensures you receive instant notifications for deposits, transfers, and KYC updates.
+            </div>
+
             <h3>Common Use Cases</h3>
             <ul style="margin-left: 20px; margin-top: 10px;">
-                <li>✅ Customer receives payment to virtual account</li>
-                <li>✅ Transfer completed successfully</li>
+                <li>✅ Customer receives payment to PalmPay virtual account</li>
+                <li>✅ Transfer completed successfully via PalmPay</li>
                 <li>✅ Transfer failed</li>
                 <li>✅ Account balance updated</li>
-                <li>✅ KYC status changed</li>
+                <li>✅ KYC status changed (BVN/NIN verification)</li>
+                <li>✅ Settlement processed (T+1 schedule)</li>
             </ul>
         </section>
 

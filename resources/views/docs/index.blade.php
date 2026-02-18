@@ -59,6 +59,10 @@
             <h2>Getting Started</h2>
             <p>Welcome to the PointPay API documentation. This guide will help you integrate our payment gateway into your application.</p>
             
+            <div class="alert info" style="background: #e8f5e9; padding: 15px; border-radius: 5px; margin: 15px 0; border-left: 4px solid #4caf50;">
+                <strong>🏦 Powered by PalmPay:</strong> PointPay uses PalmPay as the unified provider for all services - virtual accounts, identity verification (BVN/NIN), and bank transfers. One integration, three powerful features.
+            </div>
+
             <h3>Quick Start</h3>
             <ol style="margin-left: 20px; margin-top: 10px;">
                 <li>Sign up for a PointPay account at <a href="https://app.pointwave.ng">app.pointwave.ng</a></li>
@@ -140,29 +144,32 @@ Idempotency-Key: unique-request-id (for POST/PUT)</code>
 
         <section class="section">
             <h2>Core Endpoints</h2>
+            
+            <h3>🏦 PalmPay Integration</h3>
+            <p style="margin-bottom: 20px;">All endpoints below are powered by PalmPay's infrastructure, providing reliable and secure payment processing.</p>
 
             <div class="endpoint">
                 <span class="method post">POST</span>
                 <code>/v1/customers</code>
-                <p style="margin-top: 10px;">Create a new customer</p>
+                <p style="margin-top: 10px;">Create a new customer with BVN/NIN verification (PalmPay KYC)</p>
             </div>
 
             <div class="endpoint">
                 <span class="method post">POST</span>
                 <code>/v1/virtual-accounts</code>
-                <p style="margin-top: 10px;">Create a virtual account for a customer</p>
+                <p style="margin-top: 10px;">Create a PalmPay virtual account for collections</p>
             </div>
 
             <div class="endpoint">
                 <span class="method post">POST</span>
                 <code>/v1/transfers</code>
-                <p style="margin-top: 10px;">Initiate a bank transfer</p>
+                <p style="margin-top: 10px;">Initiate bank transfer via PalmPay network</p>
             </div>
 
             <div class="endpoint">
                 <span class="method get">GET</span>
                 <code>/v1/transactions</code>
-                <p style="margin-top: 10px;">Get transaction history</p>
+                <p style="margin-top: 10px;">Get transaction history across all PalmPay services</p>
             </div>
         </section>
 

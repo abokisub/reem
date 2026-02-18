@@ -149,6 +149,12 @@ Route::get('/secure/discount/banks', [AppController::class, 'getBankCharges']); 
 Route::get('/secure/beneficiaries', [App\Http\Controllers\API\BeneficiaryController::class, 'index']); // New: Source of Truth for Beneficiaries
 Route::post('/secure/beneficiaries/{id}/toggle-favorite', [App\Http\Controllers\API\BeneficiaryController::class, 'toggleFavorite']);
 Route::delete('/secure/beneficiaries/{id}', [App\Http\Controllers\API\BeneficiaryController::class, 'destroy']);
+
+// Company Logs
+Route::get('/secure/webhooks', [App\Http\Controllers\API\CompanyLogsController::class, 'getWebhooks']);
+Route::get('/secure/api/requests', [App\Http\Controllers\API\CompanyLogsController::class, 'getApiRequests']);
+Route::get('/secure/audit/logs', [App\Http\Controllers\API\CompanyLogsController::class, 'getAuditLogs']);
+
 Route::get('/secure/virtualaccounts/status', [AppController::class, 'getVirtualAccountStatus']);
 // Consolidated Lock Routes
 Route::post('/secure/lock/airtime', [ServiceLockController::class, 'lockAirtime']);
@@ -738,6 +744,17 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
         Route::post('/mark-all-as-read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAllAsRead']);
         Route::post('/{id}/mark-as-read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAsRead']);
         Route::delete('/{id}', [\App\Http\Controllers\Admin\NotificationController::class, 'destroy']);
+    });
+
+    // Settlement Management
+    Route::prefix('settlements')->group(function () {
+        Route::get('/config', [App\Http\Controllers\Admin\SettlementController::class, 'getConfig']);
+        Route::post('/config', [App\Http\Controllers\Admin\SettlementController::class, 'updateConfig']);
+        Route::get('/company/{companyId}/config', [App\Http\Controllers\Admin\SettlementController::class, 'getCompanyConfig']);
+        Route::post('/company/{companyId}/config', [App\Http\Controllers\Admin\SettlementController::class, 'updateCompanyConfig']);
+        Route::get('/pending', [App\Http\Controllers\Admin\SettlementController::class, 'getPendingSettlements']);
+        Route::get('/history', [App\Http\Controllers\Admin\SettlementController::class, 'getSettlementHistory']);
+        Route::get('/statistics', [App\Http\Controllers\Admin\SettlementController::class, 'getStatistics']);
     });
 });
 // ============================================================================

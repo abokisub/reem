@@ -20,6 +20,9 @@ class Kernel extends ConsoleKernel
         // Bank synchronization
         $schedule->command('banks:sync')->daily();
         
+        // Settlement processing (every hour to catch due settlements)
+        $schedule->command('settlements:process')->hourly();
+        
         // Settlement & Reconciliation (Enterprise Requirements)
         $schedule->command('gateway:settle')->dailyAt('02:00');
         $schedule->command('gateway:reconcile')->dailyAt('03:00');
