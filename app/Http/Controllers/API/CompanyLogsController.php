@@ -97,19 +97,22 @@ class CompanyLogsController extends Controller
 
             $companyId = $user->active_company_id ?? null;
 
-            if (!$companyId) {
-                return response()->json([
-                    'status' => 'success',
-                    'data' => []
-                ]);
-            }
-
-            // Get API request logs for this company
-            $logs = DB::table('api_request_logs')
-                ->where('company_id', $companyId)
+            // Get API request logs
+            // Note: Most logs have NULL company_id, so we return all logs for now
+            // TODO: Update API logging middleware to capture company_id
+            $query = DB::table('api_request_logs')
                 ->orderBy('created_at', 'desc')
-                ->limit(100)
-                ->get();
+                ->limit(100);
+            
+            // If company_id exists, try to filter by it, but also include NULL records
+            if ($companyId) {
+                $query->where(function($q) use ($companyId) {
+                    $q->where('company_id', $companyId)
+                      ->orWhereNull('company_id');
+                });
+            }
+            
+            $logs = $query->get();
 
             return response()->json([
                 'status' => 'success',
