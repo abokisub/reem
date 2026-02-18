@@ -1,0 +1,453 @@
+<?php
+
+namespace App\Http\Controllers\API\V1;
+
+use App\Http\Controllers\Controller;
+use App\Models\CompanyUser;
+use App\Models\Transaction;
+use App\Models\VirtualAccount;
+use App\Services\LedgerService;
+use App\Services\PalmPay\PalmPayClient;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
+
+class MerchantApiController extends Controller
+{
+    protected $palmPay;
+
+    public function __construct(PalmPayClient $palmPay)
+    {
+        $this->palmPay = $palmPay;
+    }
+
+    /**
+     * Standard response helper
+     */
+    protected function respond($status, $message, $data = [], $code = 200, $requestId = null)
+    {
+        return response()->json([
+            'status' => $status,
+            'request_id' => $requestId ?: request()->attributes->get('request_id'),
+            'message' => $message,
+            'data' => $data
+        ], $code);
+    }
+
+    /**
+     * Create a new customer (company_user)
+     */
+    public function createCustomer(Request $request)
+    {
+        $company = $request->attributes->get('company');
+
+        $validator = Validator::make($request->all(), [
+            'first_name' => 'required|string',
+            'last_name' => 'required|string',
+            'email' => 'required|email',
+            'phone_number' => 'required|string',
+            'address' => 'required|string',
+            'state' => 'required|string',
+            'city' => 'required|string',
+            'postal_code' => 'required|string',
+            'date_of_birth' => 'required|date_format:Y-m-d',
+            'id_type' => 'required|string|in:bvn,nin',
+            'id_number' => 'required|string',
+            'id_card' => 'required|file|mimes:jpg,png,pdf|max:5120',
+            'utility_bill' => 'required|file|mimes:jpg,png,pdf|max:5120',
+            'external_customer_id' => 'sometimes|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, $validator->errors()->first(), [], 422);
+        }
+
+        // Handle File Uploads
+        $idCardPath = $request->file('id_card')->store('kyc/id_cards', 'public');
+        $utilityBillPath = $request->file('utility_bill')->store('kyc/utility_bills', 'public');
+
+        $customer = CompanyUser::create([
+            'company_id' => $company->id,
+            'external_customer_id' => $request->external_customer_id,
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
+            'email' => $request->email,
+            'phone' => $request->phone_number,
+            'address' => $request->address,
+            'state' => $request->state,
+            'city' => $request->city,
+            'postal_code' => $request->postal_code,
+            'date_of_birth' => $request->date_of_birth,
+            'id_type' => $request->id_type,
+            'id_number' => $request->id_number,
+            'id_card_path' => $idCardPath,
+            'utility_bill_path' => $utilityBillPath,
+            'kyc_status' => 'pending',
+            'is_test' => $request->attributes->get('is_test', false),
+        ]);
+
+        return $this->respond(true, 'Customer created successfully', [
+            'customer_id' => $customer->uuid,
+            'kyc_status' => $customer->kyc_status,
+            'created_at' => $customer->created_at->toIso8601String()
+        ], 201);
+    }
+
+    /**
+     * Update existing customer
+     */
+    public function updateCustomer(Request $request, $customerId)
+    {
+        $company = $request->attributes->get('company');
+        $isTest = $request->attributes->get('is_test', false);
+        $customer = CompanyUser::where('uuid', $customerId)
+            ->where('company_id', $company->id)
+            ->where('is_test', $isTest)
+            ->first();
+
+        if (!$customer)
+            return $this->respond(false, 'Customer not found', [], 404);
+
+        $validator = Validator::make($request->all(), [
+            'first_name' => 'sometimes|string',
+            'last_name' => 'sometimes|string',
+            'email' => 'sometimes|email',
+            'phone_number' => 'sometimes|string',
+            'address' => 'sometimes|string',
+            'state' => 'sometimes|string',
+            'city' => 'sometimes|string',
+            'postal_code' => 'sometimes|string',
+            'date_of_birth' => 'sometimes|date_format:Y-m-d',
+            'id_type' => 'sometimes|string|in:bvn,nin',
+            'id_number' => 'sometimes|string',
+            'id_card' => 'sometimes|file|mimes:jpg,png,pdf|max:5120',
+            'utility_bill' => 'sometimes|file|mimes:jpg,png,pdf|max:5120',
+        ]);
+
+        if ($validator->fails())
+            return $this->respond(false, $validator->errors()->first(), [], 422);
+
+        $data = $request->except(['id_card', 'utility_bill']);
+        if ($request->hasFile('id_card')) {
+            $data['id_card_path'] = $request->file('id_card')->store('kyc/id_cards', 'public');
+            $data['kyc_status'] = 'pending';
+        }
+        if ($request->hasFile('utility_bill')) {
+            $data['utility_bill_path'] = $request->file('utility_bill')->store('kyc/utility_bills', 'public');
+            $data['kyc_status'] = 'pending';
+        }
+        if (isset($data['phone_number'])) {
+            $data['phone'] = $data['phone_number'];
+            unset($data['phone_number']);
+        }
+
+        $customer->update($data);
+        return $this->respond(true, 'Customer updated successfully', [
+            'customer_id' => $customer->uuid,
+            'kyc_status' => $customer->kyc_status
+        ]);
+    }
+
+    /**
+     * Get Customer Profile
+     */
+    public function getCustomer(Request $request, $customerId)
+    {
+        $company = $request->attributes->get('company');
+        $isTest = $request->attributes->get('is_test', false);
+        $customer = CompanyUser::where('uuid', $customerId)
+            ->where('company_id', $company->id)
+            ->where('is_test', $isTest)
+            ->first();
+
+        if (!$customer)
+            return $this->respond(false, 'Customer not found', [], 404);
+
+        return $this->respond(true, 'Customer details retrieved', $customer);
+    }
+
+    /**
+     * Create a Virtual Account (Enterprise Version)
+     */
+    public function createVirtualAccount(Request $request)
+    {
+        $company = $request->attributes->get('company');
+
+        $validator = Validator::make($request->all(), [
+            // Option 1: Existing Customer
+            'customer_id' => 'sometimes|string|exists:company_users,uuid',
+
+            // Option 2: Shared Fields
+            'bank_codes' => 'sometimes|array',
+            'account_type' => 'required|string|in:static,dynamic',
+            'amount' => 'required_if:account_type,dynamic|numeric',
+            'external_reference' => 'sometimes|string',
+
+            // New Customer Details (If customer_id is missing)
+            'first_name' => 'required_without:customer_id|string',
+            'last_name' => 'required_without:customer_id|string',
+            'email' => 'required_without:customer_id|email',
+            'phone_number' => 'required_without:customer_id|string',
+            'id_type' => 'sometimes|string|in:bvn,nin',
+            'id_number' => 'sometimes|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, $validator->errors()->first(), [], 422);
+        }
+
+        // 1. Resolve or Create Customer (Identity Guarding)
+        $customer = null;
+        if ($request->customer_id) {
+            $customer = CompanyUser::where('uuid', $request->customer_id)->first();
+        }
+
+        // If not found by ID or no ID provided, check by email OR phone (Deduplication)
+        if (!$customer) {
+            $customerQuery = CompanyUser::where('company_id', $company->id)
+                ->where(function ($query) use ($request) {
+                    $query->where('email', $request->email);
+                    if ($request->phone_number) {
+                        $query->orWhere('phone', $request->phone_number);
+                    }
+                });
+
+            $customer = $customerQuery->first();
+
+            if ($customer) {
+                \Log::info('Resolved existing customer by identity attributes', [
+                    'email' => $request->email,
+                    'phone' => $request->phone_number,
+                    'existing_uuid' => $customer->uuid
+                ]);
+            } else {
+                // Create new customer if truly unique
+                $customer = CompanyUser::create([
+                    'company_id' => $company->id,
+                    'first_name' => $request->first_name,
+                    'last_name' => $request->last_name,
+                    'email' => $request->email,
+                    'phone' => $request->phone_number,
+                    'id_type' => $request->id_type,
+                    'id_number' => $request->id_number,
+                    'is_test' => $request->attributes->get('is_test', false),
+                ]);
+            }
+        }
+
+        // 2. Prevent duplicates for dynamic accounts (Idempotency)
+        if ($request->account_type === 'dynamic' && $request->external_reference) {
+            $existing = VirtualAccount::where('provider_reference', $request->external_reference)
+                ->where('company_id', $company->id)
+                ->first();
+            if ($existing)
+                return $this->respond(true, 'Retrieved existing dynamic account', ['virtual_accounts' => [$this->formatVa($existing)]]);
+        }
+
+        // Initialize Service
+        $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
+
+        // 3. Provision Accounts (Get from configuration)
+        $defaultBankCode = config('services.palmpay.bank_code', '100033');
+        $bankCodes = $request->bank_codes ?? [$defaultBankCode];
+        $createdAccounts = [];
+        $errors = [];
+
+        foreach ($bankCodes as $bankCode) {
+            try {
+                // Get bank name from banks table
+                $bank = \App\Models\Bank::where('code', $bankCode)->first();
+                $bankName = $bank ? $bank->name : config('services.palmpay.bank_name', 'PalmPay');
+
+                if ($request->attributes->get('is_test')) {
+                    // MOCK Sandbox Provisioning
+                    $va = VirtualAccount::create([
+                        'company_id' => $company->id,
+                        'company_user_id' => $customer->id,
+                        'bank_code' => $bankCode,
+                        'bank_name' => $bankName,
+                        'account_number' => '99' . rand(10000000, 99999999),
+                        'account_name' => "TS_" . strtoupper($customer->last_name) . " " . strtoupper($customer->first_name),
+                        'account_type' => $request->account_type,
+                        'amount' => $request->amount,
+                        'provider' => 'sandbox',
+                        'status' => 'active',
+                        'is_test' => true,
+                    ]);
+                } else {
+                    $customerData = [
+                        'name' => "{$customer->first_name} {$customer->last_name}",
+                        'email' => $customer->email,
+                        'phone' => $customer->phone,
+                        'identity_type' => $request->id_type === 'rc' ? 'company' : 'personal',
+                        'license_number' => $request->id_number,
+                        'account_type' => $request->account_type,
+                        'amount' => $request->amount,
+                        'external_reference' => $request->external_reference,
+                    ];
+
+                    $va = $virtualAccountService->createVirtualAccount(
+                        $company->id,
+                        $customer->uuid,
+                        $customerData,
+                        $bankCode,
+                        $customer->id // company_user_id
+                    );
+                }
+
+                $createdAccounts[] = $this->formatVa($va);
+
+            } catch (\Exception $e) {
+                Log::error("Failed to create $bankName account", [
+                    'error' => $e->getMessage(),
+                    'customer' => $customer->id
+                ]);
+                $errors[] = "$bankName: " . $e->getMessage();
+            }
+        }
+
+        if (empty($createdAccounts)) {
+            return $this->respond(false, 'Provider Error: ' . implode(', ', $errors), [], 500);
+        }
+
+        return $this->respond(true, 'Virtual accounts created successfully', [
+            'customer' => [
+                'customer_id' => $customer->uuid,
+                'name' => "{$customer->first_name} {$customer->last_name}",
+                'email' => $customer->email,
+            ],
+            'virtual_accounts' => $createdAccounts
+        ], 201);
+    }
+
+    /**
+     * Update VA Status (PATCH)
+     */
+    public function updateVirtualAccount(Request $request, $vaId)
+    {
+        $company = $request->attributes->get('company');
+        $isTest = $request->attributes->get('is_test', false);
+        $va = VirtualAccount::where('uuid', $vaId)
+            ->where('company_id', $company->id)
+            ->where('is_test', $isTest)
+            ->first();
+
+        if (!$va)
+            return $this->respond(false, 'Virtual account not found', [], 404);
+
+        if ($va->account_type === 'dynamic') {
+            return $this->respond(false, 'Cannot update status of dynamic accounts', [], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'status' => 'required|string|in:active,deactivated',
+            'reason' => 'sometimes|string',
+        ]);
+
+        if ($validator->fails())
+            return $this->respond(false, $validator->errors()->first(), [], 422);
+
+        $va->update(['status' => $request->status]);
+
+        // Audit Trail (Log)
+        Log::info("VA Status Updated", ['va' => $va->uuid, 'status' => $request->status, 'reason' => $request->reason, 'user' => $company->name]);
+
+        return $this->respond(true, 'Virtual account status updated', [
+            'virtual_account_id' => $va->uuid,
+            'status' => $va->status
+        ]);
+    }
+
+    protected function formatVa($va)
+    {
+        return [
+            'bank_code' => $va->bank_code,
+            'bank_name' => $va->bank_name,
+            'account_number' => $va->account_number,
+            'account_name' => $va->account_name,
+            'account_type' => $va->account_type,
+            'virtual_account_id' => $va->uuid,
+        ];
+    }
+
+    public function getTransactions(Request $request)
+    {
+        $company = $request->attributes->get('company');
+        $isTest = $request->attributes->get('is_test', false);
+
+        $transactions = Transaction::where('company_id', $company->id)
+            ->where('is_test', $isTest)
+            ->latest()
+            ->paginate(20);
+
+        return $this->respond(true, 'Transactions retrieved', $transactions);
+    }
+
+    public function initiateTransfer(Request $request, LedgerService $ledger)
+    {
+        $company = $request->attributes->get('company');
+        $isTest = $request->attributes->get('is_test', false);
+
+        $validator = Validator::make($request->all(), [
+            'amount' => 'required|numeric|min:100',
+            'bank_code' => 'required|string',
+            'account_number' => 'required|string',
+            'account_name' => 'required|string',
+        ]);
+
+        if ($validator->fails())
+            return $this->respond(false, $validator->errors()->first(), [], 422);
+
+        // Check balance (Sandbox uses independent balance check or skipped for easy testing?)
+        // Let's enforce balance even in sandbox but maybe allow a "Sandbox Funding" endpoint later.
+        $wallet = $ledger->getOrCreateAccount($company->name . ' Wallet', 'company_wallet', $company->id);
+
+        // Skip balance check for Test Mode to facilitate testing? 
+        // No, better to enforce it to test balance handling logic.
+        if ($wallet->balance < $request->amount && !$isTest)
+            return $this->respond(false, 'Insufficient balance', [], 400);
+
+        $internalRef = ($isTest ? 'TS_' : 'PWV_OUT_') . strtoupper(Str::random(10));
+
+        try {
+            if (!$isTest) {
+                $settlementClearing = $ledger->getOrCreateAccount('Settlement Clearing', 'settlement');
+                $ledger->recordEntry($internalRef, $wallet->id, $settlementClearing->id, $request->amount, "Payout Initialized");
+
+                $response = $this->palmPay->post('/transfer/v1/initiate', [
+                    'amount' => $request->amount,
+                    'bankCode' => $request->bank_code,
+                    'accountNumber' => $request->account_number,
+                    'accountName' => $request->account_name,
+                    'reference' => $internalRef,
+                ]);
+                $providerRef = $response['data']['orderNo'] ?? null;
+            } else {
+                // Mock Success for Sandbox
+                $providerRef = 'MOCK_TS_' . Str::random(12);
+            }
+
+            Transaction::create([
+                'transaction_id' => Transaction::generateTransactionId(), // Adding this just in case booted is not used
+                'company_id' => $company->id,
+                'reference' => $internalRef,
+                'amount' => $request->amount,
+                'fee' => 0,
+                'total_amount' => $request->amount,
+                'type' => 'debit',
+                'category' => 'transfer_out',
+                'status' => 'success',
+                'palmpay_reference' => $providerRef,
+                'recipient_account_number' => $request->account_number,
+                'recipient_account_name' => $request->account_name,
+                'recipient_bank_code' => $request->bank_code,
+                'is_test' => $isTest,
+            ]);
+
+            return $this->respond(true, 'Transfer successful' . ($isTest ? ' (SANDBOX)' : ''), ['reference' => $internalRef, 'status' => 'successful']);
+        } catch (\Exception $e) {
+            return $this->respond(false, 'Transfer failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+}

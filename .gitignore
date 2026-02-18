@@ -1,0 +1,32 @@
+/node_modules
+/public/hot
+/public/storage
+/storage/*.key
+/vendor
+.env
+.env.backup
+.phpunit.result.cache
+Homestead.json
+Homestead.yaml
+npm-debug.log
+yarn-error.log
+/backups/*.sql
+/backups/*.txt
+*.log
+.DS_Store
+Thumbs.db
+node_modules
+
+# Frontend folder (too heavy - build and upload manually)
+/frontend/
+/Kobopoint/
+
+# Test files
+test_*.php
+create_customer_test.php
+
+# Storage logs
+/storage/logs/*.log
+
+# Documentation markdown files (optional - can be excluded if too many)
+# *.md

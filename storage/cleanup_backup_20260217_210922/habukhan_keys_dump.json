@@ -1,0 +1,18 @@
+{
+    "id": 1,
+    "mon_app_key": "MK_PROD_YNB9N7Y9NV",
+    "mon_sk_key": "V6JWR5YXVD7TQYVL7QK5TA8S24RA17XR",
+    "mon_con_num": "923727835022",
+    "mon_bvn": "22490148602",
+    "default_limit": "5000",
+    "min": "100",
+    "max": "1000000",
+    "psk": "sk_live_7bacab6f669360e5fa7b6b4f3ceeae35226f189a",
+    "psk_bvn": "22490148602",
+    "plive": "pk_live_652a14fac4107b34597389adba578a1593c163ec",
+    "bank_name": "ALAT by WEMA",
+    "account_number": "true19",
+    "account_name": "true1",
+    "billstack_key": null,
+    "autopilot_key": "live_2adbacbd03cb48ad8559593fbd298f5cpjmqi148"
+}
