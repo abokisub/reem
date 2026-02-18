@@ -5,6 +5,7 @@ namespace App\Services\PalmPay;
 use App\Models\Transaction;
 use App\Models\VirtualAccount;
 use App\Models\CompanyWallet;
+use App\Models\Company;
 use App\Models\PalmPayWebhook;
 use App\Services\PalmPay\PalmPaySignature;
 use App\Services\LedgerService;
