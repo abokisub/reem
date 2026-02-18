@@ -175,6 +175,10 @@ class WebhookHandler
             // Net amount is what the company receives (amount - fee)
             $netAmount = $amount - $fee;
 
+            // Get wallet balance before transaction
+            $wallet = CompanyWallet::where('company_id', $virtualAccount->company_id)->first();
+            $balanceBefore = $wallet ? $wallet->balance : 0;
+
             // Create transaction
             $transaction = Transaction::create([
                 'transaction_id' => Transaction::generateTransactionId(),
@@ -194,10 +198,13 @@ class WebhookHandler
                 'metadata' => [
                     'sender_name' => $payload['senderName'] ?? null,
                     'sender_account' => $payload['senderAccount'] ?? null,
+                    'sender_bank' => $payload['senderBank'] ?? null,
                     'charge_type' => $chargeDetails['type'],
                     'charge_value' => $chargeDetails['value'],
                     'charge_cap' => $chargeDetails['cap'],
                 ],
+                'balance_before' => $balanceBefore,
+                'balance_after' => $balanceBefore + $netAmount,
                 'processed_at' => now(),
             ]);
 

@@ -78,7 +78,14 @@ class TransactionController extends Controller
             // Update wallet balance
             $wallet = CompanyWallet::where('company_id', $transaction->company_id)->first();
             if ($wallet) {
+                $balanceBefore = $wallet->balance;
                 $wallet->debit($transaction->amount);
+                
+                // Update refund transaction with balance info
+                $refundTransaction->update([
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $balanceBefore - $transaction->amount
+                ]);
             }
             
             DB::commit();
