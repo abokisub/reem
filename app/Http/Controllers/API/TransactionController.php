@@ -57,7 +57,7 @@ class TransactionController extends Controller
                 'net_amount' => $transaction->amount,
                 'total_amount' => $transaction->amount,
                 'currency' => 'NGN',
-                'status' => 'pending',
+                'status' => 'success', // Changed from 'pending' to 'success'
                 'reference' => 'REFUND_' . $transaction->reference,
                 'description' => 'Refund for transaction ' . $transaction->transaction_id,
                 'metadata' => json_encode([
@@ -65,7 +65,8 @@ class TransactionController extends Controller
                     'original_reference' => $transaction->reference,
                     'refund_initiated_by' => $user->email,
                     'refund_initiated_at' => now()->toDateTimeString()
-                ])
+                ]),
+                'processed_at' => now()
             ]);
             
             // Mark original transaction as refunded
