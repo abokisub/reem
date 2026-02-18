@@ -59,17 +59,47 @@ class BankingService
     }
 
     /**
-     * Initiate a transfer.
-     * TODO: Implement PalmPay transfer API
+     * Initiate a transfer using PalmPay
      */
     public function transfer(array $details): array
     {
-        Log::warning("BankingService: Transfer called but PalmPay integration not yet implemented");
-
-        return [
-            'status' => 'pending',
-            'message' => 'PalmPay integration in progress. Transfers temporarily unavailable.'
-        ];
+        try {
+            $transferService = new \App\Services\PalmPay\TransferService();
+            
+            // Get company ID from details or use default
+            $companyId = $details['company_id'] ?? 1;
+            
+            // Prepare transfer data
+            $transferData = [
+                'amount' => $details['amount'],
+                'account_number' => $details['account_number'],
+                'account_name' => $details['account_name'] ?? null,
+                'bank_code' => $details['bank_code'],
+                'bank_name' => $details['bank_name'] ?? null,
+                'narration' => $details['narration'] ?? 'Bank Transfer',
+                'reference' => $details['reference'] ?? null,
+                'metadata' => $details['metadata'] ?? null,
+            ];
+            
+            // Initiate transfer
+            $transaction = $transferService->initiateTransfer($companyId, $transferData);
+            
+            return [
+                'status' => $transaction->status,
+                'message' => 'Transfer initiated successfully',
+                'transaction_id' => $transaction->transaction_id,
+                'reference' => $transaction->reference,
+                'bank_name' => $transaction->recipient_bank_name
+            ];
+            
+        } catch (\Exception $e) {
+            Log::error("BankingService Transfer Error: " . $e->getMessage());
+            
+            return [
+                'status' => 'fail',
+                'message' => $e->getMessage()
+            ];
+        }
     }
 
     /**

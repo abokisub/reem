@@ -18,6 +18,7 @@ class TransferRouter
      * Process a transfer request.
      *
      * @param array $details
+     * @param int|null $cid Company ID
      * @return array
      */
     public function processTransfer(array $details, $cid = null)
@@ -31,6 +32,9 @@ class TransferRouter
         if ($settings && $settings->transfer_lock_all) {
             throw new Exception("Transfer service is currently disabled by administrator.");
         }
+
+        // Add company_id to details
+        $details['company_id'] = $cid ?: 1;
 
         // 2. Delegate to BankingService (Unified logic)
         return $this->bankingService->transfer($details);
