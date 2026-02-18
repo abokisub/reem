@@ -255,7 +255,8 @@ class Trans extends Controller
                     'reference as transid',
                     'created_at as date',
                     'description as details',
-                    DB::raw("CASE WHEN status = 'success' THEN 'active' WHEN status = 'failed' THEN 'blocked' ELSE status END as status")
+                    'fee as charges',
+                    DB::raw("CASE WHEN status = 'success' THEN 'successful' WHEN status = 'failed' THEN 'failed' ELSE 'processing' END as status")
                 ];
 
                 if (!empty($search)) {
@@ -385,7 +386,8 @@ class Trans extends Controller
                     'reference as transid',
                     'created_at as date',
                     'description as details',
-                    DB::raw("CASE WHEN status = 'success' THEN 'active' WHEN status = 'failed' THEN 'blocked' ELSE status END as status")
+                    'fee as charges',
+                    DB::raw("CASE WHEN status = 'success' THEN 'successful' WHEN status = 'failed' THEN 'failed' ELSE 'processing' END as status")
                 )
                     ->orderBy('id', 'desc')
                     ->paginate($request->limit);
