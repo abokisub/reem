@@ -102,85 +102,119 @@ class AdminController extends Controller
         }
     }
     public function UserSystem(Request $request)
-    {
-        $explode_url = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $explode_url)) {
-            if (!empty($request->id)) {
-                $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
-                    $query->whereIn('type', ['admin', 'ADMIN']);
-                });
-                if ($check_user->count() > 0) {
+        {
+            $explode_url = explode(',', config('app.habukhan_app_key'));
+            if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $explode_url)) {
+                if (!empty($request->id)) {
+                    $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
+                        $query->whereIn('type', ['admin', 'ADMIN']);
+                    });
+                    if ($check_user->count() > 0) {
 
-                    $users_info = [
-                        'wallet_balance' => DB::table('users')->sum('balance'),
-                        'ref_balance' => DB::table('users')->sum('referral_balance'),
-                        'all_user' => DB::table('users')->count(),
-                        'smart_total' => DB::table('users')->where('type', 'SMART')->count(),
-                        'awuf_total' => DB::table('users')->where('type', 'AWUF')->count(),
-                        'special_total' => DB::table('users')->where('type', 'SPECIAL')->count(),
-                        'api_total' => DB::table('users')->where('type', 'API')->count(),
-                        'agent_total' => DB::table('users')->where('type', 'AGENT')->count(),
-                        'customer_total' => DB::table('users')->where('type', 'CUSTOMER')->count(),
-                        'admin_total' => DB::table('users')->whereIn('type', ['admin', 'ADMIN'])->count(),
-                        'active_user' => DB::table('users')->where('status', 'active')->count(),
-                        'deactivate_user' => DB::table('users')->where('status', 'suspended')->count(),
-                        'banned_user' => DB::table('users')->where('status', 'suspended')->count(),
-                        'unverified_user' => DB::table('users')->where('status', 'pending')->count(),
-                        'mtn_cg_bal' => DB::table('wallet_funding')->sum('mtn_cg_bal'),
-                        'mtn_g_bal' => DB::table('wallet_funding')->sum('mtn_g_bal'),
-                        'mtn_sme_bal' => DB::table('wallet_funding')->sum('mtn_sme_bal'),
-                        'airtel_cg_bal' => DB::table('wallet_funding')->sum('airtel_cg_bal'),
-                        'airtel_g_bal' => DB::table('wallet_funding')->sum('airtel_g_bal'),
-                        'airtel_sme_bal' => DB::table('wallet_funding')->sum('airtel_sme_bal'),
-                        'glo_cg_bal' => DB::table('wallet_funding')->sum('glo_cg_bal'),
-                        'glo_g_bal' => DB::table('wallet_funding')->sum('glo_g_bal'),
-                        'glo_sme_bal' => DB::table('wallet_funding')->sum('glo_sme_bal'),
-                        'mobile_cg_bal' => DB::table('wallet_funding')->sum('mobile_cg_bal'),
-                        'mobile_g_bal' => DB::table('wallet_funding')->sum('mobile_g_bal'),
-                        'mobile_sme_bal' => DB::table('wallet_funding')->sum('mobile_sme_bal'),
-                        'total_process' => DB::table('message')->where(['plan_status' => 0])->count(),
-                        'total_data_proccess' => DB::table('data')->where(['plan_status' => 0])->count(),
-                        // Charity Stats
-                        'charity_escrow' => DB::table('charities')->sum('pending_balance'),
-                        'charity_available' => DB::table('charities')->sum('available_balance'),
-                        'total_donations' => DB::table('donations')->sum('amount'),
-                        'today_donations' => $today_donations = DB::table('donations')->whereDate('created_at', Carbon::today())->sum('amount'),
-                        'total_campaigns' => DB::table('campaigns')->count(),
-                        'total_organizations' => DB::table('charities')->count(),
+                        // Calculate total revenue from company wallets (this is the actual business revenue)
+                        $total_revenue = DB::table('company_wallets')->sum('balance');
 
-                        'today_data_success' => $today_data = DB::table('data')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::today())->count(),
-                        'today_airtime_success' => $today_airtime = DB::table('airtime')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::today())->count(),
-                        'today_sales' => $today_sales = DB::table('data')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::today())->sum('amount') +
-                            DB::table('airtime')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::today())->sum('discount') +
-                            $today_donations,
+                        // Get transaction statistics
+                        $total_transactions = DB::table('transactions')->count();
+                        $successful_transactions = DB::table('transactions')->where('status', 'success')->count();
+                        $failed_transactions = DB::table('transactions')->where('status', 'failed')->count();
+                        $pending_settlement = DB::table('settlement_queue')->where('status', 'pending')->count();
 
-                        'yesterday_sales' => $yesterday_sales = DB::table('data')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::yesterday())->sum('amount') +
-                            DB::table('airtime')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::yesterday())->sum('discount') +
-                            DB::table('donations')->whereDate('created_at', Carbon::yesterday())->sum('amount'),
+                        // Get business statistics
+                        $active_businesses = DB::table('companies')->where('status', 'active')->count();
+                        $registered_businesses = DB::table('companies')->count();
+                        $pending_activations = DB::table('companies')->where('status', 'pending')->count();
+                        $total_virtual_accounts = DB::table('virtual_accounts')->count();
 
-                        'yesterday_trans' => $yesterday_trans = DB::table('data')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::yesterday())->count() +
-                            DB::table('airtime')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::yesterday())->count() +
-                            DB::table('donations')->whereDate('created_at', Carbon::yesterday())->count(),
+                        $users_info = [
+                            // New payment gateway metrics
+                            'total_revenue' => $total_revenue,
+                            'total_transactions' => $total_transactions,
+                            'successful_transactions' => $successful_transactions,
+                            'failed_transactions' => $failed_transactions,
+                            'pending_settlement' => $pending_settlement,
+                            'active_businesses' => $active_businesses,
+                            'registered_businesses' => $registered_businesses,
+                            'pending_activations' => $pending_activations,
+                            'total_virtual_accounts' => $total_virtual_accounts,
 
-                        'sales_percent' => $yesterday_sales > 0 ? round((($today_sales - $yesterday_sales) / $yesterday_sales) * 100, 1) : ($today_sales > 0 ? 100 : 0),
-                        'trans_percent' => $yesterday_trans > 0 ? round(((($today_data + $today_airtime + DB::table('donations')->whereDate('created_at', Carbon::today())->count()) - $yesterday_trans) / $yesterday_trans) * 100, 1) : (($today_data + $today_airtime + DB::table('donations')->whereDate('created_at', Carbon::today())->count()) > 0 ? 100 : 0),
+                            // Existing user wallet metrics (for backward compatibility)
+                            'wallet_balance' => DB::table('users')->sum('balance'),
+                            'ref_balance' => DB::table('users')->sum('referral_balance'),
+                            'all_user' => DB::table('users')->count(),
+                            'smart_total' => DB::table('users')->where('type', 'SMART')->count(),
+                            'awuf_total' => DB::table('users')->where('type', 'AWUF')->count(),
+                            'special_total' => DB::table('users')->where('type', 'SPECIAL')->count(),
+                            'api_total' => DB::table('users')->where('type', 'API')->count(),
+                            'agent_total' => DB::table('users')->where('type', 'AGENT')->count(),
+                            'customer_total' => DB::table('users')->where('type', 'CUSTOMER')->count(),
+                            'admin_total' => DB::table('users')->whereIn('type', ['admin', 'ADMIN'])->count(),
+                            'active_user' => DB::table('users')->where('status', 'active')->count(),
+                            'deactivate_user' => DB::table('users')->where('status', 'suspended')->count(),
+                            'banned_user' => DB::table('users')->where('status', 'suspended')->count(),
+                            'unverified_user' => DB::table('users')->where('status', 'pending')->count(),
+                            'mtn_cg_bal' => DB::table('wallet_funding')->sum('mtn_cg_bal'),
+                            'mtn_g_bal' => DB::table('wallet_funding')->sum('mtn_g_bal'),
+                            'mtn_sme_bal' => DB::table('wallet_funding')->sum('mtn_sme_bal'),
+                            'airtel_cg_bal' => DB::table('wallet_funding')->sum('airtel_cg_bal'),
+                            'airtel_g_bal' => DB::table('wallet_funding')->sum('airtel_g_bal'),
+                            'airtel_sme_bal' => DB::table('wallet_funding')->sum('airtel_sme_bal'),
+                            'glo_cg_bal' => DB::table('wallet_funding')->sum('glo_cg_bal'),
+                            'glo_g_bal' => DB::table('wallet_funding')->sum('glo_g_bal'),
+                            'glo_sme_bal' => DB::table('wallet_funding')->sum('glo_sme_bal'),
+                            'mobile_cg_bal' => DB::table('wallet_funding')->sum('mobile_cg_bal'),
+                            'mobile_g_bal' => DB::table('wallet_funding')->sum('mobile_g_bal'),
+                            'mobile_sme_bal' => DB::table('wallet_funding')->sum('mobile_sme_bal'),
+                            'total_process' => DB::table('message')->where(['plan_status' => 0])->count(),
+                            'total_data_proccess' => DB::table('data')->where(['plan_status' => 0])->count(),
+                            // Charity Stats
+                            'charity_escrow' => DB::table('charities')->sum('pending_balance'),
+                            'charity_available' => DB::table('charities')->sum('available_balance'),
+                            'total_donations' => DB::table('donations')->sum('amount'),
+                            'today_donations' => $today_donations = DB::table('donations')->whereDate('created_at', Carbon::today())->sum('amount'),
+                            'total_campaigns' => DB::table('campaigns')->count(),
+                            'total_organizations' => DB::table('charities')->count(),
 
-                        'total_pending' => DB::table('data')->where('plan_status', 0)->count() +
-                            DB::table('airtime')->where('plan_status', 0)->count() +
-                            DB::table('cable')->where('plan_status', 0)->count() +
-                            DB::table('bill')->where('plan_status', 0)->count() +
-                            DB::table('campaigns')->where('payout_status', 'pending')->where('status', 'closed')->count(),
-                    ];
+                            'today_data_success' => $today_data = DB::table('data')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::today())->count(),
+                            'today_airtime_success' => $today_airtime = DB::table('airtime')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::today())->count(),
+                            'today_sales' => $today_sales = DB::table('data')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::today())->sum('amount') +
+                                DB::table('airtime')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::today())->sum('discount') +
+                                $today_donations,
 
-                    return response()->json([
-                        'status' => 'success',
-                        'user' => $users_info,
-                        'payment' => DB::table('habukhan_key')->first(),
-                    ]);
+                            'yesterday_sales' => $yesterday_sales = DB::table('data')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::yesterday())->sum('amount') +
+                                DB::table('airtime')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::yesterday())->sum('discount') +
+                                DB::table('donations')->whereDate('created_at', Carbon::yesterday())->sum('amount'),
+
+                            'yesterday_trans' => $yesterday_trans = DB::table('data')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::yesterday())->count() +
+                                DB::table('airtime')->where(['plan_status' => 1])->whereDate('plan_date', Carbon::yesterday())->count() +
+                                DB::table('donations')->whereDate('created_at', Carbon::yesterday())->count(),
+
+                            'sales_percent' => $yesterday_sales > 0 ? round((($today_sales - $yesterday_sales) / $yesterday_sales) * 100, 1) : ($today_sales > 0 ? 100 : 0),
+                            'trans_percent' => $yesterday_trans > 0 ? round(((($today_data + $today_airtime + DB::table('donations')->whereDate('created_at', Carbon::today())->count()) - $yesterday_trans) / $yesterday_trans) * 100, 1) : (($today_data + $today_airtime + DB::table('donations')->whereDate('created_at', Carbon::today())->count()) > 0 ? 100 : 0),
+
+                            'total_pending' => DB::table('data')->where('plan_status', 0)->count() +
+                                DB::table('airtime')->where('plan_status', 0)->count() +
+                                DB::table('cable')->where('plan_status', 0)->count() +
+                                DB::table('bill')->where('plan_status', 0)->count() +
+                                DB::table('campaigns')->where('payout_status', 'pending')->where('status', 'closed')->count(),
+                        ];
+
+                        return response()->json([
+                            'status' => 'success',
+                            'user' => $users_info,
+                            'payment' => DB::table('habukhan_key')->first(),
+                        ]);
+                    } else {
+                        return response()->json([
+                            'status' => 403,
+                            'message' => 'Not Authorised'
+                        ])->setStatusCode(403);
+                    }
                 } else {
+                    return redirect(config('app.error_500'));
                     return response()->json([
                         'status' => 403,
-                        'message' => 'Not Authorised'
+                        'message' => 'Unable to Authenticate System'
                     ])->setStatusCode(403);
                 }
             } else {
@@ -190,14 +224,7 @@ class AdminController extends Controller
                     'message' => 'Unable to Authenticate System'
                 ])->setStatusCode(403);
             }
-        } else {
-            return redirect(config('app.error_500'));
-            return response()->json([
-                'status' => 403,
-                'message' => 'Unable to Authenticate System'
-            ])->setStatusCode(403);
         }
-    }
     public function editUserDetails(Request $request)
     {
         $explode_url = explode(',', config('app.habukhan_app_key'));
