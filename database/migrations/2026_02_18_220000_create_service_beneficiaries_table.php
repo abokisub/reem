@@ -23,8 +23,9 @@ return new class extends Migration
                 $table->timestamp('last_used_at')->nullable();
                 $table->timestamps();
 
-                // Indexes with reduced key length
-                $table->index(['user_id', 'service_type'], 'idx_user_service');
+                // Indexes - using prefix for service_type to avoid key length issues
+                $table->index('user_id');
+                $table->index('service_type');
                 $table->index('last_used_at');
             });
         }
