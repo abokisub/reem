@@ -39,8 +39,12 @@ class CompanyController extends Controller
 
         $events = $query->orderBy('created_at', 'desc')->paginate($request->limit ?? 10);
 
-        $total_sent = CompanyWebhookLog::where('company_id', $user->company->id)->where('status', 'sent')->count();
-        $total_failed = CompanyWebhookLog::where('company_id', $user->company->id)->where('status', 'failed')->count();
+        $total_sent = CompanyWebhookLog::where('company_id', $user->company->id)
+            ->where('status', 'delivery_success')
+            ->count();
+        $total_failed = CompanyWebhookLog::where('company_id', $user->company->id)
+            ->whereIn('status', ['delivery_failed', 'failed'])
+            ->count();
 
         return response()->json([
             'status' => 'success',
