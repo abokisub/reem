@@ -34,7 +34,16 @@ class CompanyController extends Controller
         }
 
         if ($request->has('status') && $request->status !== 'All' && !empty($request->status)) {
-            $query->where('status', strtolower($request->status));
+            // Map frontend filter values to database status values
+            $statusMap = [
+                'sent' => 'delivery_success',
+                'failed' => 'delivery_failed',
+            ];
+            
+            $filterStatus = strtolower($request->status);
+            $dbStatus = $statusMap[$filterStatus] ?? $filterStatus;
+            
+            $query->where('status', $dbStatus);
         }
 
         $events = $query->orderBy('created_at', 'desc')->paginate($request->limit ?? 10);
