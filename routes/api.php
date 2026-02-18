@@ -363,6 +363,7 @@ Route::get('recharge_card/trans/{id}/secure/sucess', [Trans::class, 'RechargeCar
 Route::get('system/all/trans/{id}/secure', [Trans::class, 'UserTrans']);
 Route::get('system/all/history/records/{id}/secure', [Trans::class, 'AllHistoryUser']);
 Route::get('system/all/ra-history/records/{id}/secure', [Trans::class, 'AllRATransactions']);
+Route::get('system/all/ra-history/records/{id}/secure/export', [App\Http\Controllers\API\TransactionController::class, 'exportTransactions']);
 Route::get('system/all/datatrans/habukhan/{id}/secure', [Trans::class, 'AllDataHistoryUser']);
 Route::get('system/all/stock/trans/habukhan/{id}/secure', [Trans::class, 'AllStockHistoryUser']);
 Route::get('system/all/deposit/trans/habukhan/{id}/secure', [Trans::class, 'AllDepositHistory']);
@@ -370,6 +371,12 @@ Route::get('system/all/airtime/trans/habukhan/{id}/secure', [Trans::class, 'AllA
 Route::get('system/all/cable/trans/habukhan/{id}/secure', [Trans::class, 'AllCableHistoryUser']);
 Route::get('system/all/bill/trans/habukhan/{id}/secure', [Trans::class, 'AllBillHistoryUser']);
 Route::get('system/all/result/trans/habukhan/{id}/secure', [Trans::class, 'AllResultHistoryUser']);
+
+// Transaction actions (refund, resend notification)
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::post('transactions/{id}/refund', [App\Http\Controllers\API\TransactionController::class, 'initiateRefund']);
+    Route::post('transactions/{id}/resend-notification', [App\Http\Controllers\API\TransactionController::class, 'resendNotification']);
+});
 
 // Fix: Missing route for "Adex" history calls (maps to AllHistoryUser)
 Route::get('system/all/history/adex/{id}/secure', [Trans::class, 'AllHistoryUser']);
