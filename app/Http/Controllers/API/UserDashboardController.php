@@ -110,21 +110,25 @@ class UserDashboardController extends Controller
         }
 
         // 2. Total Transactions and Transaction Analytics
-        $transactionsQuery = DB::table('message')
-            ->where('username', $user->username);
+        $transactionsQuery = DB::table('transactions')
+            ->where('company_id', $user->active_company_id)
+            ->where('type', 'credit')
+            ->where('channel', 'virtual_account');
 
         if ($startDate && $endDate) {
-            $transactionsQuery->whereBetween('habukhan_date', [$startDate, $endDate]);
+            $transactionsQuery->whereBetween('created_at', [$startDate, $endDate]);
         }
         $totalTransactions = $transactionsQuery->count();
 
         // Transaction Chart (Daily)
         $transactionChart = [];
         if ($startDate && $endDate) {
-            $dailyTransactions = DB::table('message')
-                ->where('username', $user->username)
-                ->whereBetween('habukhan_date', [$startDate, $endDate])
-                ->select(DB::raw('DATE(habukhan_date) as date'), DB::raw('count(*) as count'))
+            $dailyTransactions = DB::table('transactions')
+                ->where('company_id', $user->active_company_id)
+                ->where('type', 'credit')
+                ->where('channel', 'virtual_account')
+                ->whereBetween('created_at', [$startDate, $endDate])
+                ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
                 ->groupBy('date')
                 ->pluck('count', 'date');
 
@@ -137,21 +141,14 @@ class UserDashboardController extends Controller
             }
         }
 
-        // 3. Pending Settlement
-        $pendingDeposits = (float) DB::table('transactions')
-            ->where('company_id', $user->active_company_id)
-            ->where('type', 'credit')
-            ->where('status', 'pending')
-            ->sum('amount');
-
-        $pendingTransfers = (float) DB::table('transactions')
-            ->where('company_id', $user->active_company_id)
-            ->where('type', 'debit')
-            ->where('category', 'transfer_out')
-            ->where('status', 'pending')
-            ->sum('amount');
-
-        $pendingSettlement = $pendingDeposits + $pendingTransfers;
+        // 3. Pending Settlement (from settlement_queue table)
+        $pendingSettlement = 0;
+        if (\Schema::hasTable('settlement_queue')) {
+            $pendingSettlement = (float) DB::table('settlement_queue')
+                ->where('company_id', $user->active_company_id)
+                ->where('status', 'pending')
+                ->sum('amount');
+        }
 
         // 4. Growth Stats (Compare with previous period)
         $revenueGrowth = 0;
