@@ -2613,47 +2613,19 @@ class SecureController extends Controller
     }
     public function DataPurchased(Request $request)
     {
+        // NOTE: PointWave is a payment gateway, not a data reseller
+        // This endpoint is kept for backward compatibility but returns 0
+        // Old PointPay code queried a 'data' table that doesn't exist in PointWave
+        
         $explode_url = explode(',', config('app.habukhan_app_key'));
         if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $explode_url) || $request->headers->get('origin') === $request->getSchemeAndHttpHost()) {
             if (!empty($request->id)) {
                 if (DB::table('users')->where(['id' => $this->verifytoken($request->id)])->count() == 1) {
-                    $user = DB::table('users')->where(['id' => $this->verifytoken($request->id)])->first();
-                    // Sum the amount spent on data purchases today
-                    $total_amount = DB::table('data')
-                        ->where(['username' => $user->username, 'plan_status' => 1])
-                        ->whereDate('plan_date', Carbon::today())
-                        ->sum('amount');
-                    // Calculate total data volume purchased today
-                    $data_purchase = DB::table('data')
-                        ->where(['username' => $user->username, 'plan_status' => 1])
-                        ->whereDate('plan_date', Carbon::today())
-                        ->get();
-                    $total_gb = 0;
-                    foreach ($data_purchase as $data) {
-                        $plans = $data->plan_name;
-                        $check_gb = substr($plans, -2);
-                        if ($check_gb == 'MB') {
-                            $mb = rtrim($plans, "MB");
-                            $gb = $mb / 1024;
-                        } elseif ($check_gb == 'GB') {
-                            $gb = rtrim($plans, "GB");
-                        } elseif ($check_gb == 'TB') {
-                            $tb = rtrim($plans, 'TB');
-                            $gb = ceil($tb * 1024);
-                        } else {
-                            $gb = 0;
-                        }
-                        $total_gb += $gb;
-                    }
-                    if ($total_gb >= 1024) {
-                        $calculate_gb = $total_gb / 1024 . 'TB';
-                    } else {
-                        $calculate_gb = $total_gb . 'GB';
-                    }
+                    // Return 0 for data purchases since PointWave doesn't sell data
                     return response()->json([
                         'status' => 'success',
-                        'data_purchased_amount' => $total_amount,
-                        'data_purchased_volume' => $calculate_gb
+                        'data_purchased_amount' => 0,
+                        'data_purchased_volume' => '0GB'
                     ]);
                 } else {
                     \Log::warning("DataPurchased 403: Token verification failed for ID: " . ($request->id ?? 'MISSING'));
@@ -2663,14 +2635,12 @@ class SecureController extends Controller
                     ])->setStatusCode(403);
                 }
             } else {
-
                 return response()->json([
                     'status' => 403,
                     'message' => 'Unable to Authenticate System'
                 ])->setStatusCode(403);
             }
         } else {
-
             return response()->json([
                 'status' => 403,
                 'message' => 'Unable to Authenticate System'
