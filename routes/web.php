@@ -45,6 +45,10 @@ Route::get('/docs/sandbox', function () {
     return view('docs.sandbox');
 })->name('docs.sandbox');
 
+Route::get('/docs/banks', function () {
+    return view('docs.banks');
+})->name('docs.banks');
+
 // Health Check Endpoint
 Route::get('/api/health', function () {
     return response()->json([
@@ -53,3 +57,10 @@ Route::get('/api/health', function () {
         'version' => '1.0.0',
     ]);
 });
+
+// Catch-all route for React SPA
+// This MUST be the last route to avoid conflicts
+// It serves the React app for all routes that don't match above
+Route::get('/{any}', function () {
+    return view('index');
+})->where('any', '.*');

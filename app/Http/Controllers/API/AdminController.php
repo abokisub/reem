@@ -3848,39 +3848,66 @@ class AdminController extends Controller
             if ($check_user->count() > 0) {
                 $updateData = [];
 
-                // Pay with Transfer
+                // Pay with Transfer (Funding with Bank Transfer)
                 if ($request->has('transfer_type')) {
                     $updateData['transfer_charge_type'] = $request->transfer_type;
                     $updateData['transfer_charge_value'] = $request->transfer_value ?? 0;
-                    $updateData['transfer_charge_cap'] = $request->transfer_cap;
+                    $updateData['transfer_charge_cap'] = $request->transfer_cap ?? 0;
                 }
 
-                // Pay with Wallet
+                // Pay with Wallet (Internal Transfer)
                 if ($request->has('wallet_type')) {
                     $updateData['wallet_charge_type'] = $request->wallet_type;
                     $updateData['wallet_charge_value'] = $request->wallet_value ?? 0;
-                    $updateData['wallet_charge_cap'] = $request->wallet_cap;
+                    $updateData['wallet_charge_cap'] = $request->wallet_cap ?? 0;
                 }
 
-                // Payout to Bank
+                // Payout to Bank (External Transfer - Other Banks)
                 if ($request->has('payout_bank_type')) {
                     $updateData['payout_bank_charge_type'] = $request->payout_bank_type;
                     $updateData['payout_bank_charge_value'] = $request->payout_bank_value ?? 0;
-                    $updateData['payout_bank_charge_cap'] = $request->payout_bank_cap;
+                    $updateData['payout_bank_charge_cap'] = $request->payout_bank_cap ?? 0;
                 }
 
-                // Payout to PalmPay
+                // Payout to PalmPay (Settlement Withdrawal)
                 if ($request->has('payout_palmpay_type')) {
                     $updateData['payout_palmpay_charge_type'] = $request->payout_palmpay_type;
                     $updateData['payout_palmpay_charge_value'] = $request->payout_palmpay_value ?? 0;
-                    $updateData['payout_palmpay_charge_cap'] = $request->payout_palmpay_cap;
+                    $updateData['payout_palmpay_charge_cap'] = $request->payout_palmpay_cap ?? 0;
+                }
+
+                // Settlement Rules
+                if ($request->has('auto_settlement_enabled')) {
+                    $updateData['auto_settlement_enabled'] = $request->auto_settlement_enabled ? 1 : 0;
+                }
+                if ($request->has('settlement_delay_hours')) {
+                    $updateData['settlement_delay_hours'] = max(1, min(168, (int) $request->settlement_delay_hours));
+                }
+                if ($request->has('settlement_skip_weekends')) {
+                    $updateData['settlement_skip_weekends'] = $request->settlement_skip_weekends ? 1 : 0;
+                }
+                if ($request->has('settlement_skip_holidays')) {
+                    $updateData['settlement_skip_holidays'] = $request->settlement_skip_holidays ? 1 : 0;
+                }
+                if ($request->has('settlement_time')) {
+                    $updateData['settlement_time'] = $request->settlement_time;
+                }
+                if ($request->has('settlement_minimum_amount')) {
+                    $updateData['settlement_minimum_amount'] = max(0, (float) $request->settlement_minimum_amount);
                 }
 
                 if (!empty($updateData)) {
-                    $habukhan = $check_user->first();
-                    $cid = $habukhan->active_company_id;
-                    DB::table('settings')->where('company_id', $cid)->update($updateData);
-                    return response()->json(['status' => 'success', 'message' => 'Bank Charges Updated']);
+                    // Update global settings (company_id = 1 or NULL)
+                    $settings = DB::table('settings')->first();
+                    if ($settings) {
+                        DB::table('settings')->where('id', $settings->id)->update($updateData);
+                    } else {
+                        // Create if doesn't exist
+                        $updateData['company_id'] = 1;
+                        DB::table('settings')->insert($updateData);
+                    }
+                    
+                    return response()->json(['status' => 'success', 'message' => 'Charges & Settlement Rules Updated']);
                 }
 
                 return response()->json(['status' => 403, 'message' => 'No data to update'])->setStatusCode(403);
@@ -3898,31 +3925,63 @@ class AdminController extends Controller
                 ->where(['type' => 'ADMIN']);
 
             if ($check_user->count() > 0) {
-                $updateData = [];
-
-                if ($request->has('type')) {
-                    $updateData['charge_type'] = $request->type;
-                }
-                if ($request->has('value')) {
-                    $updateData['charge_value'] = $request->value;
-                }
-                if ($request->has('cap')) {
-                    $updateData['charge_cap'] = $request->cap;
-                }
-                if ($request->has('is_active')) {
-                    $updateData['is_active'] = $request->is_active;
-                }
-
-                if (!empty($updateData)) {
-                    $updateData['updated_at'] = now();
+                // Handle bulk update for PalmPay VA and KYC charges
+                if ($request->has('palmpay_charge')) {
+                    $palmpay = $request->palmpay_charge;
                     DB::table('service_charges')
-                        ->where('id', $request->charge_id)
-                        ->update($updateData);
-
-                    return response()->json(['status' => 'success', 'message' => 'Service Charge Updated']);
+                        ->where('service_name', 'palmpay_va')
+                        ->where('company_id', 1)
+                        ->update([
+                            'charge_type' => $palmpay['type'] ?? 'PERCENT',
+                            'charge_value' => $palmpay['value'] ?? 0,
+                            'charge_cap' => $palmpay['cap'] ?? null,
+                            'updated_at' => now(),
+                        ]);
                 }
 
-                return response()->json(['status' => 403, 'message' => 'No data to update'])->setStatusCode(403);
+                // Handle KYC charges bulk update
+                if ($request->has('kyc_charges')) {
+                    foreach ($request->kyc_charges as $serviceName => $chargeData) {
+                        if (isset($chargeData['value'])) {
+                            DB::table('service_charges')
+                                ->where('service_name', $serviceName)
+                                ->where('service_category', 'kyc')
+                                ->where('company_id', 1)
+                                ->update([
+                                    'charge_value' => $chargeData['value'],
+                                    'charge_cap' => $chargeData['cap'] ?? null,
+                                    'updated_at' => now(),
+                                ]);
+                        }
+                    }
+                }
+
+                // Handle single charge update (legacy)
+                if ($request->has('charge_id')) {
+                    $updateData = [];
+
+                    if ($request->has('type')) {
+                        $updateData['charge_type'] = $request->type;
+                    }
+                    if ($request->has('value')) {
+                        $updateData['charge_value'] = $request->value;
+                    }
+                    if ($request->has('cap')) {
+                        $updateData['charge_cap'] = $request->cap;
+                    }
+                    if ($request->has('is_active')) {
+                        $updateData['is_active'] = $request->is_active;
+                    }
+
+                    if (!empty($updateData)) {
+                        $updateData['updated_at'] = now();
+                        DB::table('service_charges')
+                            ->where('id', $request->charge_id)
+                            ->update($updateData);
+                    }
+                }
+
+                return response()->json(['status' => 'success', 'message' => 'Service Charges Updated']);
             }
         }
         return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);

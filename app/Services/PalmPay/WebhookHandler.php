@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\PalmPayWebhook;
 use App\Services\PalmPay\PalmPaySignature;
 use App\Services\LedgerService;
+use App\Services\ChargeCalculator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -167,6 +168,13 @@ class WebhookHandler
                 ];
             }
 
+            // Calculate charge based on service_charges table
+            $chargeDetails = ChargeCalculator::getServiceCharge('payment', 'palmpay_va', $amount);
+            $fee = $chargeDetails['charge'];
+
+            // Net amount is what the company receives (amount - fee)
+            $netAmount = $amount - $fee;
+
             // Create transaction
             $transaction = Transaction::create([
                 'transaction_id' => Transaction::generateTransactionId(),
@@ -175,7 +183,8 @@ class WebhookHandler
                 'type' => 'credit',
                 'category' => 'virtual_account_credit',
                 'amount' => $amount,
-                'fee' => 0,
+                'fee' => $fee,
+                'net_amount' => $netAmount,
                 'total_amount' => $amount,
                 'currency' => 'NGN',
                 'status' => 'success',
@@ -185,6 +194,9 @@ class WebhookHandler
                 'metadata' => [
                     'sender_name' => $payload['senderName'] ?? null,
                     'sender_account' => $payload['senderAccount'] ?? null,
+                    'charge_type' => $chargeDetails['type'],
+                    'charge_value' => $chargeDetails['value'],
+                    'charge_cap' => $chargeDetails['cap'],
                 ],
                 'processed_at' => now(),
             ]);
@@ -218,11 +230,11 @@ class WebhookHandler
                     $settlementTime
                 );
                 
-                // Queue for settlement
+                // Queue for settlement (use net amount - what company receives after fees)
                 DB::table('settlement_queue')->insert([
                     'company_id' => $virtualAccount->company_id,
                     'transaction_id' => $transaction->id,
-                    'amount' => $amount,
+                    'amount' => $netAmount,
                     'status' => 'pending',
                     'transaction_date' => now(),
                     'scheduled_settlement_date' => $scheduledDate,
@@ -241,18 +253,20 @@ class WebhookHandler
                 
                 Log::info('Transaction Queued for Settlement', [
                     'transaction_id' => $transaction->transaction_id,
-                    'amount' => $amount,
+                    'gross_amount' => $amount,
+                    'fee' => $fee,
+                    'net_amount' => $netAmount,
                     'scheduled_date' => $scheduledDate->toDateTimeString(),
                 ]);
             } else {
-                // Immediate settlement (old behavior)
+                // Immediate settlement (old behavior) - credit net amount to wallet
                 $wallet = CompanyWallet::where('company_id', $virtualAccount->company_id)
                     ->where('currency', 'NGN')
                     ->lockForUpdate()
                     ->firstOrFail();
 
                 $balanceBefore = $wallet->balance;
-                $wallet->credit($amount);
+                $wallet->credit($netAmount);
                 $wallet->save();
 
                 // Update transaction balances
@@ -264,8 +278,11 @@ class WebhookHandler
 
             Log::info('Virtual Account Credited', [
                 'transaction_id' => $transaction->transaction_id,
-                'amount' => $amount,
-                'account_number' => $accountNumber
+                'gross_amount' => $amount,
+                'fee' => $fee,
+                'net_amount' => $netAmount,
+                'account_number' => $accountNumber,
+                'charge_config' => $chargeDetails
             ]);
 
             // Record Ledger Entry (Double Entry)
