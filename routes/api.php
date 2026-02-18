@@ -430,6 +430,11 @@ Route::get('admin/all/stock/trans/by/system/{id}/secure', [AdminTrans::class, 'S
 Route::get('admin/all/transfer/trans/by/system/{id}/secure', [AdminTrans::class, 'TransferTransSum']);
 Route::get('admin/all/deposit/trans/by/system/{id}/secure', [AdminTrans::class, 'DepositTransSum']);
 Route::get('admin/all/card/trans/by/system/{id}/secure', [AdminTrans::class, 'CardTransSum']);
+
+// Statement and Report Routes
+Route::get('secure/trans/statement/{id}/secure', [AdminTrans::class, 'getStatement']);
+Route::get('secure/trans/report/{id}/secure', [AdminTrans::class, 'getReport']);
+
 // Charity Management
 Route::post('admin/charity/add', [CharityController::class, 'addCharity']);
 Route::post('admin/charity/update', [CharityController::class, 'updateCharity']);

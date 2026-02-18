@@ -1719,3 +1719,149 @@ class AdminTrans extends Controller
         return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
     }
 }
+
+    /**
+     * Get Transaction Statement
+     * Financial statement with date range filtering
+     */
+    public function getStatement(Request $request)
+    {
+        $allowed_origins = explode(',', config('app.habukhan_app_key'));
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+            if (!empty($request->id)) {
+                $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where('type', 'ADMIN');
+                
+                if ($check_user->count() > 0) {
+                    $startDate = $request->start_date ?? Carbon::now()->startOfMonth()->format('Y-m-d');
+                    $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->format('Y-m-d');
+                    $search = $request->search ?? '';
+                    
+                    // Get transactions from the new transactions table
+                    $query = DB::table('transactions')
+                        ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                        ->orderBy('created_at', 'desc');
+                    
+                    if (!empty($search)) {
+                        $query->where(function($q) use ($search) {
+                            $q->where('reference', 'LIKE', "%$search%")
+                              ->orWhere('customer_name', 'LIKE', "%$search%")
+                              ->orWhere('customer_account_number', 'LIKE', "%$search%")
+                              ->orWhere('details', 'LIKE', "%$search%");
+                        });
+                    }
+                    
+                    $transactions = $query->paginate($request->limit ?? 50);
+                    
+                    // Calculate summary
+                    $summary = DB::table('transactions')
+                        ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                        ->selectRaw('
+                            COUNT(*) as total_count,
+                            SUM(CASE WHEN type = "credit" THEN amount ELSE 0 END) as total_credit,
+                            SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_debit,
+                            SUM(CASE WHEN status = "success" THEN 1 ELSE 0 END) as successful_count,
+                            SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed_count,
+                            SUM(charges) as total_charges
+                        ')
+                        ->first();
+                    
+                    return response()->json([
+                        'status' => 'success',
+                        'statement' => $transactions,
+                        'summary' => $summary,
+                        'date_range' => [
+                            'start' => $startDate,
+                            'end' => $endDate
+                        ]
+                    ]);
+                }
+            }
+        }
+        return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
+    }
+
+    /**
+     * Get Transaction Reports
+     * Analytics and performance metrics
+     */
+    public function getReport(Request $request)
+    {
+        $allowed_origins = explode(',', config('app.habukhan_app_key'));
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+            if (!empty($request->id)) {
+                $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where('type', 'ADMIN');
+                
+                if ($check_user->count() > 0) {
+                    $startDate = $request->start_date ?? Carbon::now()->startOfMonth()->format('Y-m-d');
+                    $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->format('Y-m-d');
+                    
+                    // Overall metrics
+                    $metrics = DB::table('transactions')
+                        ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                        ->selectRaw('
+                            COUNT(*) as total_transactions,
+                            SUM(CASE WHEN status = "success" THEN 1 ELSE 0 END) as successful_transactions,
+                            SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed_transactions,
+                            SUM(CASE WHEN status = "processing" THEN 1 ELSE 0 END) as pending_transactions,
+                            SUM(CASE WHEN type = "credit" THEN amount ELSE 0 END) as total_inflow,
+                            SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_outflow,
+                            SUM(charges) as total_fees,
+                            AVG(amount) as average_transaction_amount
+                        ')
+                        ->first();
+                    
+                    // Daily breakdown
+                    $daily = DB::table('transactions')
+                        ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                        ->selectRaw('
+                            DATE(created_at) as date,
+                            COUNT(*) as count,
+                            SUM(CASE WHEN status = "success" THEN amount ELSE 0 END) as volume,
+                            SUM(charges) as fees
+                        ')
+                        ->groupBy('date')
+                        ->orderBy('date', 'desc')
+                        ->get();
+                    
+                    // Top companies by volume
+                    $topCompanies = DB::table('transactions')
+                        ->join('companies', 'transactions.company_id', '=', 'companies.id')
+                        ->whereBetween('transactions.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                        ->selectRaw('
+                            companies.business_name,
+                            COUNT(*) as transaction_count,
+                            SUM(transactions.amount) as total_volume
+                        ')
+                        ->groupBy('companies.id', 'companies.business_name')
+                        ->orderBy('total_volume', 'desc')
+                        ->limit(10)
+                        ->get();
+                    
+                    // Success rate by hour
+                    $hourlyStats = DB::table('transactions')
+                        ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                        ->selectRaw('
+                            HOUR(created_at) as hour,
+                            COUNT(*) as total,
+                            SUM(CASE WHEN status = "success" THEN 1 ELSE 0 END) as successful
+                        ')
+                        ->groupBy('hour')
+                        ->orderBy('hour')
+                        ->get();
+                    
+                    return response()->json([
+                        'status' => 'success',
+                        'metrics' => $metrics,
+                        'daily_breakdown' => $daily,
+                        'top_companies' => $topCompanies,
+                        'hourly_stats' => $hourlyStats,
+                        'date_range' => [
+                            'start' => $startDate,
+                            'end' => $endDate
+                        ]
+                    ]);
+                }
+            }
+        }
+        return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
+    }
