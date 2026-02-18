@@ -41,6 +41,7 @@ class Kernel extends HttpKernel
         ],
 
         'api' => [
+            \App\Http\Middleware\DebugLogger::class,
             \App\Http\Middleware\CorrelationIdMiddleware::class,
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             \App\Http\Middleware\IdempotencyMiddleware::class,

@@ -1718,7 +1718,6 @@ class AdminTrans extends Controller
         }
         return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
     }
-}
 
     /**
      * Get Transaction Statement
@@ -1865,3 +1864,4 @@ class AdminTrans extends Controller
         }
         return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
     }
+}
