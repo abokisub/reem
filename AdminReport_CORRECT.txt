@@ -1,0 +1,196 @@
+/* eslint-disable react-hooks/exhaustive-deps */
+import { useState, useEffect } from 'react';
+import { useSnackbar } from 'notistack';
+import { useTheme, styled } from '@mui/material/styles';
+import {
+    Card,
+    Container,
+    Typography,
+    Stack,
+    Box,
+    Grid,
+    TextField,
+    Button,
+    CircularProgress,
+    Table,
+    TableBody,
+    TableRow,
+    TableCell,
+    TableContainer,
+    TableHead
+} from '@mui/material';
+import useSettings from '../../hooks/useSettings';
+import Page from '../../components/Page';
+import Iconify from '../../components/Iconify';
+import { fCurrency } from '../../utils/formatNumber';
+import axios from '../../utils/axios';
+
+const HeaderCardStyle = styled(Card)(({ theme }) => ({
+    padding: theme.spacing(4),
+    background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
+    borderRadius: 24,
+    border: 'none',
+    boxShadow: '0 20px 40px 0 rgba(30, 27, 75, 0.2)',
+    marginBottom: theme.spacing(4),
+    color: '#fff',
+}));
+
+const MetricCard = styled(Card)(({ theme }) => ({
+    padding: theme.spacing(3),
+    borderRadius: 16,
+    boxShadow: theme.customShadows.z12,
+    height: '100%'
+}));
+
+export default function AdminReport() {
+    const theme = useTheme();
+    const { themeStretch } = useSettings();
+    const { enqueueSnackbar } = useSnackbar();
+    const [metrics, setMetrics] = useState(null);
+    const [dailyBreakdown, setDailyBreakdown] = useState([]);
+    const [topCompanies, setTopCompanies] = useState([]);
+    const [load, setLoad] = useState(true);
+    const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0].slice(0, 8) + '01');
+    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+    const AccessToken = window.localStorage.getItem('accessToken');
+
+    useEffect(() => {
+        initialize(startDate, endDate);
+    }, []);
+
+    const initialize = async (start, end) => {
+        setLoad(true);
+        try {
+            const response = await axios.get(`/api/secure/trans/report/${AccessToken}/secure?start_date=${start}&end_date=${end}`);
+            setMetrics(response.data?.metrics || null);
+            setDailyBreakdown(response.data?.daily_breakdown || []);
+            setTopCompanies(response.data?.top_companies || []);
+            setLoad(false);
+        } catch (error) {
+            console.error('Error fetching report:', error);
+            const errorMessage = typeof error === 'string' ? error : (error.response?.data?.message || 'Error fetching report');
+            enqueueSnackbar(errorMessage, { variant: 'error' });
+            setLoad(false);
+        }
+    };
+
+    const handleDateFilter = () => {
+        initialize(startDate, endDate);
+    };
+
+    const successRate = metrics ? ((metrics.successful_transactions / metrics.total_transactions) * 100).toFixed(2) : 0;
+
+    return (
+        <Page title="Transaction Report">
+            <Container maxWidth={themeStretch ? false : 'xl'}>
+                <HeaderCardStyle>
+                    <Box>
+                        <Typography variant="h3" sx={{ fontWeight: 900, mb: 1 }}>Transaction Reports</Typography>
+                        <Typography variant="subtitle2" sx={{ opacity: 0.8, fontWeight: 600 }}>Analytics and performance metrics</Typography>
+                    </Box>
+                </HeaderCardStyle>
+                <Card sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                        <TextField label="Start Date" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+                        <TextField label="End Date" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} InputLabelProps={{ shrink: true }} size="small" />
+                        <Button variant="contained" onClick={handleDateFilter} startIcon={<Iconify icon="eva:funnel-fill" />}>Generate Report</Button>
+                    </Stack>
+                </Card>
+                {load ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress /></Box>
+                ) : (
+                    <>
+                        {metrics && (
+                            <Grid container spacing={3} sx={{ mb: 4 }}>
+                                <Grid item xs={12} md={3}>
+                                    <MetricCard>
+                                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>Total Transactions</Typography>
+                                        <Typography variant="h3" sx={{ fontWeight: 800 }}>{metrics.total_transactions || 0}</Typography>
+                                        <Typography variant="caption" color="success.main">{metrics.successful_transactions} successful</Typography>
+                                    </MetricCard>
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <MetricCard>
+                                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>Success Rate</Typography>
+                                        <Typography variant="h3" sx={{ fontWeight: 800, color: 'success.main' }}>{successRate}%</Typography>
+                                        <Typography variant="caption" color="error.main">{metrics.failed_transactions} failed</Typography>
+                                    </MetricCard>
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <MetricCard>
+                                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>Total Volume</Typography>
+                                        <Typography variant="h4" sx={{ fontWeight: 800 }}>₦{fCurrency(metrics.total_inflow || 0)}</Typography>
+                                        <Typography variant="caption" color="text.secondary">Inflow</Typography>
+                                    </MetricCard>
+                                </Grid>
+                                <Grid item xs={12} md={3}>
+                                    <MetricCard>
+                                        <Typography variant="subtitle2" color="text.secondary" gutterBottom>Average Transaction</Typography>
+                                        <Typography variant="h4" sx={{ fontWeight: 800 }}>₦{fCurrency(metrics.average_transaction_amount || 0)}</Typography>
+                                        <Typography variant="caption" color="text.secondary">Fees: ₦{fCurrency(metrics.total_fees || 0)}</Typography>
+                                    </MetricCard>
+                                </Grid>
+                            </Grid>
+                        )}
+                        {topCompanies.length > 0 && (
+                            <Card sx={{ mb: 3, borderRadius: 2 }}>
+                                <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Top Companies by Volume</Typography>
+                                </Box>
+                                <TableContainer>
+                                    <Table>
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell>Company</TableCell>
+                                                <TableCell align="right">Transactions</TableCell>
+                                                <TableCell align="right">Total Volume</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {topCompanies.map((company, index) => (
+                                                <TableRow key={index}>
+                                                    <TableCell><Typography variant="subtitle2" sx={{ fontWeight: 600 }}>{company.business_name}</Typography></TableCell>
+                                                    <TableCell align="right">{company.transaction_count}</TableCell>
+                                                    <TableCell align="right"><Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₦{fCurrency(company.total_volume)}</Typography></TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            </Card>
+                        )}
+                        {dailyBreakdown.length > 0 && (
+                            <Card sx={{ borderRadius: 2 }}>
+                                <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                                    <Typography variant="h6" sx={{ fontWeight: 700 }}>Daily Breakdown</Typography>
+                                </Box>
+                                <TableContainer>
+                                    <Table>
+                                        <TableHead>
+                                            <TableRow>
+                                                <TableCell>Date</TableCell>
+                                                <TableCell align="right">Transactions</TableCell>
+                                                <TableCell align="right">Volume</TableCell>
+                                                <TableCell align="right">Fees</TableCell>
+                                            </TableRow>
+                                        </TableHead>
+                                        <TableBody>
+                                            {dailyBreakdown.map((day, index) => (
+                                                <TableRow key={index}>
+                                                    <TableCell>{day.date}</TableCell>
+                                                    <TableCell align="right">{day.count}</TableCell>
+                                                    <TableCell align="right">₦{fCurrency(day.volume)}</TableCell>
+                                                    <TableCell align="right">₦{fCurrency(day.fees)}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </TableContainer>
+                            </Card>
+                        )}
+                    </>
+                )}
+            </Container>
+        </Page>
+    );
+}
