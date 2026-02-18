@@ -4869,8 +4869,8 @@ class AdminController extends Controller
         $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($id)])->whereIn('type', ['admin', 'ADMIN']);
         if ($check_user->count() > 0) {
             $logs = DB::table('webhook_logs')
-                ->join('companies', 'webhook_logs.company_id', '=', 'companies.id')
-                ->select('webhook_logs.*', 'companies.company_name')
+                ->leftJoin('companies', 'webhook_logs.company_id', '=', 'companies.id')
+                ->select('webhook_logs.*', 'companies.name as company_name')
                 ->orderBy('webhook_logs.created_at', 'desc')
                 ->paginate(20);
             return response()->json(['status' => 'success', 'data' => $logs]);
