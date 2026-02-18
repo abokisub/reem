@@ -105,6 +105,9 @@ class PalmPaySignature
             // Step 2: MD5 hash and convert to uppercase
             $md5Str = strtoupper(md5($signatureString));
 
+            // URL-decode the signature first (PalmPay sends it URL-encoded)
+            $signature = urldecode($signature);
+
             Log::debug('PalmPay Webhook Signature Verification', [
                 'signature_string' => $signatureString,
                 'md5_uppercase' => $md5Str,
