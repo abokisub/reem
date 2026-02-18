@@ -37,7 +37,8 @@ class Transaction extends Model
         'balance_after',
         'processed_at',
         'is_test',
-        'processed_at',
+        'is_refunded',
+        'refund_transaction_id',
     ];
 
     protected static function booted()

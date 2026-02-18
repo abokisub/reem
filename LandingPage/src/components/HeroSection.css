@@ -1,0 +1,385 @@
+.hero-section {
+  position: relative;
+  min-height: calc(100vh - 73px);
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  padding: 4rem 0;
+}
+
+/* Background */
+.hero-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+}
+
+.hero-gradient {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, 
+    rgba(16, 185, 129, 0.05) 0%, 
+    rgba(59, 130, 246, 0.05) 50%, 
+    rgba(139, 92, 246, 0.05) 100%
+  );
+}
+
+.hero-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 50%, rgba(16, 185, 129, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.1) 0%, transparent 50%);
+}
+
+/* Content */
+.hero-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4rem;
+  align-items: center;
+}
+
+/* Left Content */
+.hero-text {
+  max-width: 600px;
+}
+
+.customer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--white);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-lg);
+  margin-bottom: 2rem;
+}
+
+.customer-avatars {
+  display: flex;
+}
+
+.customer-avatars img {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--white);
+  margin-left: -8px;
+}
+
+.customer-avatars img:first-child {
+  margin-left: 0;
+}
+
+.customer-text {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.customer-text span {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.join-btn {
+  padding: 0.375rem 0.875rem;
+  background: var(--gradient-primary);
+  color: var(--white);
+  border: none;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform var(--transition-fast);
+}
+
+.join-btn:hover {
+  transform: scale(1.05);
+}
+
+.hero-title {
+  font-size: 3.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: 1.5rem;
+  color: var(--text-primary);
+}
+
+.gradient-text {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero-description {
+  font-size: 1.25rem;
+  color: var(--text-secondary);
+  margin-bottom: 2.5rem;
+  line-height: 1.6;
+}
+
+.hero-cta {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Right Content - Dashboard Preview */
+.hero-image {
+  position: relative;
+}
+
+.dashboard-preview {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.dashboard-mockup {
+  background: var(--white);
+  border-radius: var(--radius-2xl);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  transform: perspective(1000px) rotateY(-5deg);
+  transition: transform var(--transition-slow);
+}
+
+.dashboard-mockup:hover {
+  transform: perspective(1000px) rotateY(0deg);
+}
+
+/* Mockup Header */
+.mockup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem;
+  background: var(--gradient-primary);
+}
+
+.mockup-logo {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-md);
+}
+
+.mockup-nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.nav-item {
+  width: 60px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-full);
+}
+
+.nav-item.active {
+  background: var(--white);
+}
+
+/* Mockup Content */
+.mockup-content {
+  padding: 2rem;
+  background: var(--gray-100);
+}
+
+.balance-card {
+  background: var(--gradient-primary);
+  padding: 2rem;
+  border-radius: var(--radius-xl);
+  margin-bottom: 1.5rem;
+}
+
+.balance-label {
+  width: 80px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.75rem;
+}
+
+.balance-amount {
+  width: 150px;
+  height: 32px;
+  background: var(--white);
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+}
+
+.balance-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.action-btn {
+  flex: 1;
+  height: 40px;
+  border-radius: var(--radius-lg);
+}
+
+.action-btn.primary {
+  background: var(--white);
+}
+
+.action-btn.secondary {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+.stat-card {
+  height: 100px;
+  border-radius: var(--radius-xl);
+  background: var(--white);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.stat-card.blue::before {
+  background: var(--secondary-blue);
+}
+
+.stat-card.green::before {
+  background: var(--primary-green);
+}
+
+.stat-card.teal::before {
+  background: var(--primary-light);
+}
+
+.stat-card.orange::before {
+  background: #f59e0b;
+}
+
+/* Floating Cards */
+.floating-card {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+}
+
+.floating-card.card-1 {
+  top: 10%;
+  right: -10%;
+}
+
+.floating-card.card-2 {
+  bottom: 15%;
+  left: -10%;
+}
+
+.card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+}
+
+.card-icon.green {
+  background: var(--gradient-primary);
+}
+
+.card-icon.blue {
+  background: var(--gradient-secondary);
+}
+
+.card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.card-title {
+  width: 80px;
+  height: 10px;
+  background: var(--gray-200);
+  border-radius: var(--radius-sm);
+}
+
+.card-value {
+  width: 100px;
+  height: 16px;
+  background: var(--gray-300);
+  border-radius: var(--radius-sm);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .hero-title {
+    font-size: 2.5rem;
+  }
+
+  .floating-card.card-1,
+  .floating-card.card-2 {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-content {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  .hero-text {
+    text-align: center;
+    max-width: 100%;
+  }
+
+  .customer-badge {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero-title {
+    font-size: 2rem;
+  }
+
+  .hero-description {
+    font-size: 1.125rem;
+  }
+
+  .hero-cta {
+    justify-content: center;
+  }
+
+  .dashboard-mockup {
+    transform: none;
+  }
+}
