@@ -196,8 +196,8 @@ class WebhookHandler
             $settings = DB::table('settings')->first();
             $company = Company::find($virtualAccount->company_id);
             
-            $settlementEnabled = $settings && $settings->auto_settlement_enabled;
-            $useCustomSettlement = $company && $company->custom_settlement_enabled;
+            $settlementEnabled = $settings && property_exists($settings, 'auto_settlement_enabled') && $settings->auto_settlement_enabled;
+            $useCustomSettlement = $company && property_exists($company, 'custom_settlement_enabled') && $company->custom_settlement_enabled;
             
             if ($settlementEnabled) {
                 // Get settlement configuration
