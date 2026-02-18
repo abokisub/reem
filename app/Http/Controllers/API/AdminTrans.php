@@ -469,35 +469,52 @@ class AdminTrans extends Controller
         if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
-                    $query->where('type', 'ADMIN')->orwhere('type', 'CUSTOMER');
+                    $query->where('type', 'ADMIN')->orwhere('type', 'admin')->orwhere('type', 'CUSTOMER');
                 });
                 if ($check_user->count() > 0) {
                     $search = strtolower($request->search);
+                    
+                    // Query both old message table and new transactions table
+                    $query = DB::table('transactions')
+                        ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
+                        ->leftJoin('users', 'companies.id', '=', 'users.active_company_id')
+                        ->select(
+                            'transactions.id',
+                            'transactions.transaction_id as transid',
+                            'transactions.reference',
+                            'transactions.amount',
+                            'transactions.fee',
+                            'transactions.status as plan_status',
+                            'transactions.type',
+                            'transactions.category',
+                            'transactions.description as message',
+                            'transactions.created_at as habukhan_date',
+                            'transactions.balance_before as oldbal',
+                            'transactions.balance_after as newbal',
+                            'users.username',
+                            'companies.name as company_name'
+                        );
+                    
                     if (!empty($search)) {
-                        if ($request->status == 'ALL') {
-                            return response()->json([
-                                'all_summary' => DB::table('message')->Where(function ($query) use ($search) {
-                                    $query->orWhere('message', 'LIKE', "%$search%")->orWhere('username', 'LIKE', "%$search%")->orWhere('habukhan_date', 'LIKE', "%$search%")->orWhere('oldbal', 'LIKE', "%$search%")->orWhere('transid', 'LIKE', "%$search%")->orWhere('newbal', 'LIKE', "%$search%");
-                                })->orderBy('id', 'desc')->paginate($request->limit)
-                            ]);
-                        } else {
-                            return response()->json([
-                                'all_summary' => DB::table('message')->where(['plan_status' => $request->status])->Where(function ($query) use ($search) {
-                                    $query->orWhere('message', 'LIKE', "%$search%")->orWhere('username', 'LIKE', "%$search%")->orWhere('habukhan_date', 'LIKE', "%$search%")->orWhere('oldbal', 'LIKE', "%$search%")->orWhere('transid', 'LIKE', "%$search%")->orWhere('newbal', 'LIKE', "%$search%");
-                                })->orderBy('id', 'desc')->paginate($request->limit)
-                            ]);
-                        }
-                    } else {
-                        if ($request->status == 'ALL') {
-                            return response()->json([
-                                'all_summary' => DB::table('message')->orderBy('id', 'desc')->paginate($request->limit)
-                            ]);
-                        } else {
-                            return response()->json([
-                                'all_summary' => DB::table('message')->where(['plan_status' => $request->status])->orderBy('id', 'desc')->paginate($request->limit)
-                            ]);
-                        }
+                        $query->where(function ($q) use ($search) {
+                            $q->orWhere('transactions.transaction_id', 'LIKE', "%$search%")
+                              ->orWhere('transactions.reference', 'LIKE', "%$search%")
+                              ->orWhere('transactions.description', 'LIKE', "%$search%")
+                              ->orWhere('transactions.amount', 'LIKE', "%$search%")
+                              ->orWhere('users.username', 'LIKE', "%$search%")
+                              ->orWhere('companies.name', 'LIKE', "%$search%");
+                        });
                     }
+                    
+                    if ($request->status != 'ALL') {
+                        $query->where('transactions.status', $request->status);
+                    }
+                    
+                    $transactions = $query->orderBy('transactions.id', 'desc')->paginate($request->limit ?? 20);
+                    
+                    return response()->json([
+                        'all_summary' => $transactions
+                    ]);
                 } else {
                     return response()->json([
                         'status' => 403,
@@ -505,14 +522,12 @@ class AdminTrans extends Controller
                     ])->setStatusCode(403);
                 }
             } else {
-                return redirect(config('app.error_500'));
                 return response()->json([
                     'status' => 403,
                     'message' => 'Unable to Authenticate System'
                 ])->setStatusCode(403);
             }
         } else {
-            return redirect(config('app.error_500'));
             return response()->json([
                 'status' => 403,
                 'message' => 'Unable to Authenticate System'
