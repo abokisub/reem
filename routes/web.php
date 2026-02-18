@@ -62,5 +62,5 @@ Route::get('/api/health', function () {
 // This MUST be the last route to avoid conflicts
 // It serves the React app for all routes that don't match above
 Route::get('/{any}', function () {
-    return view('index');
+    return file_get_contents(public_path('index.html'));
 })->where('any', '.*');
