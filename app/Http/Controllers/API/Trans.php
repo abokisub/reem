@@ -247,36 +247,46 @@ class Trans extends Controller
                 $user = DB::table('users')->where(['id' => $this->verifytoken($request->id), 'status' => 'active'])->first();
                 $search = strtolower($request->search);
                 $baseQuery = DB::table('transactions')
-                    ->where('company_id', $user->active_company_id)
-                    ->where('type', 'credit');
+                    ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
+                    ->where('transactions.company_id', $user->active_company_id)
+                    ->where('transactions.type', 'credit');
 
                 $selectFields = [
-                    '*',
-                    'reference as transid',
-                    'created_at as date',
-                    'description as details',
-                    'fee as charges',
-                    DB::raw("CASE WHEN status = 'success' THEN 'successful' WHEN status = 'failed' THEN 'failed' ELSE 'processing' END as status")
+                    'transactions.*',
+                    'transactions.reference as transid',
+                    'transactions.created_at as date',
+                    'transactions.description as details',
+                    'transactions.fee as charges',
+                    'virtual_accounts.account_name as va_account_name',
+                    'virtual_accounts.account_number as va_account_number',
+                    DB::raw("CASE WHEN transactions.status = 'success' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' ELSE 'processing' END as status")
                 ];
 
                 if (!empty($search)) {
                     $baseQuery->where(function ($query) use ($search) {
-                        $query->orWhere('amount', 'LIKE', "%$search%")
-                            ->orWhere('created_at', 'LIKE', "%$search%")
-                            ->orWhere('reference', 'LIKE', "%$search%")
-                            ->orWhere('description', 'LIKE', "%$search%");
+                        $query->orWhere('transactions.amount', 'LIKE', "%$search%")
+                            ->orWhere('transactions.created_at', 'LIKE', "%$search%")
+                            ->orWhere('transactions.reference', 'LIKE', "%$search%")
+                            ->orWhere('transactions.description', 'LIKE', "%$search%");
                     });
                 }
 
                 if ($request->status != 'ALL') {
                     $statusMap = ['active' => 'success', 'blocked' => 'failed'];
                     $dbStatus = $statusMap[strtolower($request->status)] ?? $request->status;
-                    $baseQuery->where('status', $dbStatus);
+                    $baseQuery->where('transactions.status', $dbStatus);
                 }
 
                 $deposit_trans = $baseQuery->select($selectFields)
-                    ->orderBy('id', 'desc')
+                    ->orderBy('transactions.id', 'desc')
                     ->paginate($request->limit);
+
+                // Extract sender_name from metadata for each transaction
+                foreach ($deposit_trans as $transaction) {
+                    $metadata = json_decode($transaction->metadata, true);
+                    $transaction->customer_name = $metadata['sender_name'] ?? $transaction->va_account_name ?? 'Unknown';
+                    $transaction->customer_account = $metadata['sender_account'] ?? '';
+                }
 
                 return response()->json([
                     'deposit_trans' => $deposit_trans,
@@ -357,7 +367,8 @@ class Trans extends Controller
 
                 $search = strtolower($request->search);
                 $query = DB::table('transactions')
-                    ->where('company_id', $user->active_company_id);
+                    ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
+                    ->where('transactions.company_id', $user->active_company_id);
 
                 if (!empty($search)) {
                     $query->where(function ($q) use ($search) {
@@ -381,15 +392,24 @@ class Trans extends Controller
 
                 // Map new schema columns to legacy frontend expectations
                 $transactions = $query->select(
-                    '*',
-                    'reference as transid',
-                    'created_at as date',
-                    'description as details',
-                    'fee as charges',
-                    DB::raw("CASE WHEN status = 'success' THEN 'successful' WHEN status = 'failed' THEN 'failed' ELSE 'processing' END as status")
+                    'transactions.*',
+                    'transactions.reference as transid',
+                    'transactions.created_at as date',
+                    'transactions.description as details',
+                    'transactions.fee as charges',
+                    'virtual_accounts.account_name as va_account_name',
+                    'virtual_accounts.account_number as va_account_number',
+                    DB::raw("CASE WHEN transactions.status = 'success' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' ELSE 'processing' END as status")
                 )
-                    ->orderBy('id', 'desc')
+                    ->orderBy('transactions.id', 'desc')
                     ->paginate($request->limit);
+
+                // Extract sender_name from metadata for each transaction
+                foreach ($transactions as $transaction) {
+                    $metadata = json_decode($transaction->metadata, true);
+                    $transaction->customer_name = $metadata['sender_name'] ?? $transaction->va_account_name ?? 'Unknown';
+                    $transaction->customer_account = $metadata['sender_account'] ?? '';
+                }
 
                 return response()->json([
                     'ra_trans' => $transactions
