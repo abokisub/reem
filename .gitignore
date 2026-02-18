@@ -19,6 +19,7 @@ node_modules
 
 # Frontend folder (too heavy - build and upload manually)
 /frontend/
+/LandingPage/
 /Kobopoint/
 
 # Test files

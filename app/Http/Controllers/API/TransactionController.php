@@ -46,7 +46,23 @@ class TransactionController extends Controller
             
             DB::beginTransaction();
             
-            // Create refund transaction
+            // Check if refund already exists for this transaction
+            $existingRefund = Transaction::where('metadata', 'like', '%"original_transaction_id":' . $transaction->id . '%')
+                ->where('category', 'refund')
+                ->first();
+                
+            if ($existingRefund) {
+                DB::rollBack();
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'A refund already exists for this transaction',
+                    'data' => [
+                        'existing_refund_id' => $existingRefund->transaction_id
+                    ]
+                ], 400);
+            }
+            
+            // Create refund transaction with unique reference
             $refundTransaction = Transaction::create([
                 'transaction_id' => 'RFD_' . strtoupper(uniqid()),
                 'company_id' => $transaction->company_id,
@@ -57,8 +73,8 @@ class TransactionController extends Controller
                 'net_amount' => $transaction->amount,
                 'total_amount' => $transaction->amount,
                 'currency' => 'NGN',
-                'status' => 'success', // Changed from 'pending' to 'success'
-                'reference' => 'REFUND_' . $transaction->reference,
+                'status' => 'success',
+                'reference' => 'REFUND_' . $transaction->reference . '_' . time(),
                 'description' => 'Refund for transaction ' . $transaction->transaction_id,
                 'metadata' => json_encode([
                     'original_transaction_id' => $transaction->id,
