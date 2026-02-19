@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -14,15 +15,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('settings', function (Blueprint $table) {
-            $table->decimal('settlement_delay_hours', 8, 4)->default(24)->change()
-                ->comment('Hours to delay settlement (supports decimals: 0.0167=1min, 0.5=30min, 1=1h, 24=1day)');
-        });
-
-        Schema::table('companies', function (Blueprint $table) {
-            $table->decimal('custom_settlement_delay_hours', 8, 4)->nullable()->change()
-                ->comment('Custom settlement delay for this company (supports decimals)');
-        });
+        // Use raw SQL to avoid Doctrine DBAL requirement
+        DB::statement('ALTER TABLE settings MODIFY COLUMN settlement_delay_hours DECIMAL(8,4) DEFAULT 24 COMMENT "Hours to delay settlement (supports decimals: 0.0167=1min, 0.5=30min, 1=1h, 24=1day)"');
+        
+        DB::statement('ALTER TABLE companies MODIFY COLUMN custom_settlement_delay_hours DECIMAL(8,4) NULL COMMENT "Custom settlement delay for this company (supports decimals)"');
     }
 
     /**
@@ -30,14 +26,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('settings', function (Blueprint $table) {
-            $table->integer('settlement_delay_hours')->default(24)->change()
-                ->comment('Hours to delay settlement (1, 7, 24, etc.)');
-        });
-
-        Schema::table('companies', function (Blueprint $table) {
-            $table->integer('custom_settlement_delay_hours')->nullable()->change()
-                ->comment('Custom settlement delay for this company');
-        });
+        // Use raw SQL to avoid Doctrine DBAL requirement
+        DB::statement('ALTER TABLE settings MODIFY COLUMN settlement_delay_hours INT DEFAULT 24 COMMENT "Hours to delay settlement (1, 7, 24, etc.)"');
+        
+        DB::statement('ALTER TABLE companies MODIFY COLUMN custom_settlement_delay_hours INT NULL COMMENT "Custom settlement delay for this company"');
     }
 };
