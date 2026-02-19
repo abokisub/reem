@@ -183,7 +183,7 @@ class AppController extends Controller
             // Build settlement config (safe check for settings columns)
             $settlementConfig = [
                 'enabled' => property_exists($settings, 'auto_settlement_enabled') ? (bool) $settings->auto_settlement_enabled : true,
-                'delay_hours' => $useCustomSettlement ? (int) $customDelayHours : (property_exists($settings, 'settlement_delay_hours') ? (int) $settings->settlement_delay_hours : 24),
+                'delay_hours' => $useCustomSettlement ? (float) $customDelayHours : (property_exists($settings, 'settlement_delay_hours') ? (float) $settings->settlement_delay_hours : 24),
                 'skip_weekends' => property_exists($settings, 'settlement_skip_weekends') ? (bool) $settings->settlement_skip_weekends : true,
                 'skip_holidays' => property_exists($settings, 'settlement_skip_holidays') ? (bool) $settings->settlement_skip_holidays : true,
                 'settlement_time' => property_exists($settings, 'settlement_time') ? $settings->settlement_time : '02:00:00',
