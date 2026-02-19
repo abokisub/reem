@@ -248,7 +248,9 @@ class TransferPurchase extends Controller
                 'account_number' => $request->account_number,
                 'account_name' => $request->account_name,
                 'narration' => $request->narration,
-                'reference' => $transid
+                'reference' => $transid,
+                'balance_already_deducted' => true,  // Signal that balance was already deducted
+                'transaction_reference' => $transid  // Pass existing transaction reference
             ];
 
             try {

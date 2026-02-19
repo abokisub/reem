@@ -1,0 +1,116 @@
+# Implementation Plan
+
+- [ ] 1. Write bug condition exploration test
+  - **Property 1: Fault Condition** - Double Balance Deduction in Internal Transfer Flow
+  - **CRITICAL**: This test MUST FAIL on unfixed code - failure confirms the bug exists
+  - **DO NOT attempt to fix the test or the code when it fails**
+  - **NOTE**: This test encodes the expected behavior - it will validate the fix when it passes after implementation
+  - **GOAL**: Surface counterexamples that demonstrate the double deduction bug
+  - **Scoped PBT Approach**: Scope the property to transfers initiated through internal flow (TransferPurchase → TransferRouter → BankingService → TransferService) with sufficient balance
+  - Test that when a user with ₦10,000 balance initiates a ₦5,000 transfer (₦50 fee), the transfer succeeds without "Insufficient balance" errors
+  - Test that balance is deducted exactly once (₦5,050 total deduction)
+  - Test that transaction status progresses from 'pending' to 'debited' to 'processing'
+  - Test that no duplicate ledger entries are created
+  - Run test on UNFIXED code
+  - **EXPECTED OUTCOME**: Test FAILS with "Insufficient balance to cover amount and fees" error (this is correct - it proves the bug exists)
+  - Document counterexamples found:
+    - TransferPurchase successfully deducts ₦5,050, balance becomes ₦4,950
+    - TransferService checks if ₦4,950 >= ₦5,050 → FAILS
+    - System logs "Failed to Initiate Transfer (Ledger Error)"
+    - Refund process is triggered
+  - Mark task complete when test is written, run, and failure is documented
+  - _Requirements: 1.1, 1.2, 1.3_
+
+- [ ] 2. Write preservation property tests (BEFORE implementing fix)
+  - **Property 2: Preservation** - Existing Transfer Validation and Refund Behavior
+  - **IMPORTANT**: Follow observation-first methodology
+  - Observe behavior on UNFIXED code for non-buggy inputs:
+    - User with ₦3,000 attempts ₦5,000 transfer → TransferPurchase rejects with "Insufficient Funds"
+    - Transfer fails after initiation → Refund process returns funds correctly
+    - Transaction records are created with correct status values
+    - Direct API calls to TransferService (if any) perform balance operations
+  - Write property-based tests capturing observed behavior patterns:
+    - Property: For all transfers with genuinely insufficient balance (before any deduction), TransferPurchase rejects with appropriate error
+    - Property: For all transfers that fail after initiation, refund process returns correct amount
+    - Property: For all transactions created, status values are accurate and progress correctly
+    - Property: For all settlement operations, processing occurs correctly after successful transfers
+  - Property-based testing generates many test cases for stronger guarantees
+  - Run tests on UNFIXED code
+  - **EXPECTED OUTCOME**: Tests PASS (this confirms baseline behavior to preserve)
+  - Mark task complete when tests are written, run, and passing on unfixed code
+  - _Requirements: 3.1, 3.2, 3.3, 3.4_
+
+- [ ] 3. Fix for transfer double deduction bug
+
+  - [x] 3.1 Modify TransferPurchase.php to pass context flags
+    - Add `'balance_already_deducted' => true` to `$transferDetails` array (around line 260)
+    - Add `'transaction_reference' => $transid` to pass existing transaction reference
+    - This signals to downstream services that balance operations are complete
+    - _Bug_Condition: isBugCondition(input) where input.source == 'internal_flow' AND balanceAlreadyDeducted(input.reference)_
+    - _Expected_Behavior: Balance checked and deducted exactly once in TransferPurchase, TransferService skips balance operations_
+    - _Preservation: Initial balance validation continues to reject insufficient balance; transaction recording remains unchanged; refund logic continues to work; direct API calls remain unchanged_
+    - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4_
+
+  - [x] 3.2 Modify BankingService.php to forward context flags
+    - In the `transfer` method, forward `balance_already_deducted` flag from details to TransferService
+    - Add the flag to `$transferData` array (around line 77)
+    - Ensure `transaction_reference` is also forwarded
+    - This maintains the context through the routing layer
+    - _Bug_Condition: isBugCondition(input) where input.source == 'internal_flow'_
+    - _Expected_Behavior: Context flags propagate through BankingService to TransferService_
+    - _Preservation: All existing BankingService functionality remains unchanged_
+    - _Requirements: 2.1, 2.2_
+
+  - [x] 3.3 Modify TransferService.php to skip balance operations when flag is set
+    - At the beginning of `initiateTransfer` method, check if `$transferData['balance_already_deducted']` is true
+    - If true AND `$transferData['transaction_reference']` exists:
+      - Look up existing transaction by reference
+      - Update status from 'pending' to 'debited'
+      - Skip balance checking and deduction (lines 52-88)
+      - Skip ledger recording (already done in TransferPurchase)
+    - If false or not set:
+      - Perform balance operations as before (backward compatibility)
+      - Create new transaction
+      - Record ledger entries
+    - Ensure `processPalmPayTransfer` call executes in BOTH scenarios
+    - _Bug_Condition: isBugCondition(input) where TransferService.initiateTransfer() attempts balance check/deduction when balance already deducted_
+    - _Expected_Behavior: TransferService skips balance operations for internal flow, performs them for direct API calls_
+    - _Preservation: Direct API calls continue to perform balance operations; transaction status updates remain correct; provider integration unchanged_
+    - _Requirements: 2.1, 2.2, 2.3, 3.1, 3.2, 3.3, 3.4_
+
+  - [ ] 3.4 Verify bug condition exploration test now passes
+    - **Property 1: Expected Behavior** - Single Balance Deduction Per Transfer
+    - **IMPORTANT**: Re-run the SAME test from task 1 - do NOT write a new test
+    - The test from task 1 encodes the expected behavior
+    - When this test passes, it confirms the expected behavior is satisfied
+    - Run bug condition exploration test from step 1
+    - **EXPECTED OUTCOME**: Test PASSES (confirms bug is fixed)
+    - Verify:
+      - User with ₦10,000 can successfully initiate ₦5,000 transfer
+      - Balance is deducted exactly once (₦5,050 total)
+      - Transaction status progresses: 'pending' → 'debited' → 'processing'
+      - No "Insufficient balance" errors occur
+      - No duplicate ledger entries
+    - _Requirements: 2.1, 2.2, 2.3_
+
+  - [ ] 3.5 Verify preservation tests still pass
+    - **Property 2: Preservation** - Existing Transfer Validation and Refund Behavior
+    - **IMPORTANT**: Re-run the SAME tests from task 2 - do NOT write new tests
+    - Run preservation property tests from step 2
+    - **EXPECTED OUTCOME**: Tests PASS (confirms no regressions)
+    - Verify:
+      - Insufficient balance transfers still rejected in TransferPurchase
+      - Refund process still works correctly for failed transfers
+      - Transaction records maintain accurate status values
+      - Direct API calls (if any) still perform balance operations
+      - Settlement processing continues to work correctly
+    - Confirm all tests still pass after fix (no regressions)
+
+- [ ] 4. Checkpoint - Ensure all tests pass
+  - Run all exploration tests - should PASS (bug is fixed)
+  - Run all preservation tests - should PASS (no regressions)
+  - Run existing unit tests - should PASS (no breaking changes)
+  - Run integration tests - should PASS (full flow works correctly)
+  - Verify in logs that double deduction errors no longer occur
+  - Verify transaction records are accurate and complete
+  - If any issues arise, document them and ask the user for guidance

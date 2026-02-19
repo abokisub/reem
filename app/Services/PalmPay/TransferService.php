@@ -43,87 +43,113 @@ class TransferService
     {
         try {
             return DB::transaction(function () use ($companyId, $transferData) {
-                // Get company wallet
-                $wallet = CompanyWallet::where('company_id', $companyId)
-                    ->where('currency', 'NGN')
-                    ->lockForUpdate()
-                    ->firstOrFail();
+                // Check if balance was already deducted (internal flow from TransferPurchase)
+                $balanceAlreadyDeducted = $transferData['balance_already_deducted'] ?? false;
+                $existingReference = $transferData['transaction_reference'] ?? null;
+                
+                if ($balanceAlreadyDeducted && $existingReference) {
+                    // INTERNAL FLOW: Balance already deducted by TransferPurchase
+                    // Look up and update existing transaction instead of creating new one
+                    
+                    $transaction = Transaction::where('reference', $existingReference)
+                        ->where('company_id', $companyId)
+                        ->firstOrFail();
+                    
+                    // Update transaction with provider details and change status to 'debited'
+                    $transaction->update([
+                        'status' => 'debited',
+                        'provider' => 'palmpay',
+                        'reconciliation_status' => 'not_started',
+                        'recipient_bank_name' => $transferData['bank_name'] ?? null,
+                    ]);
+                    
+                    // Skip balance operations and ledger recording (already done in TransferPurchase)
+                    
+                } else {
+                    // DIRECT API FLOW: Perform balance operations (backward compatibility)
+                    
+                    // Get company wallet
+                    $wallet = CompanyWallet::where('company_id', $companyId)
+                        ->where('currency', 'NGN')
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
-                // 1. Calculate Charges BEFORE provider call
-                $amount = $transferData['amount'];
-                $feeResults = $this->feeService->calculateFee($companyId, $amount, 'transfer');
-                $fee = (float) $feeResults['fee'];
-                $totalAmount = $amount + $fee;
+                    // 1. Calculate Charges BEFORE provider call
+                    $amount = $transferData['amount'];
+                    $feeResults = $this->feeService->calculateFee($companyId, $amount, 'transfer');
+                    $fee = (float) $feeResults['fee'];
+                    $totalAmount = $amount + $fee;
 
-                // 2. Strict Balance Check
-                if ($wallet->balance < $totalAmount) {
-                    throw new \Exception('Insufficient balance to cover amount and fees');
+                    // 2. Strict Balance Check
+                    if ($wallet->balance < $totalAmount) {
+                        throw new \Exception('Insufficient balance to cover amount and fees');
+                    }
+
+                    // 3. Generate Secure References (Never Null)
+                    $transactionId = Transaction::generateTransactionId();
+                    $reference = Transaction::generateReference() ?? 'PWV_' . strtoupper(Str::random(12));
+
+                    $balanceBefore = $wallet->balance;
+
+                    // 4. Record Double Entry Ledger (Atomic)
+                    // Debit: Company Wallet (Total)
+                    // Credit: Provider Clearing (Amount)
+                    // Credit: Platform Revenue (Fee)
+
+                    $companyAccount = $this->ledgerService->getOrCreateAccount("Company Wallet $companyId", 'company_wallet', $companyId);
+                    $providerAccount = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
+                    $revenueAccount = $this->ledgerService->getOrCreateAccount('Platform Revenue', 'revenue');
+
+                    $this->ledgerService->recordTransaction($reference, [
+                        ['account_id' => $companyAccount->id, 'type' => 'debit', 'amount' => $totalAmount],
+                        ['account_id' => $providerAccount->id, 'type' => 'credit', 'amount' => $amount],
+                        ['account_id' => $revenueAccount->id, 'type' => 'credit', 'amount' => $fee],
+                    ], "Bank Transfer to " . ($transferData['bank_name'] ?? 'Unknown'));
+
+                    // 5. Sync Legacy CompanyWallet Table (Balance Integrity)
+                    $wallet->decrement('balance', $totalAmount);
+                    $wallet->decrement('ledger_balance', $totalAmount);
+                    $wallet->save();
+
+                    // 6. Sync System Wallets (Revenue & Clearing Isolation)
+                    $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
+                    if ($revWallet)
+                        $revWallet->credit($fee);
+
+                    $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
+                    if ($clrWallet)
+                        $clrWallet->credit($amount);
+
+                    // 7. Create Transaction Record
+                    // Note: For transfers, we start with 'debited' status (wallet already debited)
+                    // This allows proper state transitions: debited → processing → successful/failed
+                    $transaction = Transaction::create([
+                        'transaction_id' => $transactionId,
+                        'company_id' => $companyId,
+                        'type' => 'debit',
+                        'category' => 'transfer_out',
+                        'amount' => $amount,
+                        'fee' => $fee,
+                        'net_amount' => $amount,
+                        'total_amount' => $totalAmount,
+                        'currency' => 'NGN',
+                        'status' => 'debited',
+                        'reference' => $reference,
+                        'external_reference' => $transferData['reference'] ?? null,
+                        'recipient_account_number' => $transferData['account_number'],
+                        'recipient_account_name' => $transferData['account_name'] ?? null,
+                        'recipient_bank_code' => $transferData['bank_code'],
+                        'recipient_bank_name' => $transferData['bank_name'] ?? null,
+                        'description' => $transferData['narration'] ?? 'Bank Transfer',
+                        'metadata' => $transferData['metadata'] ?? null,
+                        'balance_before' => $balanceBefore,
+                        'balance_after' => $wallet->balance,
+                        'provider' => 'palmpay',
+                        'reconciliation_status' => 'not_started',
+                    ]);
                 }
 
-                // 3. Generate Secure References (Never Null)
-                $transactionId = Transaction::generateTransactionId();
-                $reference = Transaction::generateReference() ?? 'PWV_' . strtoupper(Str::random(12));
-
-                $balanceBefore = $wallet->balance;
-
-                // 4. Record Double Entry Ledger (Atomic)
-                // Debit: Company Wallet (Total)
-                // Credit: Provider Clearing (Amount)
-                // Credit: Platform Revenue (Fee)
-
-                $companyAccount = $this->ledgerService->getOrCreateAccount("Company Wallet $companyId", 'company_wallet', $companyId);
-                $providerAccount = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
-                $revenueAccount = $this->ledgerService->getOrCreateAccount('Platform Revenue', 'revenue');
-
-                $this->ledgerService->recordTransaction($reference, [
-                    ['account_id' => $companyAccount->id, 'type' => 'debit', 'amount' => $totalAmount],
-                    ['account_id' => $providerAccount->id, 'type' => 'credit', 'amount' => $amount],
-                    ['account_id' => $revenueAccount->id, 'type' => 'credit', 'amount' => $fee],
-                ], "Bank Transfer to " . ($transferData['bank_name'] ?? 'Unknown'));
-
-                // 5. Sync Legacy CompanyWallet Table (Balance Integrity)
-                $wallet->decrement('balance', $totalAmount);
-                $wallet->decrement('ledger_balance', $totalAmount);
-                $wallet->save();
-
-                // 6. Sync System Wallets (Revenue & Clearing Isolation)
-                $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
-                if ($revWallet)
-                    $revWallet->credit($fee);
-
-                $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
-                if ($clrWallet)
-                    $clrWallet->credit($amount);
-
-                // 7. Create Transaction Record
-                // Note: For transfers, we start with 'debited' status (wallet already debited)
-                // This allows proper state transitions: debited → processing → successful/failed
-                $transaction = Transaction::create([
-                    'transaction_id' => $transactionId,
-                    'company_id' => $companyId,
-                    'type' => 'debit',
-                    'category' => 'transfer_out',
-                    'amount' => $amount,
-                    'fee' => $fee,
-                    'net_amount' => $amount,
-                    'total_amount' => $totalAmount,
-                    'currency' => 'NGN',
-                    'status' => 'debited',
-                    'reference' => $reference,
-                    'external_reference' => $transferData['reference'] ?? null,
-                    'recipient_account_number' => $transferData['account_number'],
-                    'recipient_account_name' => $transferData['account_name'] ?? null,
-                    'recipient_bank_code' => $transferData['bank_code'],
-                    'recipient_bank_name' => $transferData['bank_name'] ?? null,
-                    'description' => $transferData['narration'] ?? 'Bank Transfer',
-                    'metadata' => $transferData['metadata'] ?? null,
-                    'balance_before' => $balanceBefore,
-                    'balance_after' => $wallet->balance,
-                    'provider' => 'palmpay',
-                    'reconciliation_status' => 'not_started',
-                ]);
-
-                // 7. Async Provider Call (Triggered after commit)
+                // 8. Async Provider Call (Triggered after commit) - BOTH flows
                 DB::afterCommit(function () use ($transaction) {
                     $this->processPalmPayTransfer($transaction);
                 });

@@ -80,6 +80,8 @@ class BankingService
                 'narration' => $details['narration'] ?? 'Bank Transfer',
                 'reference' => $details['reference'] ?? null,
                 'metadata' => $details['metadata'] ?? null,
+                'balance_already_deducted' => $details['balance_already_deducted'] ?? false,  // Forward context flag
+                'transaction_reference' => $details['transaction_reference'] ?? null  // Forward transaction reference
             ];
             
             // Initiate transfer
