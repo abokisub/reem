@@ -182,28 +182,53 @@ class Trans extends Controller
                         }
                     }
                 } else if ($database_name == 'transfers') {
+                    $category = ['transfer', 'payout', 'transfer_out'];
                     if (!empty($search)) {
                         if ($request->status == 'ALL') {
                             return response()->json([
-                                'transfers' => DB::table('transfers')->where(['user_id' => $user->id])->Where(function ($query) use ($search) {
-                                    $query->orWhere('amount', 'LIKE', "%$search%")->orWhere('reference', 'LIKE', "%$search%")->orWhere('account_number', 'LIKE', "%$search%")->orWhere('account_name', 'LIKE', "%$search%")->orWhere('bank_code', 'LIKE', "%$search%")->orWhere('status', 'LIKE', "%$search%");
-                                })->orderBy('id', 'desc')->paginate($request->limit)
+                                'transfers' => DB::table('transactions')
+                                    ->where(['company_id' => $user->id])
+                                    ->whereIn('category', $category)
+                                    ->Where(function ($query) use ($search) {
+                                        $query->orWhere('amount', 'LIKE', "%$search%")
+                                            ->orWhere('reference', 'LIKE', "%$search%")
+                                            ->orWhere('recipient_account_number', 'LIKE', "%$search%")
+                                            ->orWhere('recipient_account_name', 'LIKE', "%$search%");
+                                    })
+                                    ->orderBy('id', 'desc')
+                                    ->paginate($request->limit)
                             ]);
                         } else {
                             return response()->json([
-                                'transfers' => DB::table('transfers')->where(['user_id' => $user->id, 'status' => $request->status])->Where(function ($query) use ($search) {
-                                    $query->orWhere('amount', 'LIKE', "%$search%")->orWhere('reference', 'LIKE', "%$search%")->orWhere('account_number', 'LIKE', "%$search%")->orWhere('account_name', 'LIKE', "%$search%")->orWhere('bank_code', 'LIKE', "%$search%")->orWhere('status', 'LIKE', "%$search%");
-                                })->orderBy('id', 'desc')->paginate($request->limit)
+                                'transfers' => DB::table('transactions')
+                                    ->where(['company_id' => $user->id, 'status' => $request->status])
+                                    ->whereIn('category', $category)
+                                    ->Where(function ($query) use ($search) {
+                                        $query->orWhere('amount', 'LIKE', "%$search%")
+                                            ->orWhere('reference', 'LIKE', "%$search%")
+                                            ->orWhere('recipient_account_number', 'LIKE', "%$search%")
+                                            ->orWhere('recipient_account_name', 'LIKE', "%$search%");
+                                    })
+                                    ->orderBy('id', 'desc')
+                                    ->paginate($request->limit)
                             ]);
                         }
                     } else {
                         if ($request->status == 'ALL') {
                             return response()->json([
-                                'transfers' => DB::table('transfers')->where(['user_id' => $user->id])->orderBy('id', 'desc')->paginate($request->limit)
+                                'transfers' => DB::table('transactions')
+                                    ->where(['company_id' => $user->id])
+                                    ->whereIn('category', $category)
+                                    ->orderBy('id', 'desc')
+                                    ->paginate($request->limit)
                             ]);
                         } else {
                             return response()->json([
-                                'transfers' => DB::table('transfers')->where(['user_id' => $user->id, 'status' => $request->status])->orderBy('id', 'desc')->paginate($request->limit)
+                                'transfers' => DB::table('transactions')
+                                    ->where(['company_id' => $user->id, 'status' => $request->status])
+                                    ->whereIn('category', $category)
+                                    ->orderBy('id', 'desc')
+                                    ->paginate($request->limit)
                             ]);
                         }
                     }
@@ -228,9 +253,11 @@ class Trans extends Controller
 
     public function TransferDetails(Request $request)
     {
-        if (DB::table('transfers')->where(['reference' => $request->id])->count() == 1) {
+        $transaction = DB::table('transactions')->where(['reference' => $request->id])->first();
+        if ($transaction) {
+            // Map new schema fields to legacy aliases for frontend compatibility if needed
             return response()->json([
-                'trans' => DB::table('transfers')->where(['reference' => $request->id])->first()
+                'trans' => $transaction
             ]);
         } else {
             return response()->json([

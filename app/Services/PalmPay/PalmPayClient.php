@@ -97,10 +97,24 @@ class PalmPayClient
 
         } catch (\Exception $e) {
             $this->recordFailure();
-            Log::error('PalmPay API Request Failed', [
+
+            $context = [
                 'endpoint' => $endpoint,
                 'error' => $e->getMessage()
-            ]);
+            ];
+
+            // If it's a whitelist error, try to help by logging the outbound IP
+            if (str_contains($e->getMessage(), 'OPEN_GW_000012') || str_contains($e->getMessage(), 'white list')) {
+                try {
+                    $outboundIp = Http::get('https://ifconfig.me/ip')->body();
+                    $context['detected_outbound_ip'] = trim($outboundIp);
+                    Log::warning('PalmPay Whitelist Error Diagnostic: Server outbound IP detected.', $context);
+                } catch (\Exception $ipEx) {
+                    Log::warning('PalmPay Whitelist Error Diagnostic: Failed to detect outbound IP.', ['error' => $ipEx->getMessage()]);
+                }
+            }
+
+            Log::error('PalmPay API Request Failed', $context);
 
             throw $e;
         }

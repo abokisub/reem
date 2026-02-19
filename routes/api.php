@@ -441,6 +441,7 @@ Route::get('admin/all/card/trans/by/system/{id}/secure', [AdminTrans::class, 'Ca
 // Statement and Report Routes
 Route::get('secure/trans/statement/{id}/secure', [AdminTrans::class, 'getStatement']);
 Route::get('secure/trans/report/{id}/secure', [AdminTrans::class, 'getReport']);
+Route::post('admin/trans/action/{id}/secure', [AdminTrans::class, 'ProcessAdminAction']);
 
 // Charity Management
 Route::post('admin/charity/add', [CharityController::class, 'addCharity']);

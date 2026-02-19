@@ -107,7 +107,12 @@ class DocumentService
                 return null;
             }
 
-            return Storage::disk($this->disk)->path($path);
+            $disk = Storage::disk($this->disk);
+            if (method_exists($disk, 'path')) {
+                return $disk->path($path);
+            }
+
+            return storage_path('app/' . $path);
 
         } catch (Exception $e) {
             Log::error('Document Retrieval Failed', [
@@ -201,9 +206,12 @@ class DocumentService
                 return null;
             }
 
-            // For local disk, return storage path
-            // In production, you might use a signed URL or CDN
-            return Storage::disk($this->disk)->url($path);
+            $disk = Storage::disk($this->disk);
+            if (method_exists($disk, 'url')) {
+                return $disk->url($path);
+            }
+
+            return url('storage/' . $path);
 
         } catch (Exception $e) {
             Log::error('Document URL Generation Failed', [

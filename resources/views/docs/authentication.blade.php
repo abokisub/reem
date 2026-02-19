@@ -1,34 +1,151 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Authentication - PointPay API Documentation</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; line-height: 1.6; color: #333; background: #f8f9fa; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 0; margin-bottom: 40px; }
-        header h1 { font-size: 2.5rem; margin-bottom: 10px; }
-        .nav { display: flex; gap: 20px; margin-bottom: 40px; flex-wrap: wrap; }
-        .nav a { padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; transition: background 0.3s; }
-        .nav a:hover { background: #764ba2; }
-        .section { background: white; padding: 30px; margin-bottom: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .section h2 { color: #667eea; margin-bottom: 20px; font-size: 1.8rem; }
-        .section h3 { color: #764ba2; margin: 20px 0 10px; font-size: 1.3rem; }
-        .code-block { background: #f5f5f5; padding: 20px; border-radius: 5px; overflow-x: auto; margin: 15px 0; border-left: 4px solid #667eea; }
-        .code-block code { font-family: 'Courier New', monospace; font-size: 0.9rem; white-space: pre; }
-        .alert { padding: 15px; border-radius: 5px; margin: 15px 0; }
-        .alert.warning { background: #fff3cd; border-left: 4px solid #ffc107; }
-        .alert.info { background: #d1ecf1; border-left: 4px solid #17a2b8; }
-        .alert.success { background: #d4edda; border-left: 4px solid #28a745; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        table th, table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        table th { background: #f5f5f5; font-weight: 600; }
-        .badge { display: inline-block; padding: 3px 8px; border-radius: 3px; font-size: 0.85rem; font-weight: 600; }
-        .badge.required { background: #f93e3e; color: white; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 0;
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .nav {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .nav a {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .nav a:hover {
+            background: #764ba2;
+        }
+
+        .section {
+            background: white;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+
+        .section h3 {
+            color: #764ba2;
+            margin: 20px 0 10px;
+            font-size: 1.3rem;
+        }
+
+        .code-block {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        .alert.warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+
+        .alert.info {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+        }
+
+        .alert.success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        table th,
+        table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        table th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge.required {
+            background: #f93e3e;
+            color: white;
+        }
     </style>
 </head>
+
 <body>
     <header>
         <div class="container">
@@ -48,7 +165,7 @@
         <section class="section">
             <h2>Getting Your API Credentials</h2>
             <p>After completing KYC verification, you'll receive your API credentials from the dashboard:</p>
-            
+
             <table>
                 <thead>
                     <tr>
@@ -77,7 +194,8 @@
             </table>
 
             <div class="alert warning">
-                <strong>⚠️ Security Warning:</strong> Never expose your Secret Key in client-side code, public repositories, or logs. Keep it secure on your server.
+                <strong>⚠️ Security Warning:</strong> Never expose your Secret Key in client-side code, public
+                repositories, or logs. Keep it secure on your server.
             </div>
         </section>
 
@@ -145,7 +263,8 @@
 
         <section class="section">
             <h2>Idempotency</h2>
-            <p>To prevent duplicate transactions, include an <code>Idempotency-Key</code> header for all write operations (POST, PUT).</p>
+            <p>To prevent duplicate transactions, include an <code>Idempotency-Key</code> header for all write
+                operations (POST, PUT).</p>
 
             <div class="code-block"><code>Idempotency-Key: unique-request-id-12345</code></div>
 
@@ -179,7 +298,7 @@
 
         <section class="section">
             <h2>Example: PHP</h2>
-            <div class="code-block"><code><?php
+            <div class="code-block"><code>&lt;?php
 
 $businessId = '3450968aa027e86e3ff5b0169dc17edd7694a846';
 $apiKey = '7db8dbb3991382487a1fc388a05d96a7139d92ba';
@@ -304,4 +423,5 @@ createVirtualAccount();</code></div>
         </section>
     </div>
 </body>
+
 </html>

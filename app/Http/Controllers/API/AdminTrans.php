@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\FirebaseService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class AdminTrans extends Controller
@@ -14,7 +15,10 @@ class AdminTrans extends Controller
     {
 
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
                     $query->where('type', 'ADMIN')->orwhere('type', 'CUSTOMER');
@@ -23,31 +27,41 @@ class AdminTrans extends Controller
                     $search = strtolower($request->search);
                     $database_name = strtolower($request->database_name);
                     if ($database_name === 'bank_trans') {
+                        $query = DB::table('transactions')
+                            ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
+                            ->where('transactions.type', 'credit')
+                            ->select(
+                                'transactions.*',
+                                'users.username',
+                                'transactions.reference as transid',
+                                'transactions.description as details',
+                                'transactions.recipient_account_number as account_number',
+                                'transactions.recipient_account_name as account_name',
+                                'transactions.recipient_bank_name as bank_name',
+                                'transactions.recipient_bank_code as bank_code',
+                                'transactions.balance_before as oldbal',
+                                'transactions.balance_after as newbal',
+                                DB::raw("CASE WHEN transactions.status = 'success' THEN 1 WHEN transactions.status = 'failed' THEN 2 ELSE 0 END as plan_status")
+                            );
+
                         if (!empty($search)) {
-                            if ($request->status == 'ALL') {
-                                return response()->json([
-                                    'bank_trans' => DB::table('bank_transfer')->Where(function ($query) use ($search) {
-                                        $query->orWhere('amount', 'LIKE', "%$search%")->orWhere('username', 'LIKE', "%$search%")->orWhere('date', 'LIKE', "%$search%")->orWhere('account_name', 'LIKE', "%$search%")->orWhere('transid', 'LIKE', "%$search%")->orWhere('account_number', 'LIKE', "%$search%")->orWhere('bank_name', 'LIKE', "%$search%")->orWhere('bank_code', 'LIKE', "%$search%");
-                                    })->orderBy('id', 'desc')->paginate($request->limit)
-                                ]);
-                            } else {
-                                return response()->json([
-                                    'bank_trans' => DB::table('bank_transfer')->where(['plan_status' => $request->status])->Where(function ($query) use ($search) {
-                                        $query->orWhere('amount', 'LIKE', "%$search%")->orWhere('username', 'LIKE', "%$search%")->orWhere('date', 'LIKE', "%$search%")->orWhere('account_name', 'LIKE', "%$search%")->orWhere('transid', 'LIKE', "%$search%")->orWhere('account_number', 'LIKE', "%$search%")->orWhere('bank_name', 'LIKE', "%$search%")->orWhere('bank_code', 'LIKE', "%$search%");
-                                    })->orderBy('id', 'desc')->paginate($request->limit)
-                                ]);
-                            }
-                        } else {
-                            if ($request->status == 'ALL') {
-                                return response()->json([
-                                    'bank_trans' => DB::table('bank_transfer')->orderBy('id', 'desc')->paginate($request->limit)
-                                ]);
-                            } else {
-                                return response()->json([
-                                    'bank_trans' => DB::table('bank_transfer')->where(['plan_status' => $request->status])->orderBy('id', 'desc')->paginate($request->limit)
-                                ]);
-                            }
+                            $query->where(function ($q) use ($search) {
+                                $q->orWhere('transactions.amount', 'LIKE', "%$search%")
+                                    ->orWhere('users.username', 'LIKE', "%$search%")
+                                    ->orWhere('transactions.reference', 'LIKE', "%$search%")
+                                    ->orWhere('transactions.description', 'LIKE', "%$search%");
+                            });
                         }
+
+                        if ($request->status != 'ALL') {
+                            $statusMap = ['1' => 'success', '2' => 'failed', '0' => 'pending'];
+                            $dbStatus = $statusMap[$request->status] ?? $request->status;
+                            $query->where('transactions.status', $dbStatus);
+                        }
+
+                        return response()->json([
+                            'bank_trans' => $query->orderBy('transactions.id', 'desc')->paginate($request->limit)
+                        ]);
                     } else if ($database_name == 'cable_trans') {
                         if (!empty($search)) {
                             if ($request->status == 'ALL') {
@@ -233,7 +247,9 @@ class AdminTrans extends Controller
     public function DepositTransSum(Request $request)
     {
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
                     $query->where('type', 'ADMIN')->orwhere('type', 'CUSTOMER');
@@ -247,7 +263,6 @@ class AdminTrans extends Controller
                             'transactions.*',
                             'users.username',
                             'transactions.reference as transid',
-                            'transactions.created_at as date',
                             'transactions.description as details',
                             DB::raw("CASE WHEN transactions.status = 'success' THEN 'active' WHEN transactions.status = 'failed' THEN 'blocked' ELSE transactions.status END as status")
                         );
@@ -295,7 +310,9 @@ class AdminTrans extends Controller
     public function StockTransSum(Request $request)
     {
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
                     $query->where('type', 'ADMIN')->orwhere('type', 'CUSTOMER');
@@ -352,7 +369,9 @@ class AdminTrans extends Controller
     public function AirtimeTransSum(Request $request)
     {
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
                     $query->where('type', 'ADMIN')->orwhere('type', 'CUSTOMER');
@@ -408,7 +427,9 @@ class AdminTrans extends Controller
     public function DataTransSum(Request $request)
     {
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
                     $query->where('type', 'ADMIN')->orwhere('type', 'CUSTOMER');
@@ -473,7 +494,7 @@ class AdminTrans extends Controller
                 });
                 if ($check_user->count() > 0) {
                     $search = strtolower($request->search);
-                    
+
                     // Query both old message table and new transactions table
                     $query = DB::table('transactions')
                         ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
@@ -484,34 +505,40 @@ class AdminTrans extends Controller
                             'transactions.reference',
                             'transactions.amount',
                             'transactions.fee',
-                            'transactions.status as plan_status',
                             'transactions.type',
                             'transactions.category',
                             'transactions.description as message',
-                            'transactions.created_at as habukhan_date',
+                            'transactions.created_at',
                             'transactions.balance_before as oldbal',
                             'transactions.balance_after as newbal',
                             'users.username',
-                            'companies.name as company_name'
+                            'companies.name as company_name',
+                            DB::raw("CASE WHEN transactions.status = 'success' THEN 1 WHEN transactions.status = 'failed' THEN 2 ELSE 0 END as plan_status")
                         );
-                    
+
                     if (!empty($search)) {
                         $query->where(function ($q) use ($search) {
                             $q->orWhere('transactions.transaction_id', 'LIKE', "%$search%")
-                              ->orWhere('transactions.reference', 'LIKE', "%$search%")
-                              ->orWhere('transactions.description', 'LIKE', "%$search%")
-                              ->orWhere('transactions.amount', 'LIKE', "%$search%")
-                              ->orWhere('users.username', 'LIKE', "%$search%")
-                              ->orWhere('companies.name', 'LIKE', "%$search%");
+                                ->orWhere('transactions.reference', 'LIKE', "%$search%")
+                                ->orWhere('transactions.description', 'LIKE', "%$search%")
+                                ->orWhere('transactions.amount', 'LIKE', "%$search%")
+                                ->orWhere('users.username', 'LIKE', "%$search%")
+                                ->orWhere('companies.name', 'LIKE', "%$search%");
                         });
                     }
-                    
+
                     if ($request->status != 'ALL') {
                         $query->where('transactions.status', $request->status);
                     }
-                    
+
                     $transactions = $query->orderBy('transactions.id', 'desc')->paginate($request->limit ?? 20);
-                    
+
+                    $transactions->through(function ($item) {
+                        $item->display_category = Str::headline($item->category);
+                        $item->display_status = strtoupper($item->status);
+                        return $item;
+                    });
+
                     return response()->json([
                         'all_summary' => $transactions
                     ]);
@@ -537,7 +564,9 @@ class AdminTrans extends Controller
     public function DataRefund(Request $request)
     {
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
                     $query->where('type', 'ADMIN')->orwhere('type', 'CUSTOMER');
@@ -609,7 +638,7 @@ class AdminTrans extends Controller
                                 'oldbal' => $user_balance,
                                 'newbal' => $user_balance + $trans->amount,
                                 'username' => $trans->username,
-                                'habukhan_date' => $this->system_date(),
+                                'created_at' => $this->system_date(),
                                 'transid' => $trans->transid,
                                 'role' => 'data',
                                 'amount' => $trans->amount
@@ -1667,7 +1696,9 @@ class AdminTrans extends Controller
     public function CardRefund(Request $request)
     {
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
                     $query->where('type', 'ADMIN')->orwhere('type', 'CUSTOMER');
@@ -1741,31 +1772,31 @@ class AdminTrans extends Controller
     public function getStatement(Request $request)
     {
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where('type', 'ADMIN');
-                
+
                 if ($check_user->count() > 0) {
                     $startDate = $request->start_date ?? Carbon::now()->startOfMonth()->format('Y-m-d');
                     $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->format('Y-m-d');
                     $search = $request->search ?? '';
-                    
+
                     // Get transactions from the new transactions table
                     $query = DB::table('transactions')
                         ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
                         ->orderBy('created_at', 'desc');
-                    
-                    if (!empty($search)) {
-                        $query->where(function($q) use ($search) {
-                            $q->where('reference', 'LIKE', "%$search%")
-                              ->orWhere('customer_name', 'LIKE', "%$search%")
-                              ->orWhere('customer_account_number', 'LIKE', "%$search%")
-                              ->orWhere('details', 'LIKE', "%$search%");
-                        });
-                    }
-                    
+
+                    $query->where(function ($q) use ($search) {
+                        $q->where('reference', 'LIKE', "%$search%")
+                            ->orWhere('recipient_account_name', 'LIKE', "%$search%")
+                            ->orWhere('recipient_account_number', 'LIKE', "%$search%")
+                            ->orWhere('description', 'LIKE', "%$search%");
+                    });
+
                     $transactions = $query->paginate($request->limit ?? 50);
-                    
+
                     // Calculate summary
                     $summary = DB::table('transactions')
                         ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
@@ -1775,10 +1806,10 @@ class AdminTrans extends Controller
                             SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_debit,
                             SUM(CASE WHEN status = "success" THEN 1 ELSE 0 END) as successful_count,
                             SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed_count,
-                            SUM(charges) as total_charges
+                            SUM(fee) as total_charges
                         ')
                         ->first();
-                    
+
                     return response()->json([
                         'status' => 'success',
                         'statement' => $transactions,
@@ -1801,14 +1832,16 @@ class AdminTrans extends Controller
     public function getReport(Request $request)
     {
         $allowed_origins = explode(',', config('app.habukhan_app_key'));
-        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins)) {
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
             if (!empty($request->id)) {
                 $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where('type', 'ADMIN');
-                
+
                 if ($check_user->count() > 0) {
                     $startDate = $request->start_date ?? Carbon::now()->startOfMonth()->format('Y-m-d');
                     $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->format('Y-m-d');
-                    
+
                     // Overall metrics
                     $metrics = DB::table('transactions')
                         ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
@@ -1819,11 +1852,11 @@ class AdminTrans extends Controller
                             SUM(CASE WHEN status = "processing" THEN 1 ELSE 0 END) as pending_transactions,
                             SUM(CASE WHEN type = "credit" THEN amount ELSE 0 END) as total_inflow,
                             SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_outflow,
-                            SUM(charges) as total_fees,
+                            SUM(fee) as total_fees,
                             AVG(amount) as average_transaction_amount
                         ')
                         ->first();
-                    
+
                     // Daily breakdown
                     $daily = DB::table('transactions')
                         ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
@@ -1831,12 +1864,12 @@ class AdminTrans extends Controller
                             DATE(created_at) as date,
                             COUNT(*) as count,
                             SUM(CASE WHEN status = "success" THEN amount ELSE 0 END) as volume,
-                            SUM(charges) as fees
+                            SUM(fee) as fees
                         ')
                         ->groupBy('date')
                         ->orderBy('date', 'desc')
                         ->get();
-                    
+
                     // Top companies by volume
                     $topCompanies = DB::table('transactions')
                         ->join('companies', 'transactions.company_id', '=', 'companies.id')
@@ -1850,7 +1883,7 @@ class AdminTrans extends Controller
                         ->orderBy('total_volume', 'desc')
                         ->limit(10)
                         ->get();
-                    
+
                     // Success rate by hour
                     $hourlyStats = DB::table('transactions')
                         ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
@@ -1862,7 +1895,7 @@ class AdminTrans extends Controller
                         ->groupBy('hour')
                         ->orderBy('hour')
                         ->get();
-                    
+
                     return response()->json([
                         'status' => 'success',
                         'metrics' => $metrics,
@@ -1874,6 +1907,85 @@ class AdminTrans extends Controller
                             'end' => $endDate
                         ]
                     ]);
+                }
+            }
+        }
+        return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
+    }
+
+    /**
+     * Process Unified Admin Action
+     * Handles Automated Refunds and Forced Credit Notifications
+     */
+    public function ProcessAdminAction(Request $request)
+    {
+        $allowed_origins = explode(',', config('app.habukhan_app_key'));
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
+            if (!empty($request->id)) {
+                $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where('type', 'ADMIN');
+
+                if ($check_user->count() > 0) {
+                    $trans = DB::table('transactions')->where('reference', $request->reference)->first();
+                    if (!$trans) {
+                        return response()->json(['status' => 404, 'message' => 'Transaction not found'])->setStatusCode(404);
+                    }
+
+                    $action = $request->action; // 'refund' or 'notify_credit'
+
+                    if ($action === 'refund') {
+                        if ($trans->status === 'failed') {
+                            return response()->json(['status' => 400, 'message' => 'Transaction already failed/refunded'])->setStatusCode(400);
+                        }
+
+                        return DB::transaction(function () use ($trans) {
+                            $user = DB::table('users')->where('id', $trans->user_id)->lockForUpdate()->first();
+                            if (!$user)
+                                return response()->json(['status' => 404, 'message' => 'User not found'])->setStatusCode(404);
+
+                            // Refund Amount + Fee if it's a debit/transfer
+                            $refundAmount = ($trans->type === 'credit') ? 0 : ($trans->amount + ($trans->fee ?? 0));
+
+                            if ($refundAmount > 0) {
+                                DB::table('users')->where('id', $user->id)->increment('balance', $refundAmount);
+                            }
+
+                            DB::table('transactions')->where('id', $trans->id)->update([
+                                'status' => 'failed',
+                                'description' => $trans->description . ' (Admin Refunded)',
+                                'balance_after' => ($user->balance + $refundAmount)
+                            ]);
+
+                            return response()->json(['status' => 'success', 'message' => 'Transaction Refunded Successfully']);
+                        });
+
+                    } else if ($action === 'notify_credit') {
+                        // Mark as Success and ensure user is credited if it was a credit type
+                        if ($trans->status === 'success') {
+                            return response()->json(['status' => 'success', 'message' => 'Notification Sent (Already Success)']);
+                        }
+
+                        return DB::transaction(function () use ($trans) {
+                            $user = DB::table('users')->where('id', $trans->user_id)->lockForUpdate()->first();
+                            if (!$user)
+                                return response()->json(['status' => 404, 'message' => 'User not found'])->setStatusCode(404);
+
+                            if ($trans->type === 'credit') {
+                                DB::table('users')->where('id', $user->id)->increment('balance', $trans->amount);
+                            }
+
+                            DB::table('transactions')->where('id', $trans->id)->update([
+                                'status' => 'success',
+                                'processed_at' => now(),
+                                'balance_after' => ($user->balance + ($trans->type === 'credit' ? $trans->amount : 0))
+                            ]);
+
+                            return response()->json(['status' => 'success', 'message' => 'User Credited and Notified']);
+                        });
+                    }
+
+                    return response()->json(['status' => 400, 'message' => 'Invalid action'])->setStatusCode(400);
                 }
             }
         }

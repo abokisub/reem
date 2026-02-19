@@ -1,31 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Webhooks - PointPay API Documentation</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; line-height: 1.6; color: #333; background: #f8f9fa; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 0; margin-bottom: 40px; }
-        header h1 { font-size: 2.5rem; margin-bottom: 10px; }
-        .nav { display: flex; gap: 20px; margin-bottom: 40px; flex-wrap: wrap; }
-        .nav a { padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; transition: background 0.3s; }
-        .nav a:hover { background: #764ba2; }
-        .section { background: white; padding: 30px; margin-bottom: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .section h2 { color: #667eea; margin-bottom: 20px; font-size: 1.8rem; }
-        .section h3 { color: #764ba2; margin: 20px 0 10px; font-size: 1.3rem; }
-        .code-block { background: #f5f5f5; padding: 20px; border-radius: 5px; overflow-x: auto; margin: 15px 0; border-left: 4px solid #667eea; }
-        .code-block code { font-family: 'Courier New', monospace; font-size: 0.9rem; white-space: pre; }
-        .alert { padding: 15px; border-radius: 5px; margin: 15px 0; }
-        .alert.warning { background: #fff3cd; border-left: 4px solid #ffc107; }
-        .alert.info { background: #d1ecf1; border-left: 4px solid #17a2b8; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        table th, table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        table th { background: #f5f5f5; font-weight: 600; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 0;
+            margin-bottom: 40px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .nav {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 40px;
+            flex-wrap: wrap;
+        }
+
+        .nav a {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        .nav a:hover {
+            background: #764ba2;
+        }
+
+        .section {
+            background: white;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.8rem;
+        }
+
+        .section h3 {
+            color: #764ba2;
+            margin: 20px 0 10px;
+            font-size: 1.3rem;
+        }
+
+        .code-block {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 5px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border-left: 4px solid #667eea;
+        }
+
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            white-space: pre;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+        }
+
+        .alert.warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+        }
+
+        .alert.info {
+            background: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+
+        table th,
+        table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        table th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
     </style>
 </head>
+
 <body>
     <header>
         <div class="container">
@@ -47,10 +149,13 @@
 
         <section class="section">
             <h2>Overview</h2>
-            <p>Webhooks allow you to receive real-time notifications when events occur in your PointPay account. Instead of polling our API, we'll send HTTP POST requests to your server when important events happen.</p>
+            <p>Webhooks allow you to receive real-time notifications when events occur in your PointPay account. Instead
+                of polling our API, we'll send HTTP POST requests to your server when important events happen.</p>
 
             <div class="alert info">
-                <strong>🏦 PalmPay Integration:</strong> All webhook events are triggered by PalmPay's real-time payment processing system. This ensures you receive instant notifications for deposits, transfers, and KYC updates.
+                <strong>🏦 PalmPay Integration:</strong> All webhook events are triggered by PalmPay's real-time payment
+                processing system. This ensures you receive instant notifications for deposits, transfers, and KYC
+                updates.
             </div>
 
             <h3>Common Use Cases</h3>
@@ -66,7 +171,7 @@
 
         <section class="section">
             <h2>Setting Up Webhooks</h2>
-            
+
             <h3>1. Configure Your Webhook URL</h3>
             <p>Set your webhook URL in the dashboard or via API:</p>
             <div class="code-block"><code>POST /company/webhook/update
@@ -177,7 +282,8 @@ Authorization: Bearer YOUR_SECRET_KEY
 
         <section class="section">
             <h2>Signature Verification</h2>
-            <p>Every webhook includes an <code>X-PointPay-Signature</code> header for security. Always verify this signature to ensure the webhook came from PointPay.</p>
+            <p>Every webhook includes an <code>X-PointPay-Signature</code> header for security. Always verify this
+                signature to ensure the webhook came from PointPay.</p>
 
             <h3>Verification Process</h3>
             <ol style="margin-left: 20px; margin-top: 10px;">
@@ -188,7 +294,7 @@ Authorization: Bearer YOUR_SECRET_KEY
             </ol>
 
             <h3>PHP Example</h3>
-            <div class="code-block"><code><?php
+            <div class="code-block"><code>&lt;?php
 
 // Get webhook secret from dashboard
 $webhookSecret = 'your_webhook_secret_here';
@@ -298,20 +404,36 @@ app.listen(3000);</code></div>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td>1st retry</td><td>1 minute</td></tr>
-                    <tr><td>2nd retry</td><td>5 minutes</td></tr>
-                    <tr><td>3rd retry</td><td>15 minutes</td></tr>
-                    <tr><td>4th retry</td><td>1 hour</td></tr>
-                    <tr><td>5th retry</td><td>6 hours</td></tr>
+                    <tr>
+                        <td>1st retry</td>
+                        <td>1 minute</td>
+                    </tr>
+                    <tr>
+                        <td>2nd retry</td>
+                        <td>5 minutes</td>
+                    </tr>
+                    <tr>
+                        <td>3rd retry</td>
+                        <td>15 minutes</td>
+                    </tr>
+                    <tr>
+                        <td>4th retry</td>
+                        <td>1 hour</td>
+                    </tr>
+                    <tr>
+                        <td>5th retry</td>
+                        <td>6 hours</td>
+                    </tr>
                 </tbody>
             </table>
 
-            <p style="margin-top: 15px;">After 5 failed attempts, the webhook is marked as failed and you'll need to manually retrieve the data via API.</p>
+            <p style="margin-top: 15px;">After 5 failed attempts, the webhook is marked as failed and you'll need to
+                manually retrieve the data via API.</p>
         </section>
 
         <section class="section">
             <h2>Testing Webhooks</h2>
-            
+
             <h3>Local Development</h3>
             <p>For local testing, use tools like ngrok to expose your local server:</p>
             <div class="code-block"><code># Install ngrok
@@ -343,7 +465,7 @@ https://abc123.ngrok.io/webhooks/pointpay</code></div>
 
         <section class="section">
             <h2>Troubleshooting</h2>
-            
+
             <h3>Webhook Not Received</h3>
             <ul style="margin-left: 20px; margin-top: 10px;">
                 <li>Check webhook URL is correct and publicly accessible</li>
@@ -374,4 +496,5 @@ markTransactionProcessed($data['transaction_id']);</code></div>
         </section>
     </div>
 </body>
+
 </html>

@@ -68,6 +68,7 @@ return [
 
     'links' => [
         public_path('profile_image') => storage_path('app/profile_image'),
+        public_path('kyc_documents') => storage_path('app/kyc_documents'),
         public_path('storage') => storage_path('app/public'),
     ],
 

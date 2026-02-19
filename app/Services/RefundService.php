@@ -68,7 +68,7 @@ class RefundService
                 throw new Exception("Wallet not found for company {$transaction->company_id}");
             }
 
-            $wallet->increment('balance', $transaction->total_amount);
+            $wallet->increment('balance', (float) $transaction->total_amount);
 
             // 3. Reverse ledger entries
             $this->reverseLedgerEntries($transaction, $refundId);
@@ -155,7 +155,7 @@ class RefundService
                     throw new Exception("Insufficient balance for refund");
                 }
 
-                $wallet->decrement('balance', $transaction->amount);
+                $wallet->decrement('balance', (float) $transaction->amount);
 
                 // Ledger: Debit Company Wallet, Credit Bank Clearing (reversal)
                 $walletGL = $this->ledgerService->getOrCreateAccount(
