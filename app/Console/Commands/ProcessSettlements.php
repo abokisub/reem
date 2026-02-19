@@ -146,8 +146,11 @@ class ProcessSettlements extends Command
     }
 
     /**
-     * Calculate next business day settlement date
+     * Calculate settlement date based on delay hours
      * Skips weekends and holidays based on settings
+     * 
+     * IMPORTANT: settlementTime is ONLY used when delay is 24+ hours (full days)
+     * For delays under 24 hours, the exact time is preserved
      */
     public static function calculateSettlementDate(
         Carbon $transactionDate,
@@ -167,9 +170,12 @@ class ProcessSettlements extends Command
             }
         }
 
-        // Set settlement time (e.g., 2am)
-        list($hour, $minute, $second) = explode(':', $settlementTime);
-        $settlementDate->setTime((int)$hour, (int)$minute, (int)$second);
+        // Only set specific settlement time if delay is 24+ hours (full day settlement)
+        // For shorter delays (minutes/hours), preserve the exact calculated time
+        if ($delayHours >= 24) {
+            list($hour, $minute, $second) = explode(':', $settlementTime);
+            $settlementDate->setTime((int)$hour, (int)$minute, (int)$second);
+        }
 
         // If skip holidays is enabled (you can add holiday checking logic here)
         if ($skipHolidays) {
