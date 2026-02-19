@@ -90,18 +90,41 @@ class CustomerController extends Controller
         // Get transactions for this customer's virtual accounts
         $virtualAccountIds = $customer->virtualAccounts->pluck('id');
         
+        $transactions = [];
         if ($virtualAccountIds->isNotEmpty()) {
-            $transactions = DB::table('transactions')
+            $transactionStats = DB::table('transactions')
                 ->whereIn('virtual_account_id', $virtualAccountIds)
-                ->where('status', 'successful')
+                ->where('status', 'success')
                 ->select(
                     DB::raw('COUNT(*) as total_count'),
                     DB::raw('SUM(amount) as total_amount')
                 )
                 ->first();
             
-            $stats['total_transactions'] = $transactions->total_count ?? 0;
-            $stats['total_amount_received'] = $transactions->total_amount ?? 0;
+            $stats['total_transactions'] = $transactionStats->total_count ?? 0;
+            $stats['total_amount_received'] = $transactionStats->total_amount ?? 0;
+            
+            // Get recent transactions for display
+            $transactions = DB::table('transactions')
+                ->whereIn('virtual_account_id', $virtualAccountIds)
+                ->orderBy('created_at', 'desc')
+                ->limit(50)
+                ->get()
+                ->map(function ($transaction) {
+                    return [
+                        'id' => $transaction->id,
+                        'reference' => $transaction->reference,
+                        'amount' => $transaction->amount,
+                        'fee' => $transaction->fee ?? 0,
+                        'net_amount' => $transaction->net_amount ?? $transaction->amount,
+                        'status' => $transaction->status,
+                        'type' => $transaction->type,
+                        'category' => $transaction->category,
+                        'description' => $transaction->description,
+                        'created_at' => $transaction->created_at,
+                        'date' => \Carbon\Carbon::parse($transaction->created_at)->format('Y-m-d H:i:s'),
+                    ];
+                });
         }
 
         return response()->json([
@@ -122,6 +145,7 @@ class CustomerController extends Controller
                         'created_at' => $va->created_at,
                     ];
                 }),
+                'transactions' => $transactions,
             ]
         ]);
     }
