@@ -555,8 +555,9 @@ class AdminTrans extends Controller
                             $item->phone_account = $item->recipient_account_name ?? null;
                         } else {
                             // Credit transaction - extract sender info from metadata
-                            $item->phone = $metadata['sender_account'] ?? $metadata['account_number'] ?? null;
-                            $item->phone_account = $metadata['sender_name'] ?? $metadata['account_name'] ?? null;
+                            // Check multiple possible keys for sender account and name
+                            $item->phone = $metadata['sender_account'] ?? $metadata['account_number'] ?? $metadata['sender_account_number'] ?? null;
+                            $item->phone_account = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? $metadata['account_name'] ?? null;
                         }
                         
                         // Set display values
