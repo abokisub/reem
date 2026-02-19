@@ -3889,17 +3889,23 @@ class AdminController extends Controller
 
                 // Settlement Rules
                 if ($request->has('auto_settlement_enabled')) {
-                    $updateData['auto_settlement_enabled'] = $request->auto_settlement_enabled ? 1 : 0;
+                    // Handle boolean from JavaScript (true/false, "true"/"false", 1/0)
+                    $value = $request->auto_settlement_enabled;
+                    $updateData['auto_settlement_enabled'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
                 }
                 if ($request->has('settlement_delay_hours')) {
                     // Allow decimal hours (e.g., 0.0167 for 1 minute, 0.5 for 30 minutes)
                     $updateData['settlement_delay_hours'] = max(0.0167, min(168, (float) $request->settlement_delay_hours));
                 }
                 if ($request->has('settlement_skip_weekends')) {
-                    $updateData['settlement_skip_weekends'] = $request->settlement_skip_weekends ? 1 : 0;
+                    // Handle boolean from JavaScript
+                    $value = $request->settlement_skip_weekends;
+                    $updateData['settlement_skip_weekends'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
                 }
                 if ($request->has('settlement_skip_holidays')) {
-                    $updateData['settlement_skip_holidays'] = $request->settlement_skip_holidays ? 1 : 0;
+                    // Handle boolean from JavaScript
+                    $value = $request->settlement_skip_holidays;
+                    $updateData['settlement_skip_holidays'] = filter_var($value, FILTER_VALIDATE_BOOLEAN) ? 1 : 0;
                 }
                 if ($request->has('settlement_time')) {
                     $updateData['settlement_time'] = $request->settlement_time;

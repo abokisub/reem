@@ -252,14 +252,79 @@ class WebhookHandler
             // Update webhook with transaction
             $webhook->update(['transaction_id' => $transaction->id]);
 
-            // Check if settlement is enabled
-            $settings = DB::table('settings')->first();
-            $company = Company::find($virtualAccount->company_id);
+            // ===================================================================
+            // CRITICAL: Detect if this is COMPANY SELF-FUNDING or CLIENT PAYMENT
+            // ===================================================================
+            // company_user_id = NULL → Master account (company funding themselves)
+            // company_user_id = value → Client account (end user payment)
+            // 
+            // Company self-funding should:
+            // - Credit wallet INSTANTLY (no settlement delay)
+            // - NOT go to settlement queue
+            // - NOT count in "Total Transactions" or "Total Revenue" metrics
+            // ===================================================================
+            
+            $isCompanySelfFunding = ($virtualAccount->company_user_id === null);
+            
+            if ($isCompanySelfFunding) {
+                // INSTANT CREDIT for company self-funding
+                Log::info('Company Self-Funding Detected - Instant Credit', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'company_id' => $virtualAccount->company_id,
+                    'amount' => $netAmount,
+                ]);
+                
+                $wallet = CompanyWallet::where('company_id', $virtualAccount->company_id)
+                    ->where('currency', 'NGN')
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            $settlementEnabled = $settings && property_exists($settings, 'auto_settlement_enabled') && $settings->auto_settlement_enabled;
-            $useCustomSettlement = $company && property_exists($company, 'custom_settlement_enabled') && $company->custom_settlement_enabled;
+                $balanceBefore = $wallet->balance;
+                $wallet->credit($netAmount);
+                $wallet->save();
 
-            if ($settlementEnabled) {
+                // Update transaction balances
+                $transaction->update([
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $wallet->balance,
+                    'metadata' => array_merge($transaction->metadata ?? [], [
+                        'settlement_status' => 'instant',
+                        'settlement_type' => 'company_self_funding',
+                        'bypass_reason' => 'Master account funding - instant credit',
+                    ]),
+                ]);
+
+                // Sync System Wallets (Revenue & Clearing Isolation)
+                $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
+                if ($revWallet)
+                    $revWallet->credit($fee);
+
+                $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
+                if ($clrWallet)
+                    $clrWallet->credit($amount);
+                    
+                Log::info('Company Wallet Credited Instantly', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $wallet->balance,
+                    'net_amount' => $netAmount,
+                ]);
+            } else {
+                // CLIENT PAYMENT - Use settlement queue
+                Log::info('Client Payment Detected - Using Settlement Queue', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'company_id' => $virtualAccount->company_id,
+                    'company_user_id' => $virtualAccount->company_user_id,
+                ]);
+                
+                // Check if settlement is enabled
+                $settings = DB::table('settings')->first();
+                $company = Company::find($virtualAccount->company_id);
+
+                $settlementEnabled = $settings && property_exists($settings, 'auto_settlement_enabled') && $settings->auto_settlement_enabled;
+                $useCustomSettlement = $company && property_exists($company, 'custom_settlement_enabled') && $company->custom_settlement_enabled;
+
+                if ($settlementEnabled) {
                 // Get settlement configuration
                 $delayHours = $useCustomSettlement ?
                     (int) ($company->custom_settlement_delay_hours ?? 24) :
@@ -307,7 +372,7 @@ class WebhookHandler
                     'scheduled_date' => $scheduledDate->toDateTimeString(),
                 ]);
             } else {
-                // Immediate settlement (old behavior) - credit net amount to wallet
+                // Immediate settlement (auto settlement disabled) - credit net amount to wallet
                 $wallet = CompanyWallet::where('company_id', $virtualAccount->company_id)
                     ->where('currency', 'NGN')
                     ->lockForUpdate()
@@ -332,6 +397,7 @@ class WebhookHandler
                 if ($clrWallet)
                     $clrWallet->credit($amount);
             }
+            } // End of CLIENT PAYMENT block
 
             Log::info('Virtual Account Credited', [
                 'transaction_id' => $transaction->transaction_id,
