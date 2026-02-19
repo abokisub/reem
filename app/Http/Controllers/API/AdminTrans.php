@@ -1822,7 +1822,7 @@ class AdminTrans extends Controller
                     $query = DB::table('transactions')
                         ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
                         ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
-                        ->leftJoin('customers', 'transactions.customer_id', '=', 'customers.id')
+                        ->leftJoin('company_users', 'transactions.customer_id', '=', 'company_users.id')
                         ->whereBetween('transactions.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
                         ->select(
                             'transactions.id',
