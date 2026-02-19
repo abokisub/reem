@@ -476,6 +476,10 @@ class Trans extends Controller
                     $metadata = json_decode($transaction->metadata, true);
                     $transaction->customer_name = $metadata['sender_name'] ?? $transaction->va_account_name ?? 'Unknown';
                     $transaction->customer_account = $metadata['sender_account'] ?? '';
+                    $transaction->customer_bank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+                    
+                    // Keep metadata as object for frontend access
+                    $transaction->metadata = $metadata;
                 }
 
                 return response()->json([
