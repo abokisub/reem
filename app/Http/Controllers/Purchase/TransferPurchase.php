@@ -256,8 +256,11 @@ class TransferPurchase extends Controller
             try {
                 $routerResponse = $this->transferRouter->processTransfer($transferDetails, $user->active_company_id);
 
-                if ($routerResponse['status'] == 'success' || $routerResponse['status'] == 'pending') {
-                    $finalStatus = ($routerResponse['status'] == 'success') ? 'success' : 'pending';
+                // Accept all valid success statuses: 'success', 'pending', 'debited', 'successful', 'processing'
+                $validSuccessStatuses = ['success', 'pending', 'debited', 'successful', 'processing'];
+                if (in_array($routerResponse['status'], $validSuccessStatuses)) {
+                    // Map to final status
+                    $finalStatus = in_array($routerResponse['status'], ['success', 'successful', 'debited']) ? 'successful' : 'pending';
 
                     DB::table('transactions')->where('reference', $transid)->update([
                         'status' => $finalStatus,
