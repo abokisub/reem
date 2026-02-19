@@ -16,20 +16,20 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule)
     {
         // $schedule->command('inspire')->hourly();
-        
+
         // Bank synchronization
         $schedule->command('banks:sync')->daily();
-        
-        // Settlement processing (every hour to catch due settlements)
-        $schedule->command('settlements:process')->hourly();
-        
+
+        // Settlement processing (check every 5 mins for due settlements)
+        $schedule->command('settlements:process')->everyFiveMinutes();
+
         // Settlement & Reconciliation (Enterprise Requirements)
         $schedule->command('gateway:settle')->dailyAt('02:00');
         $schedule->command('gateway:reconcile')->dailyAt('03:00');
-        
+
         // Auto-refund stale transactions
         $schedule->job(new \App\Jobs\ProcessStaleTransactionsJob)->hourly();
-        
+
         // Sandbox reset (24-hour cycle)
         if (config('app.env') === 'sandbox' || config('app.sandbox_mode', false)) {
             $schedule->command('sandbox:reset')->dailyAt('00:00');
