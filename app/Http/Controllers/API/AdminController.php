@@ -3892,7 +3892,8 @@ class AdminController extends Controller
                     $updateData['auto_settlement_enabled'] = $request->auto_settlement_enabled ? 1 : 0;
                 }
                 if ($request->has('settlement_delay_hours')) {
-                    $updateData['settlement_delay_hours'] = max(1, min(168, (int) $request->settlement_delay_hours));
+                    // Allow decimal hours (e.g., 0.0167 for 1 minute, 0.5 for 30 minutes)
+                    $updateData['settlement_delay_hours'] = max(0.0167, min(168, (float) $request->settlement_delay_hours));
                 }
                 if ($request->has('settlement_skip_weekends')) {
                     $updateData['settlement_skip_weekends'] = $request->settlement_skip_weekends ? 1 : 0;
