@@ -293,6 +293,8 @@ class TransferService
                     'transaction_id' => $transaction->transaction_id
                 ]);
                 $this->handleFailedTransfer($transaction, $errorMessage);
+                // DO NOT throw exception - refund already handled
+                // Transaction is already marked as failed by handleFailedTransfer
             } else {
                 // Network errors, timeouts, etc. are ambiguous — don't reverse blindly
                 $transaction->update(['reconciliation_status' => 'pending']);
