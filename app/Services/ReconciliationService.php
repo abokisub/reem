@@ -112,5 +112,39 @@ class ReconciliationService
             ['provider_ref' => $providerRef, 'internal_ref' => $internalRef, 'provider_amount' => $pAmount, 'internal_amount' => $iAmount],
             'critical'
         );
+    /**
+     * Auto-reconcile failed transactions by querying the provider
+     */
+    public function autoReconcileFailedTransactions()
+    {
+        Log::info("🔄 Starting Auto-Reconciliation of Failed Transactions...");
+
+        $failedTransactions = \App\Models\FailedTransaction::where('status', 'pending')->get();
+
+        foreach ($failedTransactions as $failed) {
+            try {
+                // If it's a webhook failure, we check the pay-in status
+                if ($failed->type === 'webhook_failure') {
+                    $response = $this->vaService->queryPayInOrder($failed->transaction_reference);
+
+                    if ($response['success'] && isset($response['data']['status']) && $response['data']['status'] === 'SUCCESS') {
+                        // Found out the provider actually succeeded!
+                        // In a real scenario, we might trigger the WebhookHandler manually here.
+                        // For now, mark as resolved for manual final review.
+                        $failed->update([
+                            'status' => 'reconciled_success',
+                            'failure_reason' => 'Auto-reconciled: Provider confirmed SUCCESS',
+                            'resolved_at' => now(),
+                        ]);
+
+                        Log::info("✅ Failed Transaction Auto-Resolved: {$failed->transaction_reference}");
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::error("Failed to reconcile transaction: " . $failed->transaction_reference, ['error' => $e->getMessage()]);
+            }
+        }
+
+        Log::info("✅ Finished Auto-Reconciliation of Failed Transactions.");
     }
 }

@@ -16,6 +16,9 @@ class PalmPayWebhook extends Model
         'signature',
         'verified',
         'processed',
+        'retry_count',
+        'next_retry_at',
+        'status',
         'processed_at',
         'processing_error',
         'transaction_id',
@@ -26,6 +29,8 @@ class PalmPayWebhook extends Model
         'verified' => 'boolean',
         'processed' => 'boolean',
         'processed_at' => 'datetime',
+        'next_retry_at' => 'datetime',
+        'retry_count' => 'integer',
     ];
 
     /**

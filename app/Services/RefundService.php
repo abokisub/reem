@@ -77,12 +77,24 @@ class RefundService
             ]);
 
             // 4. Sync Legacy Balance (Debit company wallet)
-            $wallet = CompanyWallet::where('company_id', $originalTx->company_id)->first();
+            $wallet = CompanyWallet::where('company_id', $originalTx->company_id)
+                ->lockForUpdate()
+                ->first();
+
             if ($wallet) {
                 $wallet->decrement('balance', (float) $originalTx->net_amount);
                 $wallet->decrement('ledger_balance', (float) $originalTx->net_amount);
                 $wallet->save();
             }
+
+            // 5. Sync System Wallets Reversal
+            $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
+            if ($revWallet)
+                $revWallet->debit($originalTx->fee);
+
+            $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
+            if ($clrWallet)
+                $clrWallet->debit($originalTx->amount);
 
             return $refundTx;
         });

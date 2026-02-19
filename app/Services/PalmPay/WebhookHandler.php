@@ -164,24 +164,35 @@ class WebhookHandler
             // Convert kobo to Naira
             $amount = $orderAmount / 100;
 
-            // Find virtual account
-            $virtualAccount = VirtualAccount::where('palmpay_account_number', $accountNumber)
-                ->firstOrFail();
+            // Finding Virtual Account
+            $virtualAccount = VirtualAccount::where('palmpay_account_number', $accountNumber)->firstOrFail();
 
-            // Check for duplicate transaction
-            $existingTransaction = Transaction::where('palmpay_reference', $palmpayReference)->first();
+            // --- STRICT IDEMPOTENCY CHECK ---
+            // 1. Check if this specific webhook ORDER has already resulted in a successful transaction
+            $existingTransaction = Transaction::where('palmpay_reference', $palmpayReference)
+                ->where('provider', 'palmpay')
+                ->first();
 
             if ($existingTransaction) {
-                Log::info('Duplicate webhook ignored', [
+                Log::info('Webhook Ignored: Transaction already exists for this provider reference', [
                     'reference' => $palmpayReference,
                     'transaction_id' => $existingTransaction->transaction_id
                 ]);
 
-                return [
-                    'success' => true,
-                    'message' => 'Duplicate transaction'
-                ];
+                return ['success' => true, 'message' => 'Duplicate transaction (Idempotent)'];
             }
+
+            // 2. Double-check the webhooks table to ensure no race condition between different webhook triggers
+            $duplicateWebhook = PalmPayWebhook::where('palmpay_reference', $palmpayReference)
+                ->where('status', 'processed')
+                ->where('id', '!=', $webhook->id)
+                ->exists();
+
+            if ($duplicateWebhook) {
+                Log::info('Webhook Ignored: Already processed in another webhook entry', ['reference' => $palmpayReference]);
+                return ['success' => true, 'message' => 'Duplicate webhook (Idempotent)'];
+            }
+            // ---------------------------------
 
             // Calculate charge based on unified FeeService
             $feeResults = $this->feeService->calculateFee($virtualAccount->company_id, $amount, 'va_deposit');
@@ -296,6 +307,15 @@ class WebhookHandler
                     'balance_before' => $balanceBefore,
                     'balance_after' => $wallet->balance,
                 ]);
+
+                // Sync System Wallets (Revenue & Clearing Isolation)
+                $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
+                if ($revWallet)
+                    $revWallet->credit($fee);
+
+                $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
+                if ($clrWallet)
+                    $clrWallet->credit($amount);
             }
 
             Log::info('Virtual Account Credited', [

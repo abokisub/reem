@@ -83,7 +83,16 @@ class TransferService
                 $wallet->decrement('ledger_balance', $totalAmount);
                 $wallet->save();
 
-                // 6. Create Transaction Record
+                // 6. Sync System Wallets (Revenue & Clearing Isolation)
+                $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
+                if ($revWallet)
+                    $revWallet->credit($fee);
+
+                $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
+                if ($clrWallet)
+                    $clrWallet->credit($amount);
+
+                // 7. Create Transaction Record
                 $transaction = Transaction::create([
                     'transaction_id' => $transactionId,
                     'company_id' => $companyId,
@@ -215,16 +224,40 @@ class TransferService
                 'processed_at' => now(),
             ]);
 
-            // Refund to wallet
+            // 1. Ledger Reversal (High Integrity)
+            // Initial: Debit Wallet (Total), Credit Clearing (Amount), Credit Revenue (Fee)
+            // Reversal: Credit Wallet (Total), Debit Clearing (Amount), Debit Revenue (Fee)
+
+            $companyAccount = $this->ledgerService->getOrCreateAccount("Company Wallet " . $transaction->company_id, 'company_wallet', $transaction->company_id);
+            $providerAccount = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
+            $revenueAccount = $this->ledgerService->getOrCreateAccount('Platform Revenue', 'revenue');
+
+            $this->ledgerService->recordTransaction($transaction->reference . '_REV', [
+                ['account_id' => $companyAccount->id, 'type' => 'credit', 'amount' => (float) $transaction->total_amount],
+                ['account_id' => $providerAccount->id, 'type' => 'debit', 'amount' => (float) $transaction->amount],
+                ['account_id' => $revenueAccount->id, 'type' => 'debit', 'amount' => (float) $transaction->fee],
+            ], "Reversal of Failed Transfer: " . $transaction->reference);
+
+            // 2. Refund to Legacy Wallet Balance
             $wallet = $transaction->company->wallet;
             $wallet->credit($transaction->total_amount);
             $wallet->removePending($transaction->total_amount);
             $wallet->save();
 
+            // 3. Sync System Wallets Reversal
+            $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
+            if ($revWallet)
+                $revWallet->debit($transaction->fee);
+
+            $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
+            if ($clrWallet)
+                $clrWallet->debit($transaction->amount);
+
             DB::commit();
 
-            Log::info('Transfer Refunded', [
-                'transaction_id' => $transaction->transaction_id
+            Log::info('Transfer Refunded & Ledger Reversed', [
+                'transaction_id' => $transaction->transaction_id,
+                'reference' => $transaction->reference
             ]);
 
         } catch (\Exception $e) {
