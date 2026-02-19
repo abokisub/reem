@@ -211,7 +211,7 @@ class DocumentService
                 return $disk->url($path);
             }
 
-            return url('storage/' . $path);
+            return url($path);
 
         } catch (Exception $e) {
             Log::error('Document URL Generation Failed', [
