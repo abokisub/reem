@@ -96,6 +96,8 @@ class TransferService
                     $clrWallet->credit($amount);
 
                 // 7. Create Transaction Record
+                // Note: For transfers, we start with 'debited' status (wallet already debited)
+                // This allows proper state transitions: debited → processing → successful/failed
                 $transaction = Transaction::create([
                     'transaction_id' => $transactionId,
                     'company_id' => $companyId,
@@ -106,7 +108,7 @@ class TransferService
                     'net_amount' => $amount,
                     'total_amount' => $totalAmount,
                     'currency' => 'NGN',
-                    'status' => 'pending',
+                    'status' => 'debited',
                     'reference' => $reference,
                     'external_reference' => $transferData['reference'] ?? null,
                     'recipient_account_number' => $transferData['account_number'],
