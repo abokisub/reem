@@ -39,6 +39,9 @@ class Transaction extends Model
         'is_test',
         'is_refunded',
         'refund_transaction_id',
+        'provider',
+        'reconciliation_status',
+        'reconciled_at',
     ];
 
     protected static function booted()
@@ -58,6 +61,7 @@ class Transaction extends Model
         'balance_after' => 'decimal:2',
         'metadata' => 'array',
         'processed_at' => 'datetime',
+        'reconciled_at' => 'datetime',
     ];
 
     /**

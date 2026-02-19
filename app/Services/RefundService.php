@@ -2,270 +2,89 @@
 
 namespace App\Services;
 
-use App\Models\Refund;
 use App\Models\Transaction;
 use App\Models\CompanyWallet;
 use App\Services\LedgerService;
-use App\Services\PalmPay\RefundService as PalmPayRefundService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Exception;
+use Illuminate\Support\Str;
 
-/**
- * Core Refund Service
- * Handles auto and manual refunds with wallet/ledger reversals
- */
 class RefundService
 {
-    protected $ledgerService;
-    protected $palmPayRefundService;
+    private LedgerService $ledgerService;
 
-    public function __construct(
-        LedgerService $ledgerService,
-        PalmPayRefundService $palmPayRefundService
-    ) {
+    public function __construct(LedgerService $ledgerService)
+    {
         $this->ledgerService = $ledgerService;
-        $this->palmPayRefundService = $palmPayRefundService;
     }
 
     /**
-     * Process automatic refund for failed/stale transactions
+     * Process a refund for a successful deposit (R.A Credit)
+     * Rule: Debit Company Wallet (Net) | Debit Revenue (Fee) | Credit Provider Clearing (Gross)
      */
-    public function processAutoRefund(Transaction $transaction, string $reason = 'Auto-refund: Transaction failed'): array
+    public function refundDeposit(Transaction $originalTx, string $reason = 'Customer Refund')
     {
-        if (!in_array($transaction->type, ['debit', 'transfer'])) {
-            throw new Exception("Cannot refund transaction type: {$transaction->type}");
-        }
-
-        if ($transaction->status !== 'failed') {
-            throw new Exception("Cannot refund transaction with status: {$transaction->status}");
-        }
-
-        return DB::transaction(function () use ($transaction, $reason) {
-            // 1. Create refund record
-            $refundId = 'REF-AUTO-' . strtoupper(uniqid());
-
-            $refund = Refund::create([
-                'company_id' => $transaction->company_id,
-                'refund_id' => $refundId,
-                'transaction_id' => $transaction->reference,
-                'palmpay_order_no' => $transaction->palmpay_reference,
-                'amount' => $transaction->total_amount, // Refund full amount including fees
-                'currency' => $transaction->currency,
-                'reason' => $reason,
-                'refund_type' => 'auto',
-                'status' => 'processing',
-                'initiated_at' => now(),
-            ]);
-
-            // 2. Reverse wallet deduction (credit back to company)
-            $wallet = CompanyWallet::lockForUpdate()
-                ->where('company_id', $transaction->company_id)
-                ->where('currency', $transaction->currency)
-                ->first();
-
-            if (!$wallet) {
-                throw new Exception("Wallet not found for company {$transaction->company_id}");
+        return DB::transaction(function () use ($originalTx, $reason) {
+            if ($originalTx->type !== 'credit' || $originalTx->status !== 'success') {
+                throw new \Exception('Only successful credit transactions can be refunded.');
             }
 
-            $wallet->increment('balance', (float) $transaction->total_amount);
+            if ($originalTx->is_refunded) {
+                throw new \Exception('Transaction already refunded.');
+            }
 
-            // 3. Reverse ledger entries
-            $this->reverseLedgerEntries($transaction, $refundId);
+            // 1. Create Reversal Transaction (New Record)
+            $refundRef = 'REF_' . strtoupper(Str::random(12));
+            $refundTx = Transaction::create([
+                'transaction_id' => Transaction::generateTransactionId(),
+                'company_id' => $originalTx->company_id,
+                'type' => 'debit', // Reversal of credit is a debit
+                'category' => 'refund_reversal',
+                'amount' => $originalTx->amount,
+                'fee' => $originalTx->fee,
+                'net_amount' => $originalTx->net_amount,
+                'total_amount' => $originalTx->total_amount,
+                'currency' => $originalTx->currency,
+                'status' => 'success',
+                'reference' => $refundRef,
+                'description' => "REVERSAL: " . $originalTx->reference . " - " . $reason,
+                'metadata' => [
+                    'original_reference' => $originalTx->reference,
+                    'refund_reason' => $reason
+                ],
+                'processed_at' => now(),
+            ]);
 
-            // 4. Update transaction status
-            $transaction->update([
+            // 2. Ledger Reversal
+            $companyAccount = $this->ledgerService->getOrCreateAccount("Company Wallet " . $originalTx->company_id, 'company_wallet', $originalTx->company_id);
+            $providerAccount = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
+            $revenueAccount = $this->ledgerService->getOrCreateAccount('Platform Revenue', 'revenue');
+
+            // DEBIT Company Wallet (Net)
+            // DEBIT Revenue (Fee)
+            // CREDIT Provider Clearing (Total)
+            $this->ledgerService->recordTransaction($refundRef, [
+                ['account_id' => $companyAccount->id, 'type' => 'debit', 'amount' => $originalTx->net_amount],
+                ['account_id' => $revenueAccount->id, 'type' => 'debit', 'amount' => $originalTx->fee],
+                ['account_id' => $providerAccount->id, 'type' => 'credit', 'amount' => $originalTx->amount],
+            ], "Refund of " . $originalTx->reference);
+
+            // 3. Mark Original as Reversed
+            $originalTx->update([
                 'status' => 'reversed',
-                'error_message' => $reason,
+                'is_refunded' => true,
+                'refund_transaction_id' => $refundTx->id
             ]);
 
-            // 5. Mark refund as completed
-            $refund->update([
-                'status' => 'completed',
-                'completed_at' => now(),
-            ]);
+            // 4. Sync Legacy Balance (Debit company wallet)
+            $wallet = CompanyWallet::where('company_id', $originalTx->company_id)->first();
+            if ($wallet) {
+                $wallet->decrement('balance', (float) $originalTx->net_amount);
+                $wallet->decrement('ledger_balance', (float) $originalTx->net_amount);
+                $wallet->save();
+            }
 
-            Log::info('Auto-refund processed', [
-                'refund_id' => $refundId,
-                'transaction_id' => $transaction->reference,
-                'amount' => $transaction->total_amount,
-            ]);
-
-            return [
-                'success' => true,
-                'refund' => $refund,
-                'message' => 'Auto-refund processed successfully',
-            ];
+            return $refundTx;
         });
-    }
-
-    /**
-     * Process manual refund initiated by admin
-     */
-    public function processManualRefund(
-        Transaction $transaction,
-        string $reason,
-        int $adminId,
-        ?string $adminNotes = null
-    ): array {
-        if ($transaction->status !== 'success') {
-            throw new Exception("Can only manually refund successful transactions");
-        }
-
-        // Check if already refunded
-        $existingRefund = Refund::where('transaction_id', $transaction->reference)
-            ->whereIn('status', ['completed', 'processing'])
-            ->first();
-
-        if ($existingRefund) {
-            throw new Exception("Transaction already refunded: {$existingRefund->refund_id}");
-        }
-
-        return DB::transaction(function () use ($transaction, $reason, $adminId, $adminNotes) {
-            // 1. Create refund record
-            $refundId = 'REF-MAN-' . strtoupper(uniqid());
-
-            $refund = Refund::create([
-                'company_id' => $transaction->company_id,
-                'refund_id' => $refundId,
-                'transaction_id' => $transaction->reference,
-                'palmpay_order_no' => $transaction->palmpay_reference,
-                'amount' => $transaction->amount, // Refund principal only (not fees for manual)
-                'currency' => $transaction->currency,
-                'reason' => $reason,
-                'refund_type' => 'manual',
-                'initiated_by' => $adminId,
-                'admin_notes' => $adminNotes,
-                'status' => 'processing',
-                'initiated_at' => now(),
-            ]);
-
-            // 2. For deposits: Debit company wallet
-            if ($transaction->type === 'credit') {
-                $wallet = CompanyWallet::lockForUpdate()
-                    ->where('company_id', $transaction->company_id)
-                    ->where('currency', $transaction->currency)
-                    ->first();
-
-                if (!$wallet) {
-                    throw new Exception("Wallet not found");
-                }
-
-                if ($wallet->balance < $transaction->amount) {
-                    throw new Exception("Insufficient balance for refund");
-                }
-
-                $wallet->decrement('balance', (float) $transaction->amount);
-
-                // Ledger: Debit Company Wallet, Credit Bank Clearing (reversal)
-                $walletGL = $this->ledgerService->getOrCreateAccount(
-                    "Company Wallet {$transaction->company_id}",
-                    'company_wallet',
-                    $transaction->company_id
-                );
-                $clearingGL = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
-
-                $this->ledgerService->recordEntry(
-                    $refundId,
-                    $walletGL->id,
-                    $clearingGL->id,
-                    $transaction->amount,
-                    "Manual Refund: {$reason}"
-                );
-            }
-
-            // 3. Initiate PalmPay refund if applicable
-            if ($transaction->palmpay_reference) {
-                try {
-                    $this->palmPayRefundService->initiateRefund($transaction->company_id, [
-                        'transaction_id' => $transaction->reference,
-                        'palmpay_order_no' => $transaction->palmpay_reference,
-                        'amount' => $transaction->amount,
-                        'currency' => $transaction->currency,
-                        'reason' => $reason,
-                    ]);
-                } catch (Exception $e) {
-                    Log::error('PalmPay refund initiation failed', [
-                        'refund_id' => $refundId,
-                        'error' => $e->getMessage(),
-                    ]);
-                    // Continue with local refund even if PalmPay fails
-                }
-            }
-
-            // 4. Mark refund as completed
-            $refund->update([
-                'status' => 'completed',
-                'completed_at' => now(),
-            ]);
-
-            Log::info('Manual refund processed', [
-                'refund_id' => $refundId,
-                'transaction_id' => $transaction->reference,
-                'admin_id' => $adminId,
-                'amount' => $transaction->amount,
-            ]);
-
-            return [
-                'success' => true,
-                'refund' => $refund,
-                'message' => 'Manual refund processed successfully',
-            ];
-        });
-    }
-
-    /**
-     * Reverse ledger entries for a failed transaction
-     */
-    protected function reverseLedgerEntries(Transaction $transaction, string $refundId): void
-    {
-        $walletGL = $this->ledgerService->getOrCreateAccount(
-            "Company Wallet {$transaction->company_id}",
-            'company_wallet',
-            $transaction->company_id
-        );
-
-        if ($transaction->category === 'transfer_out') {
-            // Reverse: Debit Pending Payout Clearing, Credit Company Wallet
-            $clearingGL = $this->ledgerService->getOrCreateAccount('Pending Payout Clearing', 'clearing');
-
-            $this->ledgerService->recordEntry(
-                $refundId,
-                $clearingGL->id,
-                $walletGL->id,
-                $transaction->amount,
-                "Refund Reversal: {$transaction->reference}"
-            );
-
-            // Reverse fee if applicable
-            if ($transaction->fee > 0) {
-                $revenueGL = $this->ledgerService->getOrCreateAccount('Transfer Fee Revenue', 'revenue');
-                $this->ledgerService->recordEntry(
-                    $refundId . '-FEE',
-                    $revenueGL->id,
-                    $walletGL->id,
-                    $transaction->fee,
-                    "Fee Refund: {$transaction->reference}"
-                );
-            }
-        }
-    }
-
-    /**
-     * Get refunds for a company with filters
-     */
-    public function getRefunds(int $companyId, array $filters = []): \Illuminate\Database\Eloquent\Collection
-    {
-        $query = Refund::where('company_id', $companyId);
-
-        if (isset($filters['status'])) {
-            $query->where('status', $filters['status']);
-        }
-
-        if (isset($filters['refund_type'])) {
-            $query->where('refund_type', $filters['refund_type']);
-        }
-
-        return $query->orderBy('created_at', 'desc')->get();
     }
 }

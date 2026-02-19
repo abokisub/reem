@@ -1785,49 +1785,49 @@ class AdminTrans extends Controller
                     $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->format('Y-m-d');
                     $search = $request->search ?? '';
 
-                    // Get transactions from the new transactions table joined with users
-                    $query = DB::table('transactions')
-                        ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
-                        ->whereBetween('transactions.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                    // ABSOLUTE TRUTH: Ledger Entries are the definitive record
+                    $query = DB::table('ledger_entries')
+                        ->join('ledger_accounts as debit_acc', 'ledger_entries.debit_account_id', '=', 'debit_acc.id')
+                        ->join('ledger_accounts as credit_acc', 'ledger_entries.credit_account_id', '=', 'credit_acc.id')
+                        ->whereBetween('ledger_entries.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
                         ->select(
-                            'transactions.*',
-                            'users.username as customer_name',
-                            'users.email as customer_account_number', // Using email as account identifier if account_number is not present
-                            'transactions.fee as charges'
+                            'ledger_entries.*',
+                            'debit_acc.name as source_account',
+                            'debit_acc.account_type as source_type',
+                            'credit_acc.name as destination_account',
+                            'credit_acc.account_type as destination_type'
                         )
-                        ->orderBy('transactions.created_at', 'desc');
+                        ->orderBy('ledger_entries.created_at', 'desc');
 
-                    $query->where(function ($q) use ($search) {
-                        $q->where('transactions.reference', 'LIKE', "%$search%")
-                            ->orWhere('transactions.recipient_account_name', 'LIKE', "%$search%")
-                            ->orWhere('transactions.recipient_account_number', 'LIKE', "%$search%")
-                            ->orWhere('transactions.description', 'LIKE', "%$search%")
-                            ->orWhere('users.username', 'LIKE', "%$search%");
-                    });
+                    if (!empty($search)) {
+                        $query->where(function ($q) use ($search) {
+                            $q->where('ledger_entries.transaction_id', 'LIKE', "%$search%")
+                                ->orWhere('ledger_entries.description', 'LIKE', "%$search%")
+                                ->orWhere('debit_acc.name', 'LIKE', "%$search%")
+                                ->orWhere('credit_acc.name', 'LIKE', "%$search%");
+                        });
+                    }
 
-                    $transactions = $query->paginate($request->limit ?? 50);
+                    $statement = $query->paginate($request->limit ?? 50);
 
-                    // Calculate summary
-                    $summary = DB::table('transactions')
+                    // Summary statistics from the ledger
+                    $summary = DB::table('ledger_entries')
                         ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
                         ->selectRaw('
-                            COUNT(*) as total_count,
-                            SUM(CASE WHEN type = "credit" THEN amount ELSE 0 END) as total_credit,
-                            SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_debit,
-                            SUM(CASE WHEN status = "success" THEN 1 ELSE 0 END) as successful_count,
-                            SUM(CASE WHEN status = "failed" THEN 1 ELSE 0 END) as failed_count,
-                            SUM(fee) as total_charges
+                            COUNT(*) as total_entries,
+                            SUM(amount) as total_volume
                         ')
                         ->first();
 
                     return response()->json([
                         'status' => 'success',
-                        'statement' => $transactions,
+                        'statement' => $statement,
                         'summary' => $summary,
                         'date_range' => [
                             'start' => $startDate,
                             'end' => $endDate
-                        ]
+                        ],
+                        'is_ledger_accurate' => true
                     ]);
                 }
             }

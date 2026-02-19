@@ -21,12 +21,17 @@ use Illuminate\Support\Facades\Log;
 class WebhookHandler
 {
     private PalmPaySignature $signature;
-    private $ledgerService;
+    private LedgerService $ledgerService;
+    private \App\Services\FeeService $feeService;
 
-    public function __construct(?PalmPaySignature $signature = null, ?LedgerService $ledgerService = null)
-    {
+    public function __construct(
+        ?PalmPaySignature $signature = null,
+        ?LedgerService $ledgerService = null,
+        ?\App\Services\FeeService $feeService = null
+    ) {
         $this->signature = $signature ?? new PalmPaySignature();
         $this->ledgerService = $ledgerService ?? new LedgerService();
+        $this->feeService = $feeService ?? new \App\Services\FeeService();
     }
 
     /**
@@ -38,61 +43,71 @@ class WebhookHandler
      */
     public function handle(array $payload, ?string $signature = null): array
     {
+        // 1. Store webhook (OUTSIDE transaction to persist even if processing fails)
+        $webhook = PalmPayWebhook::create([
+            'event_type' => $payload['eventType'] ?? 'unknown',
+            'palmpay_reference' => $payload['reference'] ?? null,
+            'payload' => $payload,
+            'signature' => $signature,
+            'verified' => false,
+            'processed' => false,
+            'status' => 'pending',
+        ]);
+
         try {
-            DB::beginTransaction();
-
-            // Store webhook
-            $webhook = PalmPayWebhook::create([
-                'event_type' => $payload['eventType'] ?? 'unknown',
-                'palmpay_reference' => $payload['reference'] ?? null,
-                'payload' => $payload,
-                'signature' => $signature,
-                'verified' => false,
-                'processed' => false,
-            ]);
-
-            // Verify signature
+            // 2. Verify signature
             if ($signature && !$this->signature->verifyWebhookSignature($payload, $signature)) {
-                Log::warning('Invalid PalmPay Webhook Signature', [
-                    'webhook_id' => $webhook->id
-                ]);
-
-                DB::commit();
-
-                return [
-                    'success' => false,
-                    'message' => 'Invalid signature'
-                ];
+                $webhook->update(['status' => 'failed', 'processing_error' => 'Invalid signature']);
+                Log::warning('Invalid PalmPay Webhook Signature', ['webhook_id' => $webhook->id]);
+                return ['success' => false, 'message' => 'Invalid signature'];
             }
 
             $webhook->update(['verified' => true]);
 
-            // Process webhook based on event type
-            $result = $this->processWebhook($webhook, $payload);
+            // 3. Process within transaction
+            return DB::transaction(function () use ($webhook, $payload) {
+                $result = $this->processWebhook($webhook, $payload);
 
-            // Mark as processed
-            $webhook->update([
-                'processed' => true,
-                'processed_at' => now(),
-            ]);
+                $webhook->update([
+                    'processed' => true,
+                    'processed_at' => now(),
+                    'status' => 'processed',
+                    'processing_error' => null,
+                ]);
 
-            DB::commit();
-
-            return $result;
+                return $result;
+            });
 
         } catch (\Exception $e) {
-            DB::rollBack();
+            $retryCount = $webhook->retry_count + 1;
+            $nextRetry = now()->addMinutes(pow(2, $retryCount) * 5); // Exponential backoff: 10m, 20m, 40m...
 
-            Log::error('Webhook Processing Failed', [
-                'error' => $e->getMessage(),
-                'payload' => $payload
+            $webhook->update([
+                'status' => $retryCount >= 5 ? 'exhausted' : 'failed',
+                'retry_count' => $retryCount,
+                'next_retry_at' => $retryCount >= 5 ? null : $nextRetry,
+                'processing_error' => $e->getMessage(),
             ]);
 
-            if (isset($webhook)) {
-                $webhook->update([
-                    'processing_error' => $e->getMessage()
-                ]);
+            // Log to FailedTransaction for admin visibility if it's a critical error
+            if ($retryCount >= 3) {
+                \App\Models\FailedTransaction::updateOrCreate(
+                    ['transaction_reference' => $webhook->palmpay_reference],
+                    [
+                        'type' => 'webhook_failure',
+                        'amount' => ($payload['orderAmount'] ?? 0) / 100,
+                        'payload' => $payload,
+                        'failure_reason' => $e->getMessage(),
+                        'status' => 'pending'
+                    ]
+                );
             }
+
+            Log::error('Webhook Processing Failed', [
+                'webhook_id' => $webhook->id,
+                'error' => $e->getMessage(),
+                'retry_count' => $retryCount
+            ]);
 
             return [
                 'success' => false,
@@ -168,9 +183,9 @@ class WebhookHandler
                 ];
             }
 
-            // Calculate charge based on service_charges table
-            $chargeDetails = ChargeCalculator::getServiceCharge('payment', 'palmpay_va', $amount);
-            $fee = $chargeDetails['charge'];
+            // Calculate charge based on unified FeeService
+            $feeResults = $this->feeService->calculateFee($virtualAccount->company_id, $amount, 'va_deposit');
+            $fee = (float) $feeResults['fee'];
 
             // Net amount is what the company receives (amount - fee)
             $netAmount = $amount - $fee;
@@ -199,12 +214,12 @@ class WebhookHandler
                     'sender_name' => $payload['senderName'] ?? null,
                     'sender_account' => $payload['senderAccount'] ?? null,
                     'sender_bank' => $payload['senderBank'] ?? null,
-                    'charge_type' => $chargeDetails['type'],
-                    'charge_value' => $chargeDetails['value'],
-                    'charge_cap' => $chargeDetails['cap'],
+                    'fee_model' => $feeResults['model'],
                 ],
                 'balance_before' => $balanceBefore,
                 'balance_after' => $balanceBefore + $netAmount,
+                'provider' => 'palmpay',
+                'reconciliation_status' => 'not_started',
                 'processed_at' => now(),
             ]);
 
@@ -214,20 +229,20 @@ class WebhookHandler
             // Check if settlement is enabled
             $settings = DB::table('settings')->first();
             $company = Company::find($virtualAccount->company_id);
-            
+
             $settlementEnabled = $settings && property_exists($settings, 'auto_settlement_enabled') && $settings->auto_settlement_enabled;
             $useCustomSettlement = $company && property_exists($company, 'custom_settlement_enabled') && $company->custom_settlement_enabled;
-            
+
             if ($settlementEnabled) {
                 // Get settlement configuration
-                $delayHours = $useCustomSettlement ? 
-                    (int) ($company->custom_settlement_delay_hours ?? 24) : 
+                $delayHours = $useCustomSettlement ?
+                    (int) ($company->custom_settlement_delay_hours ?? 24) :
                     (int) ($settings->settlement_delay_hours ?? 24);
-                
+
                 $skipWeekends = (bool) ($settings->settlement_skip_weekends ?? true);
                 $skipHolidays = (bool) ($settings->settlement_skip_holidays ?? true);
                 $settlementTime = $settings->settlement_time ?? '02:00:00';
-                
+
                 // Calculate settlement date
                 $scheduledDate = \App\Console\Commands\ProcessSettlements::calculateSettlementDate(
                     now(),
@@ -236,7 +251,7 @@ class WebhookHandler
                     $skipHolidays,
                     $settlementTime
                 );
-                
+
                 // Queue for settlement (use net amount - what company receives after fees)
                 DB::table('settlement_queue')->insert([
                     'company_id' => $virtualAccount->company_id,
@@ -248,7 +263,7 @@ class WebhookHandler
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
-                
+
                 // Update transaction metadata
                 $transaction->update([
                     'metadata' => array_merge($transaction->metadata ?? [], [
@@ -257,7 +272,7 @@ class WebhookHandler
                         'settlement_delay_hours' => $delayHours,
                     ]),
                 ]);
-                
+
                 Log::info('Transaction Queued for Settlement', [
                     'transaction_id' => $transaction->transaction_id,
                     'gross_amount' => $amount,
@@ -289,25 +304,23 @@ class WebhookHandler
                 'fee' => $fee,
                 'net_amount' => $netAmount,
                 'account_number' => $accountNumber,
-                'charge_config' => $chargeDetails
+                'charge_config' => $feeResults
             ]);
 
-            // Record Ledger Entry (Double Entry)
+            // Record 3-Way Ledger Transaction (Double Entry)
             try {
                 $bankClearing = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
-                $companyWallet = $this->ledgerService->getOrCreateAccount('Company Wallet ' . $virtualAccount->company_id, 'company_wallet', $virtualAccount->company_id);
+                $companyWalletAccount = $this->ledgerService->getOrCreateAccount('Company Wallet ' . $virtualAccount->company_id, 'company_wallet', $virtualAccount->company_id);
+                $revenueAccount = $this->ledgerService->getOrCreateAccount('Platform Revenue', 'revenue');
 
-                $this->ledgerService->recordEntry(
-                    $transaction->reference,
-                    $bankClearing->id, // Debit Bank Clearing (Asset up)
-                    $companyWallet->id, // Credit Company Wallet (Liability up)
-                    $amount,
-                    "Deposit: " . ($payload['senderName'] ?? 'Unknown')
-                );
+                $this->ledgerService->recordTransaction($transaction->reference, [
+                    ['account_id' => $bankClearing->id, 'type' => 'debit', 'amount' => $amount], // Debit Clearing (Gross)
+                    ['account_id' => $companyWalletAccount->id, 'type' => 'credit', 'amount' => $netAmount], // Credit Wallet (Net)
+                    ['account_id' => $revenueAccount->id, 'type' => 'credit', 'amount' => $fee], // Credit Revenue (Fee)
+                ], "Deposit: " . ($payload['senderName'] ?? 'Unknown'));
+
             } catch (\Exception $e) {
                 Log::error('Ledger Recording Failed: ' . $e->getMessage());
-                // We do not fail the webhook, but we log the error. 
-                // In production, we might want to alert on this.
             }
 
             // Dispatch webhook to company

@@ -7,6 +7,7 @@ use App\Models\CompanyWallet;
 use App\Services\PalmPay\PalmPayClient;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * PalmPay Transfer Service
@@ -16,10 +17,16 @@ use Illuminate\Support\Facades\Log;
 class TransferService
 {
     private PalmPayClient $client;
+    private \App\Services\LedgerService $ledgerService;
+    private \App\Services\FeeService $feeService;
 
-    public function __construct()
-    {
+    public function __construct(
+        \App\Services\LedgerService $ledgerService,
+        \App\Services\FeeService $feeService
+    ) {
         $this->client = new PalmPayClient();
+        $this->ledgerService = $ledgerService;
+        $this->feeService = $feeService;
     }
 
     /**
@@ -32,72 +39,86 @@ class TransferService
     public function initiateTransfer(int $companyId, array $transferData): Transaction
     {
         try {
-            DB::beginTransaction();
+            return DB::transaction(function () use ($companyId, $transferData) {
+                // Get company wallet
+                $wallet = CompanyWallet::where('company_id', $companyId)
+                    ->where('currency', 'NGN')
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-            // Get company wallet
-            $wallet = CompanyWallet::where('company_id', $companyId)
-                ->where('currency', 'NGN')
-                ->lockForUpdate()
-                ->firstOrFail();
+                // 1. Calculate Charges BEFORE provider call
+                $amount = $transferData['amount'];
+                $feeResults = $this->feeService->calculateFee($companyId, $amount);
+                $fee = (float) $feeResults['fee'];
+                $totalAmount = $amount + $fee;
 
-            // Calculate total amount (amount + fee)
-            $amount = $transferData['amount'];
-            $fee = $this->calculateFee($amount, $companyId);
-            $totalAmount = $amount + $fee;
+                // 2. Strict Balance Check
+                if ($wallet->balance < $totalAmount) {
+                    throw new \Exception('Insufficient balance to cover amount and fees');
+                }
 
-            // Check balance
-            if ($wallet->balance < $totalAmount) {
-                throw new \Exception('Insufficient balance');
-            }
+                // 3. Generate Secure References (Never Null)
+                $transactionId = Transaction::generateTransactionId();
+                $reference = Transaction::generateReference() ?? 'PWV_' . strtoupper(Str::random(12));
 
-            // Generate transaction IDs
-            $transactionId = Transaction::generateTransactionId();
-            $reference = Transaction::generateReference();
+                $balanceBefore = $wallet->balance;
 
-            // Record balance before
-            $balanceBefore = $wallet->balance;
+                // 4. Record Double Entry Ledger (Atomic)
+                // Debit: Company Wallet (Total)
+                // Credit: Provider Clearing (Amount)
+                // Credit: Platform Revenue (Fee)
 
-            // Create transaction record
-            $transaction = Transaction::create([
-                'transaction_id' => $transactionId,
-                'company_id' => $companyId,
-                'type' => 'debit',
-                'category' => 'transfer_out',
-                'amount' => $amount,
-                'fee' => $fee,
-                'total_amount' => $totalAmount,
-                'currency' => 'NGN',
-                'status' => 'pending',
-                'reference' => $reference,
-                'external_reference' => $transferData['reference'] ?? null,
-                'recipient_account_number' => $transferData['account_number'],
-                'recipient_account_name' => $transferData['account_name'] ?? null,
-                'recipient_bank_code' => $transferData['bank_code'],
-                'recipient_bank_name' => $transferData['bank_name'] ?? null,
-                'description' => $transferData['narration'] ?? 'Bank Transfer',
-                'metadata' => $transferData['metadata'] ?? null,
-                'balance_before' => $balanceBefore,
-            ]);
+                $companyAccount = $this->ledgerService->getOrCreateAccount("Company Wallet $companyId", 'company_wallet', $companyId);
+                $providerAccount = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
+                $revenueAccount = $this->ledgerService->getOrCreateAccount('Platform Revenue', 'revenue');
 
-            // Deduct from wallet and add to pending
-            $wallet->debit($totalAmount);
-            $wallet->addPending($totalAmount);
-            $wallet->save();
+                $this->ledgerService->recordTransaction($reference, [
+                    ['account_id' => $companyAccount->id, 'type' => 'debit', 'amount' => $totalAmount],
+                    ['account_id' => $providerAccount->id, 'type' => 'credit', 'amount' => $amount],
+                    ['account_id' => $revenueAccount->id, 'type' => 'credit', 'amount' => $fee],
+                ], "Bank Transfer to " . ($transferData['bank_name'] ?? 'Unknown'));
 
-            // Update balance after
-            $transaction->update(['balance_after' => $wallet->balance]);
+                // 5. Sync Legacy CompanyWallet Table (Balance Integrity)
+                $wallet->decrement('balance', $totalAmount);
+                $wallet->decrement('ledger_balance', $totalAmount);
+                $wallet->save();
 
-            DB::commit();
+                // 6. Create Transaction Record
+                $transaction = Transaction::create([
+                    'transaction_id' => $transactionId,
+                    'company_id' => $companyId,
+                    'type' => 'debit',
+                    'category' => 'transfer_out',
+                    'amount' => $amount,
+                    'fee' => $fee,
+                    'net_amount' => $amount,
+                    'total_amount' => $totalAmount,
+                    'currency' => 'NGN',
+                    'status' => 'pending',
+                    'reference' => $reference,
+                    'external_reference' => $transferData['reference'] ?? null,
+                    'recipient_account_number' => $transferData['account_number'],
+                    'recipient_account_name' => $transferData['account_name'] ?? null,
+                    'recipient_bank_code' => $transferData['bank_code'],
+                    'recipient_bank_name' => $transferData['bank_name'] ?? null,
+                    'description' => $transferData['narration'] ?? 'Bank Transfer',
+                    'metadata' => $transferData['metadata'] ?? null,
+                    'balance_before' => $balanceBefore,
+                    'balance_after' => $wallet->balance,
+                    'provider' => 'palmpay',
+                    'reconciliation_status' => 'not_started',
+                ]);
 
-            // Call PalmPay API asynchronously
-            $this->processPalmPayTransfer($transaction);
+                // 7. Async Provider Call (Triggered after commit)
+                DB::afterCommit(function () use ($transaction) {
+                    $this->processPalmPayTransfer($transaction);
+                });
 
-            return $transaction;
+                return $transaction;
+            });
 
         } catch (\Exception $e) {
-            DB::rollBack();
-
-            Log::error('Failed to Initiate Transfer', [
+            Log::error('Failed to Initiate Transfer (Ledger Error)', [
                 'company_id' => $companyId,
                 'error' => $e->getMessage()
             ]);
@@ -290,44 +311,6 @@ class TransferService
         }
     }
 
-    /**
-     * Calculate transfer fee
-     * 
-     * @param float $amount
-     * @return float
-     */
-    private function calculateFee(float $amount, int $companyId): float
-    {
-        $settings = DB::table('settings')->where('company_id', $companyId)->first();
-        if (!$settings) {
-            $settings = DB::table('settings')->where('company_id', 1)->first();
-        }
-
-        if (!$settings) {
-            return 0.00;
-        }
-
-        $type = $settings->payout_palmpay_charge_type ?? 'FLAT';
-        $val = $settings->payout_palmpay_charge_value ?? 0;
-        $cap = $settings->payout_palmpay_charge_cap ?? 0;
-
-        if ($type == 'PERCENTAGE') {
-            $charge = ($amount / 100) * $val;
-            if ($cap > 0 && $charge > $cap) {
-                $charge = $cap;
-            }
-            return (float) $charge;
-        }
-
-        return (float) $val;
-    }
-
-    /**
-     * Map PalmPay status to our status
-     * 
-     * @param string $palmpayStatus
-     * @return string
-     */
     private function mapPalmPayStatus(string $palmpayStatus): string
     {
         $status = strtolower($palmpayStatus);

@@ -37,6 +37,8 @@ class PalmPayClient
     public function post(string $endpoint, array $data): array
     {
         $this->checkCircuitBreaker();
+        $startTime = microtime(true) * 1000;
+        $response = null;
 
         try {
             // Add required parameters
@@ -93,10 +95,17 @@ class PalmPayClient
             }
 
             $this->recordSuccess();
+
+            // Log successful response to DB
+            $duration = (int) ((microtime(true) * 1000) - $startTime);
+            $this->logToDatabase($endpoint, 'POST', $data, $responseData, $duration);
+
             return $responseData;
 
         } catch (\Exception $e) {
             $this->recordFailure();
+            $duration = (int) ((microtime(true) * 1000) - $startTime);
+            $this->logToDatabase($endpoint, 'POST', $data, $response ? $response->json() : 'No Response', $duration, $e->getMessage());
 
             $context = [
                 'endpoint' => $endpoint,
@@ -130,6 +139,9 @@ class PalmPayClient
     public function get(string $endpoint, array $params = []): array
     {
         $this->checkCircuitBreaker();
+        $startTime = microtime(true) * 1000;
+        $response = null;
+
         try {
             // Add required parameters
             $params['requestTime'] = (int) (microtime(true) * 1000);
@@ -179,9 +191,15 @@ class PalmPayClient
                 );
             }
 
+            $duration = (int) ((microtime(true) * 1000) - $startTime);
+            $this->logToDatabase($endpoint, 'GET', $params, $responseData, $duration);
+
             return $responseData;
 
         } catch (\Exception $e) {
+            $duration = (int) ((microtime(true) * 1000) - $startTime);
+            $this->logToDatabase($endpoint, 'GET', $params, $response ? $response->json() : 'No Response', $duration, $e->getMessage());
+
             Log::error('PalmPay API GET Request Failed', [
                 'endpoint' => $endpoint,
                 'error' => $e->getMessage()
@@ -263,5 +281,30 @@ class PalmPayClient
 
         \Illuminate\Support\Facades\Cache::forget('palmpay_failure_count');
         \Illuminate\Support\Facades\Cache::put($cacheKey, 'CLOSED');
+    }
+
+    /**
+     * Permanent record of API interaction
+     */
+    private function logToDatabase(string $endpoint, string $method, array $request, $response, int $timeMs, ?string $error = null)
+    {
+        try {
+            \Illuminate\Support\Facades\DB::table('provider_logs')->insert([
+                'provider' => 'palmpay',
+                'endpoint' => $endpoint,
+                'method' => $method,
+                'request_payload' => json_encode($request),
+                'response_payload' => is_string($response) ? $response : json_encode($response),
+                'status_code' => is_object($response) && method_exists($response, 'status') ? $response->status() : null,
+                'response_time_ms' => $timeMs,
+                'transaction_reference' => $request['orderNo'] ?? ($request['reference'] ?? ($request['accountReference'] ?? null)),
+                'error' => $error,
+                'ip_address' => request()->ip(),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to write to provider_logs: ' . $e->getMessage());
+        }
     }
 }
