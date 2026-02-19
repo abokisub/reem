@@ -513,6 +513,9 @@ class AdminTrans extends Controller
                             'transactions.created_at',
                             'transactions.balance_before as oldbal',
                             'transactions.balance_after as newbal',
+                            'transactions.recipient_account_number',
+                            'transactions.recipient_account_name',
+                            'transactions.recipient_bank_name',
                             'users.username',
                             'companies.name as company_name',
                             DB::raw("CASE 
@@ -545,25 +548,22 @@ class AdminTrans extends Controller
                         // Decode metadata
                         $metadata = is_string($item->metadata) ? json_decode($item->metadata, true) : $item->metadata;
                         
-                        // Extract beneficiary info from metadata or customer info
-                        $item->phone = $metadata['recipient_account'] ?? 
-                                      $metadata['account_number'] ?? 
-                                      $metadata['phone'] ?? 
-                                      $metadata['beneficiary_account'] ??
-                                      $item->customer_phone ?? 
-                                      null;
-                        
-                        $item->phone_account = $metadata['recipient_name'] ?? 
-                                              $metadata['account_name'] ?? 
-                                              $metadata['beneficiary_name'] ??
-                                              $item->customer_name ?? 
-                                              null;
+                        // For debit transactions (transfers/withdrawals), use recipient info from transaction columns
+                        // For credit transactions (deposits), use sender info from metadata
+                        if ($item->type === 'debit') {
+                            $item->phone = $item->recipient_account_number ?? null;
+                            $item->phone_account = $item->recipient_account_name ?? null;
+                        } else {
+                            // Credit transaction - extract sender info from metadata
+                            $item->phone = $metadata['sender_account'] ?? $metadata['account_number'] ?? null;
+                            $item->phone_account = $metadata['sender_name'] ?? $metadata['account_name'] ?? null;
+                        }
                         
                         // Set display values
                         $item->display_category = Str::headline($item->category);
                         $item->display_status = strtoupper($item->status ?? 'pending');
                         
-                        // Set merchant/user display name (use company_name since business_name doesn't exist)
+                        // Set merchant/user display name
                         $item->merchant_display = $item->company_name ?? $item->username ?? 'N/A';
                         
                         // Format date
