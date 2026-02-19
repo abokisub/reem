@@ -15,7 +15,6 @@ import {
     styled,
     alpha,
     Paper,
-    Paper,
     IconButton,
     Alert
 } from '@mui/material';
