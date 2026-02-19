@@ -191,14 +191,14 @@ export default function RATransactionDetails() {
     const isCredit = transaction.type === 'credit';
     
     // For credit transactions (deposits), show sender info
-    // For debit transactions (transfers), show recipient info
+    // For debit transactions (transfers), show company info as sender
     const senderName = isCredit 
         ? (metadata.sender_name || metadata.sender_account_name || transaction.customer_name || transaction.va_account_name || 'N/A')
-        : (transaction.va_account_name || transaction.company_name || 'PointWave Business');
+        : (transaction.company_name || 'PointWave Business');
     
     const senderAccount = isCredit 
         ? (metadata.sender_account || transaction.customer_account || 'N/A')
-        : (transaction.va_account_number || 'N/A');
+        : (transaction.company_account_number || transaction.va_account_number || 'N/A');
     
     const senderBank = isCredit 
         ? (metadata.sender_bank || metadata.sender_bank_name || transaction.customer_bank || 'N/A')
@@ -215,7 +215,7 @@ export default function RATransactionDetails() {
     
     const recipientBank = isCredit 
         ? 'PalmPay'
-        : (transaction.recipient_bank_name || transaction.customer_bank || 'N/A');
+        : (transaction.recipient_bank_name || transaction.customer_bank || 'PalmPay');
     
     // Balance information
     const oldBalance = transaction.oldbal || transaction.balance_before || 0;

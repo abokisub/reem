@@ -434,6 +434,8 @@ class Trans extends Controller
                 $search = strtolower($request->search);
                 $query = DB::table('transactions')
                     ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
+                    ->leftJoin('banks', 'transactions.recipient_bank_code', '=', 'banks.code')
+                    ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
                     ->where('transactions.company_id', $user->active_company_id);
 
                 if (!empty($search)) {
@@ -467,6 +469,9 @@ class Trans extends Controller
                     'transactions.balance_after as newbal',
                     'virtual_accounts.account_name as va_account_name',
                     'virtual_accounts.account_number as va_account_number',
+                    'companies.name as company_name',
+                    'companies.palmpay_account_number as company_account_number',
+                    DB::raw("COALESCE(transactions.recipient_bank_name, banks.name) as recipient_bank_name"),
                     DB::raw("CASE WHEN transactions.status = 'success' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' ELSE 'processing' END as status")
                 )
 
