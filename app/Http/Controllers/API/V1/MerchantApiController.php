@@ -9,6 +9,7 @@ use App\Models\VirtualAccount;
 use App\Services\LedgerService;
 use App\Services\PalmPay\PalmPayClient;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -399,21 +400,44 @@ class MerchantApiController extends Controller
         if ($validator->fails())
             return $this->respond(false, $validator->errors()->first(), [], 422);
 
-        // Check balance (Sandbox uses independent balance check or skipped for easy testing?)
-        // Let's enforce balance even in sandbox but maybe allow a "Sandbox Funding" endpoint later.
+        // Get payout charges from settings
+        $settings = DB::table('settings')->first();
+        $chargeType = $settings->payout_palmpay_charge_type ?? 'FLAT';
+        $chargeValue = $settings->payout_palmpay_charge_value ?? 15;
+        $chargeCap = $settings->payout_palmpay_charge_cap ?? null;
+        
+        // Calculate payout fee
+        $payoutFee = 0;
+        if ($chargeType === 'PERCENT') {
+            $payoutFee = ($request->amount * $chargeValue) / 100;
+            if ($chargeCap && $payoutFee > $chargeCap) {
+                $payoutFee = $chargeCap;
+            }
+        } else {
+            $payoutFee = $chargeValue;
+        }
+        
+        $totalDeduction = $request->amount + $payoutFee;
+
+        // Check balance
         $wallet = $ledger->getOrCreateAccount($company->name . ' Wallet', 'company_wallet', $company->id);
 
-        // Skip balance check for Test Mode to facilitate testing? 
-        // No, better to enforce it to test balance handling logic.
-        if ($wallet->balance < $request->amount && !$isTest)
-            return $this->respond(false, 'Insufficient balance', [], 400);
+        if ($wallet->balance < $totalDeduction && !$isTest)
+            return $this->respond(false, 'Insufficient balance. Required: ' . $totalDeduction . ' (Amount: ' . $request->amount . ' + Fee: ' . $payoutFee . ')', [], 400);
 
         $internalRef = ($isTest ? 'TS_' : 'PWV_OUT_') . strtoupper(Str::random(10));
 
         try {
             if (!$isTest) {
+                // Deduct total amount (amount + fee) from wallet
                 $settlementClearing = $ledger->getOrCreateAccount('Settlement Clearing', 'settlement');
-                $ledger->recordEntry($internalRef, $wallet->id, $settlementClearing->id, $request->amount, "Payout Initialized");
+                $ledger->recordEntry($internalRef, $wallet->id, $settlementClearing->id, $totalDeduction, "Payout Initialized (Amount: {$request->amount} + Fee: {$payoutFee})");
+
+                // Record fee as revenue
+                if ($payoutFee > 0) {
+                    $revenueAccount = $ledger->getOrCreateAccount('Revenue', 'revenue');
+                    $ledger->recordEntry($internalRef . '-FEE', $wallet->id, $revenueAccount->id, $payoutFee, "Payout Fee");
+                }
 
                 $response = $this->palmPay->post('/transfer/v1/initiate', [
                     'amount' => $request->amount,
@@ -423,29 +447,64 @@ class MerchantApiController extends Controller
                     'reference' => $internalRef,
                 ]);
                 $providerRef = $response['data']['orderNo'] ?? null;
+                
+                // Extract PalmPay provider fee
+                $palmpayFee = 0;
+                $palmpayVat = 0;
+                if (isset($response['data']['fee'])) {
+                    $palmpayFee = ($response['data']['fee']['fee'] ?? 0) / 100;
+                    $palmpayVat = ($response['data']['fee']['vat'] ?? 0) / 100;
+                }
+                $totalProviderFee = $palmpayFee + $palmpayVat;
+                
+                Log::info('Company Payout - PalmPay Provider Fee', [
+                    'company_id' => $company->id,
+                    'reference' => $internalRef,
+                    'our_fee_charged' => $payoutFee,
+                    'palmpay_fee' => $palmpayFee,
+                    'palmpay_vat' => $palmpayVat,
+                    'total_provider_fee' => $totalProviderFee,
+                    'net_profit' => $payoutFee - $totalProviderFee
+                ]);
             } else {
                 // Mock Success for Sandbox
                 $providerRef = 'MOCK_TS_' . Str::random(12);
+                $totalProviderFee = 0;
             }
 
             Transaction::create([
-                'transaction_id' => Transaction::generateTransactionId(), // Adding this just in case booted is not used
+                'transaction_id' => Transaction::generateTransactionId(),
                 'company_id' => $company->id,
                 'reference' => $internalRef,
                 'amount' => $request->amount,
-                'fee' => 0,
-                'total_amount' => $request->amount,
+                'fee' => $payoutFee,
+                'provider_fee' => $totalProviderFee ?? 0,
+                'total_amount' => $totalDeduction,
                 'type' => 'debit',
                 'category' => 'transfer_out',
                 'status' => 'success',
                 'palmpay_reference' => $providerRef,
+                'provider_reference' => $providerRef,
                 'recipient_account_number' => $request->account_number,
                 'recipient_account_name' => $request->account_name,
                 'recipient_bank_code' => $request->bank_code,
                 'is_test' => $isTest,
+                'metadata' => !$isTest ? [
+                    'payout_fee_charged' => $payoutFee,
+                    'palmpay_provider_fee' => $palmpayFee ?? 0,
+                    'palmpay_vat' => $palmpayVat ?? 0,
+                    'total_provider_fee' => $totalProviderFee ?? 0,
+                    'net_profit' => $payoutFee - ($totalProviderFee ?? 0)
+                ] : null,
             ]);
 
-            return $this->respond(true, 'Transfer successful' . ($isTest ? ' (SANDBOX)' : ''), ['reference' => $internalRef, 'status' => 'successful']);
+            return $this->respond(true, 'Transfer successful' . ($isTest ? ' (SANDBOX)' : ''), [
+                'reference' => $internalRef,
+                'status' => 'successful',
+                'amount' => $request->amount,
+                'fee' => $payoutFee,
+                'total_deducted' => $totalDeduction
+            ]);
         } catch (\Exception $e) {
             return $this->respond(false, 'Transfer failed: ' . $e->getMessage(), [], 500);
         }
