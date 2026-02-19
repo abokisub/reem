@@ -64,7 +64,8 @@ class BankingService
     public function transfer(array $details): array
     {
         try {
-            $transferService = new \App\Services\PalmPay\TransferService();
+            // Resolve TransferService from container with dependencies
+            $transferService = app(\App\Services\PalmPay\TransferService::class);
             
             // Get company ID from details or use default
             $companyId = $details['company_id'] ?? 1;
