@@ -1,0 +1,71 @@
+========================================
+DEPLOY FIXED MIGRATION
+========================================
+
+The migration has been fixed to use raw SQL instead of requiring Doctrine DBAL.
+
+ON YOUR SERVER (cPanel Terminal):
+----------------------------------
+
+# 1. Pull the fix
+cd /home/aboksdfs/app.pointwave.ng
+git pull origin main
+
+# 2. Run migration (should work now!)
+php artisan migrate --force
+
+# 3. Verify it worked
+php artisan tinker --execute="
+\$s = DB::table('settings')->first();
+echo 'Column type check:\n';
+echo 'Delay Hours: ' . \$s->settlement_delay_hours . '\n';
+echo 'Type: ' . gettype(\$s->settlement_delay_hours) . '\n';
+"
+
+# 4. Build frontend
+cd frontend
+npm run build
+cd ..
+
+# 5. Test the system
+php test_settlement_system.php
+
+# 6. Send test payment to master account (6644694207)
+#    It should credit INSTANTLY now!
+
+# 7. Check if it worked
+php artisan tinker --execute="
+\$tx = \App\Models\Transaction::orderBy('created_at', 'desc')->first();
+echo 'Latest Transaction:\n';
+echo 'ID: ' . \$tx->transaction_id . '\n';
+echo 'Amount: ₦' . \$tx->amount . '\n';
+
+\$va = \App\Models\VirtualAccount::find(\$tx->virtual_account_id);
+if (\$va) {
+    \$isSelfFunding = (\$va->company_user_id === null);
+    echo 'Type: ' . (\$isSelfFunding ? 'COMPANY SELF-FUNDING' : 'CLIENT PAYMENT') . '\n';
+}
+
+\$meta = \$tx->metadata ?? [];
+if (isset(\$meta['settlement_status'])) {
+    echo 'Settlement: ' . \$meta['settlement_status'] . '\n';
+    if (\$meta['settlement_status'] === 'instant') {
+        echo '✅ INSTANT CREDIT WORKING!\n';
+    }
+}
+
+\$wallet = \App\Models\CompanyWallet::where('company_id', \$tx->company_id)->first();
+echo 'Wallet Balance: ₦' . number_format(\$wallet->balance, 2) . '\n';
+"
+
+========================================
+EXPECTED RESULT:
+========================================
+
+After sending payment to master account (6644694207):
+- Settlement: instant
+- ✅ INSTANT CREDIT WORKING!
+- Wallet balance should increase immediately
+- Should NOT appear in settlement queue
+
+========================================
