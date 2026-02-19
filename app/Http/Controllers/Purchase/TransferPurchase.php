@@ -180,8 +180,12 @@ class TransferPurchase extends Controller
                     return ['status' => 'fail', 'message' => 'Company wallet not found', 'code' => 403];
                 }
 
-                if ($companyWallet->balance < $total_deduction) {
-                    return ['status' => 'fail', 'message' => 'Insufficient Funds. Your current wallet balance is ₦' . number_format($companyWallet->balance, 2), 'code' => 403];
+                // Convert to float to ensure proper comparison
+                $currentBalance = (float) $companyWallet->balance;
+                $totalDeduction = (float) $total_deduction;
+
+                if ($currentBalance < $totalDeduction) {
+                    return ['status' => 'fail', 'message' => 'Insufficient Funds. Your current wallet balance is ₦' . number_format($currentBalance, 2) . '. Required: ₦' . number_format($totalDeduction, 2), 'code' => 403];
                 }
 
                 // Store old balance for transaction record
@@ -357,8 +361,13 @@ class TransferPurchase extends Controller
             }
 
         } catch (\Exception $e) {
-            Log::error('TransferRequest Exception: ' . $e->getMessage());
-            return response()->json(['status' => 'fail', 'message' => 'Internal Server Error'])->setStatusCode(500);
+            Log::error('TransferRequest Exception: ' . $e->getMessage(), [
+                'user_id' => $user->id ?? null,
+                'company_id' => $user->active_company_id ?? null,
+                'amount' => $amount ?? null,
+                'trace' => $e->getTraceAsString()
+            ]);
+            return response()->json(['status' => 'fail', 'message' => 'Internal Server Error: ' . $e->getMessage()])->setStatusCode(500);
         }
 
     }
