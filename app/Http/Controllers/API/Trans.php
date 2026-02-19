@@ -357,6 +357,7 @@ class Trans extends Controller
                         'habukhan_date as Habukhan_date',
                         'habukhan_date as adex_date',
                         'transid',
+                        DB::raw("NULL as transaction_type"),
                         'plan_status',
                         'role',
                         DB::raw("'legacy' as source")
