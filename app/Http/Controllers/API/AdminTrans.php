@@ -1929,11 +1929,11 @@ class AdminTrans extends Controller
                         ->join('companies', 'transactions.company_id', '=', 'companies.id')
                         ->whereBetween('transactions.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
                         ->selectRaw('
-                            companies.business_name,
+                            companies.name as company_name,
                             COUNT(*) as transaction_count,
                             SUM(transactions.amount) as total_volume
                         ')
-                        ->groupBy('companies.id', 'companies.business_name')
+                        ->groupBy('companies.id', 'companies.name')
                         ->orderBy('total_volume', 'desc')
                         ->limit(10)
                         ->get();
