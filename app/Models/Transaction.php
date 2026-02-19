@@ -40,8 +40,10 @@ class Transaction extends Model
         'is_refunded',
         'refund_transaction_id',
         'provider',
+        'provider_reference',
         'reconciliation_status',
         'reconciled_at',
+        'error_message',
     ];
 
     protected static function booted()
@@ -117,14 +119,38 @@ class Transaction extends Model
      */
     public function isSuccessful(): bool
     {
-        return $this->status === 'success';
+        return in_array($this->status, ['successful', 'success', 'settled']);
     }
 
     /**
-     * Check if transaction is pending
+     * Check if transaction is in a pending/processing state
      */
     public function isPending(): bool
     {
-        return $this->status === 'pending' || $this->status === 'processing';
+        return in_array($this->status, ['pending', 'initiated', 'debited', 'processing']);
+    }
+
+    /**
+     * Check if transaction has been reversed
+     */
+    public function isReversed(): bool
+    {
+        return $this->status === 'reversed';
+    }
+
+    /**
+     * Check if transaction has been settled
+     */
+    public function isSettled(): bool
+    {
+        return $this->status === 'settled';
+    }
+
+    /**
+     * Check if this transaction needs reconciliation
+     */
+    public function needsReconciliation(): bool
+    {
+        return $this->status === 'processing' && $this->reconciliation_status === 'pending';
     }
 }

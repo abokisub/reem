@@ -19,14 +19,17 @@ class TransferService
     private PalmPayClient $client;
     private \App\Services\LedgerService $ledgerService;
     private \App\Services\FeeService $feeService;
+    private \App\Services\Financial\FinancialStateService $stateService;
 
     public function __construct(
         \App\Services\LedgerService $ledgerService,
-        \App\Services\FeeService $feeService
+        \App\Services\FeeService $feeService,
+        \App\Services\Financial\FinancialStateService $stateService
     ) {
         $this->client = new PalmPayClient();
         $this->ledgerService = $ledgerService;
         $this->feeService = $feeService;
+        $this->stateService = $stateService;
     }
 
     /**
@@ -145,63 +148,67 @@ class TransferService
     private function processPalmPayTransfer(Transaction $transaction): void
     {
         try {
-            $transaction->update(['status' => 'processing']);
+            // Transition: debited → processing
+            $this->stateService->transition($transaction, 'processing');
 
-            // Prepare request data
-            // Documentation requirements:
-            // orderId, payeeBankCode, payeeBankAccNo, amount, currency, notifyUrl, remark
             $requestData = [
-                'orderId' => $transaction->reference, // Our reference as orderId
+                'orderId' => $transaction->reference,
                 'payeeBankCode' => $transaction->recipient_bank_code,
                 'payeeBankAccNo' => $transaction->recipient_account_number,
-                'amount' => (int) ($transaction->amount * 100), // Convert to kobo (smallest unit)
+                'amount' => (int) ($transaction->amount * 100),
                 'currency' => 'NGN',
                 'notifyUrl' => config('app.url') . '/api/v1/palmpay/webhook/payout',
                 'remark' => $transaction->description ?? 'Transfer',
                 'payeeName' => $transaction->recipient_account_name ?? 'Unknown',
             ];
 
-            Log::info('Processing PalmPay Transfer', [
-                'transaction_id' => $transaction->transaction_id,
-                'data' => $requestData
-            ]);
+            Log::info('Processing PalmPay Transfer', ['transaction_id' => $transaction->transaction_id]);
 
-            // Call PalmPay API
-            // Path: /api/v2/merchant/payment/payout
             $response = $this->client->post('/api/v2/merchant/payment/payout', $requestData);
 
-            // Extract PalmPay reference
             $palmpayReference = $response['data']['orderNo'] ?? null;
-            $status = $response['data']['orderStatus'] ?? 'pending';
+            $providerStatus = strtoupper($response['data']['orderStatus'] ?? 'UNKNOWN');
 
-            // Update transaction
-            $transaction->update([
-                'palmpay_reference' => $palmpayReference,
-                'status' => $this->mapPalmPayStatus($status),
-                'processed_at' => now(),
-            ]);
+            // --- SAFE MODE: Route by provider status ---
+            if ($this->stateService->isDefinitiveFailure($providerStatus)) {
+                // Definitive failure — immediately reverse
+                Log::warning('SAFE MODE: Definitive failure from provider. Triggering reversal.', [
+                    'status' => $providerStatus,
+                    'transaction_id' => $transaction->transaction_id
+                ]);
+                $this->handleFailedTransfer($transaction, "Provider: {$providerStatus}");
 
-            // Remove from pending if successful
-            if ($transaction->status === 'success') {
-                $wallet = $transaction->company->wallet;
+            } elseif ($this->stateService->isAmbiguous($providerStatus)) {
+                // Ambiguous — hold in processing, wait for webhook/reconciliation
+                $transaction->update([
+                    'palmpay_reference' => $palmpayReference,
+                    'reconciliation_status' => 'pending',
+                    'provider_reference' => $palmpayReference,
+                ]);
+                Log::info('SAFE MODE: Ambiguous status. Holding in processing.', [
+                    'status' => $providerStatus,
+                    'transaction_id' => $transaction->transaction_id
+                ]);
+
+            } else {
+                // Successful
+                $this->stateService->transition($transaction, 'successful', [
+                    'palmpay_reference' => $palmpayReference,
+                    'provider_reference' => $palmpayReference,
+                    'reconciliation_status' => 'reconciled',
+                ]);
+                $wallet = $transaction->fresh()->company->wallet;
                 $wallet->removePending($transaction->total_amount);
                 $wallet->save();
             }
 
-            Log::info('PalmPay Transfer Processed', [
-                'transaction_id' => $transaction->transaction_id,
-                'status' => $transaction->status,
-                'palmpay_reference' => $palmpayReference
-            ]);
-
         } catch (\Exception $e) {
-            Log::error('PalmPay Transfer Failed', [
+            Log::error('PalmPay Transfer Exception', [
                 'transaction_id' => $transaction->transaction_id,
                 'error' => $e->getMessage()
             ]);
-
-            // Mark as failed and refund
-            $this->handleFailedTransfer($transaction, $e->getMessage());
+            // Exceptions (network, 500) are ambiguous — don't reverse blindly
+            $transaction->update(['reconciliation_status' => 'pending']);
         }
     }
 
@@ -217,11 +224,10 @@ class TransferService
         try {
             DB::beginTransaction();
 
-            // Update transaction status
-            $transaction->update([
-                'status' => 'failed',
+            // Strict state transition via FinancialStateService
+            $this->stateService->transition($transaction, 'failed', [
                 'error_message' => $errorMessage,
-                'processed_at' => now(),
+                'reconciliation_status' => 'not_matched',
             ]);
 
             // 1. Ledger Reversal (High Integrity)

@@ -30,6 +30,12 @@ class Kernel extends ConsoleKernel
         // Auto-refund stale transactions
         $schedule->job(new \App\Jobs\ProcessStaleTransactionsJob)->hourly();
 
+        // Webhook Retry Engine (Exponential Backoff)
+        $schedule->command('webhooks:retry')->everyMinute()->withoutOverlapping();
+
+        // Automated Reconciliation (every 10 minutes)
+        $schedule->command('reconcile:auto')->everyTenMinutes()->withoutOverlapping();
+
         // Sandbox reset (24-hour cycle)
         if (config('app.env') === 'sandbox' || config('app.sandbox_mode', false)) {
             $schedule->command('sandbox:reset')->dailyAt('00:00');
