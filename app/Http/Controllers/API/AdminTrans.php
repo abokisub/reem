@@ -1817,37 +1817,49 @@ class AdminTrans extends Controller
                     $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->format('Y-m-d');
                     $search = $request->search ?? '';
 
-                    // ABSOLUTE TRUTH: Ledger Entries are the definitive record
-                    $query = DB::table('ledger_entries')
-                        ->join('ledger_accounts as debit_acc', 'ledger_entries.debit_account_id', '=', 'debit_acc.id')
-                        ->join('ledger_accounts as credit_acc', 'ledger_entries.credit_account_id', '=', 'credit_acc.id')
-                        ->whereBetween('ledger_entries.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                    // Query transactions table
+                    $query = DB::table('transactions')
+                        ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
+                        ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
+                        ->leftJoin('customers', 'transactions.customer_id', '=', 'customers.id')
+                        ->whereBetween('transactions.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
                         ->select(
-                            'ledger_entries.*',
-                            'debit_acc.name as source_account',
-                            'debit_acc.account_type as source_type',
-                            'credit_acc.name as destination_account',
-                            'credit_acc.account_type as destination_type'
+                            'transactions.id',
+                            'transactions.reference',
+                            'transactions.amount',
+                            'transactions.fee as charges',
+                            'transactions.type',
+                            'transactions.status',
+                            'transactions.description',
+                            'transactions.created_at',
+                            'transactions.recipient_account_number as customer_account_number',
+                            'transactions.recipient_account_name as customer_name',
+                            'users.username',
+                            'companies.name as company_name'
                         )
-                        ->orderBy('ledger_entries.created_at', 'desc');
+                        ->orderBy('transactions.created_at', 'desc');
 
                     if (!empty($search)) {
                         $query->where(function ($q) use ($search) {
-                            $q->where('ledger_entries.transaction_id', 'LIKE', "%$search%")
-                                ->orWhere('ledger_entries.description', 'LIKE', "%$search%")
-                                ->orWhere('debit_acc.name', 'LIKE', "%$search%")
-                                ->orWhere('credit_acc.name', 'LIKE', "%$search%");
+                            $q->where('transactions.reference', 'LIKE', "%$search%")
+                                ->orWhere('transactions.description', 'LIKE', "%$search%")
+                                ->orWhere('users.username', 'LIKE', "%$search%")
+                                ->orWhere('companies.name', 'LIKE', "%$search%")
+                                ->orWhere('transactions.recipient_account_number', 'LIKE', "%$search%")
+                                ->orWhere('transactions.recipient_account_name', 'LIKE', "%$search%");
                         });
                     }
 
                     $statement = $query->paginate($request->limit ?? 50);
 
-                    // Summary statistics from the ledger
-                    $summary = DB::table('ledger_entries')
+                    // Summary statistics
+                    $summary = DB::table('transactions')
                         ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
                         ->selectRaw('
-                            COUNT(*) as total_entries,
-                            SUM(amount) as total_volume
+                            COUNT(*) as total_count,
+                            SUM(CASE WHEN type = "credit" THEN amount ELSE 0 END) as total_credit,
+                            SUM(CASE WHEN type = "debit" THEN amount ELSE 0 END) as total_debit,
+                            SUM(fee) as total_charges
                         ')
                         ->first();
 
@@ -1858,8 +1870,7 @@ class AdminTrans extends Controller
                         'date_range' => [
                             'start' => $startDate,
                             'end' => $endDate
-                        ],
-                        'is_ledger_accurate' => true
+                        ]
                     ]);
                 }
             }
