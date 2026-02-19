@@ -1,0 +1,92 @@
+═══════════════════════════════════════════════════════════════
+🔧 SETTLEMENT STATE TRANSITION FIX - DEPLOYMENT GUIDE
+═══════════════════════════════════════════════════════════════
+
+ISSUE FIXED:
+────────────────────────────────────────────────────────────────
+❌ Error: "Invalid state transition: [pending] → [processing]"
+❌ Settlements not completing
+❌ No bank alerts received
+
+ROOT CAUSE:
+────────────────────────────────────────────────────────────────
+Transfer transactions were created with 'pending' status, but the
+state machine doesn't allow pending → processing transitions.
+
+SOLUTION:
+────────────────────────────────────────────────────────────────
+✅ Changed initial status from 'pending' to 'debited'
+✅ Now follows proper flow: debited → processing → successful
+✅ Settlements will complete and trigger bank alerts
+
+═══════════════════════════════════════════════════════════════
+DEPLOYMENT STEPS (COPY & PASTE)
+═══════════════════════════════════════════════════════════════
+
+1️⃣  CONNECT TO SERVER:
+────────────────────────────────────────────────────────────────
+ssh aboksdfs@app.pointwave.ng
+cd /home/aboksdfs/app.pointwave.ng
+
+
+2️⃣  RUN DEPLOYMENT SCRIPT:
+────────────────────────────────────────────────────────────────
+bash DEPLOY_SETTLEMENT_STATE_FIX.sh
+
+
+3️⃣  TEST THE FIX:
+────────────────────────────────────────────────────────────────
+# Watch logs in real-time
+tail -f storage/logs/laravel.log
+
+# In another terminal, trigger a settlement
+# (or wait for the cron job to run)
+
+# You should see:
+✅ "Transaction State Transition: [debited] → [processing]"
+✅ "Transaction State Transition: [processing] → [successful]"
+✅ No more "Invalid state transition" errors
+
+
+4️⃣  VERIFY SUCCESS:
+────────────────────────────────────────────────────────────────
+- Check your settlement bank account
+- You should receive bank alert
+- Check company wallet balance increased
+- Check settlement_queue table status = 'completed'
+
+═══════════════════════════════════════════════════════════════
+WHAT WAS CHANGED
+═══════════════════════════════════════════════════════════════
+
+File: app/Services/PalmPay/TransferService.php
+Line: 129
+
+BEFORE:
+  'status' => 'pending',
+
+AFTER:
+  'status' => 'debited',
+
+This single change fixes the entire settlement flow!
+
+═══════════════════════════════════════════════════════════════
+TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════
+
+If you still don't receive alerts:
+1. Check settlement_queue table for pending settlements
+2. Verify cron job is running: crontab -l
+3. Manually trigger: php artisan settlements:process
+4. Check PalmPay account has sufficient balance
+5. Verify webhook URL is configured correctly
+
+═══════════════════════════════════════════════════════════════
+STATUS: ✅ PUSHED TO GITHUB - READY TO DEPLOY
+═══════════════════════════════════════════════════════════════
+
+Time needed: 2-3 minutes
+Risk: Very low (single line change)
+Rollback: Just revert the commit if needed
+
+═══════════════════════════════════════════════════════════════
