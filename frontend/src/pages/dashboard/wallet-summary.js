@@ -1,6 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useState, useEffect } from 'react';
-import { sentenceCase, capitalCase } from 'change-case';
+import { useEffect, useState } from 'react';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
 import { useSnackbar } from 'notistack';
 
@@ -116,7 +115,7 @@ export default function WalletSummary() {
     const theme = useTheme();
     const { enqueueSnackbar } = useSnackbar();
     const { themeStretch } = useSettings();
-    const { user, setting } = useAuth();
+    const { user } = useAuth();
 
     const [transactions, setTransactions] = useState([]);
     const [page, setPage] = useState(0);
