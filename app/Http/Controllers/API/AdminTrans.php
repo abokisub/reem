@@ -501,7 +501,7 @@ class AdminTrans extends Controller
                         ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
                         ->select(
                             'transactions.id',
-                            'transactions.transaction_id as transid',
+                            'transactions.reference as transid',
                             'transactions.reference',
                             'transactions.amount',
                             'transactions.fee',
@@ -515,7 +515,6 @@ class AdminTrans extends Controller
                             'transactions.balance_after as newbal',
                             'users.username',
                             'companies.name as company_name',
-                            'companies.business_name',
                             DB::raw("CASE 
                                 WHEN transactions.status = 'success' THEN 'success'
                                 WHEN transactions.status = 'successful' THEN 'success'
@@ -528,8 +527,7 @@ class AdminTrans extends Controller
 
                     if (!empty($search)) {
                         $query->where(function ($q) use ($search) {
-                            $q->orWhere('transactions.transaction_id', 'LIKE', "%$search%")
-                                ->orWhere('transactions.reference', 'LIKE', "%$search%")
+                            $q->orWhere('transactions.reference', 'LIKE', "%$search%")
                                 ->orWhere('transactions.description', 'LIKE', "%$search%")
                                 ->orWhere('transactions.amount', 'LIKE', "%$search%")
                                 ->orWhere('users.username', 'LIKE', "%$search%")
@@ -565,8 +563,8 @@ class AdminTrans extends Controller
                         $item->display_category = Str::headline($item->category);
                         $item->display_status = strtoupper($item->status ?? 'pending');
                         
-                        // Set merchant/user display name
-                        $item->merchant_display = $item->business_name ?? $item->company_name ?? $item->username ?? 'N/A';
+                        // Set merchant/user display name (use company_name since business_name doesn't exist)
+                        $item->merchant_display = $item->company_name ?? $item->username ?? 'N/A';
                         
                         // Format date
                         $item->plan_date = $item->created_at;
