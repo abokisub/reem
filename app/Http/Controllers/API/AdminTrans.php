@@ -499,7 +499,6 @@ class AdminTrans extends Controller
                     $query = DB::table('transactions')
                         ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
                         ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
-                        ->leftJoin('company_users', 'transactions.company_user_id', '=', 'company_users.id')
                         ->select(
                             'transactions.id',
                             'transactions.transaction_id as transid',
@@ -517,12 +516,11 @@ class AdminTrans extends Controller
                             'users.username',
                             'companies.name as company_name',
                             'companies.business_name',
-                            'company_users.name as customer_name',
-                            'company_users.email as customer_email',
-                            'company_users.phone as customer_phone',
                             DB::raw("CASE 
                                 WHEN transactions.status = 'success' THEN 'success'
+                                WHEN transactions.status = 'successful' THEN 'success'
                                 WHEN transactions.status = 'pending' THEN 'pending'
+                                WHEN transactions.status = 'processing' THEN 'pending'
                                 WHEN transactions.status = 'failed' THEN 'failed'
                                 ELSE 'pending'
                             END as plan_status")
@@ -535,9 +533,7 @@ class AdminTrans extends Controller
                                 ->orWhere('transactions.description', 'LIKE', "%$search%")
                                 ->orWhere('transactions.amount', 'LIKE', "%$search%")
                                 ->orWhere('users.username', 'LIKE', "%$search%")
-                                ->orWhere('companies.name', 'LIKE', "%$search%")
-                                ->orWhere('company_users.name', 'LIKE', "%$search%")
-                                ->orWhere('company_users.phone', 'LIKE', "%$search%");
+                                ->orWhere('companies.name', 'LIKE', "%$search%");
                         });
                     }
 

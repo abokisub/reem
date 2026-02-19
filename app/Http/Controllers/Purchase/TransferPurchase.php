@@ -168,7 +168,7 @@ class TransferPurchase extends Controller
                 // RE-FETCH USER WITH PESSIMISTIC LOCK
                 $lockedUser = DB::table('users')->where('id', $user->id)->lockForUpdate()->first();
 
-                $charge = $this->calculateTransferCharge($amount, $lockedUser->active_company_id);
+                $charge = $this->calculateTransferCharge($amount, $lockedUser->active_company_id, $request->account_number, $request->bank_code);
                 $total_deduction = $amount + $charge;
 
                 // Get company wallet with lock
@@ -377,14 +377,33 @@ class TransferPurchase extends Controller
 
     }
 
-    private function calculateTransferCharge($amount, $cid = null)
+    private function calculateTransferCharge($amount, $cid = null, $accountNumber = null, $bankCode = null)
     {
         $settings = $this->core($cid);
-        $type = $settings->transfer_charge_type ?? 'FLAT';
-        $value = $settings->transfer_charge_value ?? 0;
-        $cap = $settings->transfer_charge_cap ?? 0;
+        
+        // Determine if this is a settlement withdrawal
+        $isSettlementWithdrawal = false;
+        if ($cid && $accountNumber && $bankCode) {
+            $company = \App\Models\Company::find($cid);
+            if ($company && 
+                $company->settlement_account_number == $accountNumber && 
+                $company->bank_code == $bankCode) {
+                $isSettlementWithdrawal = true;
+            }
+        }
+        
+        // Use settlement withdrawal charges if applicable, otherwise use external transfer charges
+        if ($isSettlementWithdrawal) {
+            $type = $settings->payout_palmpay_charge_type ?? 'FLAT';
+            $value = $settings->payout_palmpay_charge_value ?? 10;
+            $cap = $settings->payout_palmpay_charge_cap ?? 0;
+        } else {
+            $type = $settings->transfer_charge_type ?? 'FLAT';
+            $value = $settings->transfer_charge_value ?? 0;
+            $cap = $settings->transfer_charge_cap ?? 0;
+        }
 
-        if ($type == 'PERCENTAGE') {
+        if ($type == 'PERCENTAGE' || $type == 'PERCENT') {
             $charge = ($amount / 100) * $value;
             // Apply cap if it's set and charge exceeds it
             if ($cap > 0 && $charge > $cap) {
