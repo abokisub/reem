@@ -1771,6 +1771,7 @@ class AuthController extends Controller
             'settlement_bank_name' => $user->paystack_bank,
             'settlement_account_number' => $user->paystack_account,
             'settlement_account_name' => $user->palmpay_account_name, // Default or generic
+            'bank_code' => $user->paystack_bank_code, // CRITICAL: Save bank code for settlement withdrawal fee detection
 
             'kyc_documents' => json_encode($kycDocs),
             'updated_at' => now()
