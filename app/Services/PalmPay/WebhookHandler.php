@@ -205,6 +205,12 @@ class WebhookHandler
             $wallet = CompanyWallet::where('company_id', $virtualAccount->company_id)->first();
             $balanceBefore = $wallet ? $wallet->balance : 0;
 
+            // Extract sender information from payload
+            $senderName = $payload['payerAccountName'] ?? $payload['senderName'] ?? 'Unknown';
+            $senderAccount = $payload['payerAccountNo'] ?? $payload['senderAccount'] ?? null;
+            $senderBank = $payload['payerBankName'] ?? $payload['senderBank'] ?? null;
+            $narration = $payload['reference'] ?? $payload['narration'] ?? 'Virtual Account Credit';
+            
             // Create transaction
             $transaction = Transaction::create([
                 'transaction_id' => Transaction::generateTransactionId(),
@@ -220,12 +226,21 @@ class WebhookHandler
                 'status' => 'success',
                 'reference' => Transaction::generateReference(),
                 'palmpay_reference' => $palmpayReference,
-                'description' => $payload['narration'] ?? 'Virtual Account Credit',
+                'description' => $narration,
                 'metadata' => [
-                    'sender_name' => $payload['senderName'] ?? null,
-                    'sender_account' => $payload['senderAccount'] ?? null,
-                    'sender_bank' => $payload['senderBank'] ?? null,
+                    'sender_name' => $senderName,
+                    'sender_account' => $senderAccount,
+                    'sender_bank' => $senderBank,
+                    'sender_account_name' => $senderName,
+                    'sender_bank_name' => $senderBank,
+                    'narration' => $narration,
                     'fee_model' => $feeResults['model'],
+                    'fee_type' => $feeResults['type'] ?? 'PERCENT',
+                    'fee_value' => $feeResults['value'] ?? 0,
+                    'fee_cap' => $feeResults['cap'] ?? null,
+                    'palmpay_order_no' => $palmpayReference,
+                    'palmpay_session_id' => $payload['sessionId'] ?? null,
+                    'virtual_account_name' => $payload['virtualAccountName'] ?? null,
                 ],
                 'balance_before' => $balanceBefore,
                 'balance_after' => $balanceBefore + $netAmount,
@@ -337,7 +352,7 @@ class WebhookHandler
                     ['account_id' => $bankClearing->id, 'type' => 'debit', 'amount' => $amount], // Debit Clearing (Gross)
                     ['account_id' => $companyWalletAccount->id, 'type' => 'credit', 'amount' => $netAmount], // Credit Wallet (Net)
                     ['account_id' => $revenueAccount->id, 'type' => 'credit', 'amount' => $fee], // Credit Revenue (Fee)
-                ], "Deposit: " . ($payload['senderName'] ?? 'Unknown'));
+                ], "Deposit from " . $senderName . " via " . ($senderBank ?? 'Bank'));
 
             } catch (\Exception $e) {
                 Log::error('Ledger Recording Failed: ' . $e->getMessage());
@@ -354,13 +369,20 @@ class WebhookHandler
                     'payload' => [
                         'event' => 'payment.success',
                         'data' => [
+                            'transaction_id' => $transaction->transaction_id,
                             'amount' => $transaction->amount,
+                            'fee' => $transaction->fee,
+                            'net_amount' => $transaction->netAmount,
                             'reference' => $transaction->reference,
                             'status' => 'success',
                             'customer' => [
                                 'account_number' => $accountNumber,
-                                'sender_name' => $payload['senderName'] ?? null,
-                            ]
+                                'sender_name' => $senderName,
+                                'sender_account' => $senderAccount,
+                                'sender_bank' => $senderBank,
+                            ],
+                            'narration' => $narration,
+                            'created_at' => $transaction->created_at->toIso8601String(),
                         ]
                     ],
                     'status' => 'pending',
