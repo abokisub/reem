@@ -170,6 +170,16 @@ class TransferPurchase extends Controller
 
                 $charge = $this->calculateTransferCharge($amount, $lockedUser->active_company_id, $request->account_number, $request->bank_code);
                 $total_deduction = $amount + $charge;
+                
+                // Log transfer fee calculation
+                \Log::info('Transfer Fee Calculated', [
+                    'transaction_id' => $transid,
+                    'amount' => $amount,
+                    'fee' => $charge,
+                    'total_deduction' => $total_deduction,
+                    'account_number' => $request->account_number,
+                    'bank_code' => $request->bank_code
+                ]);
 
                 // Get company wallet with lock
                 $companyWallet = \App\Models\CompanyWallet::where('company_id', $lockedUser->active_company_id)
@@ -409,10 +419,12 @@ class TransferPurchase extends Controller
             $type = $settings->payout_palmpay_charge_type ?? 'FLAT';
             $value = $settings->payout_palmpay_charge_value ?? 10;
             $cap = $settings->payout_palmpay_charge_cap ?? 0;
+            $chargeCategory = 'Settlement Withdrawal';
         } else {
             $type = $settings->transfer_charge_type ?? 'FLAT';
             $value = $settings->transfer_charge_value ?? 0;
             $cap = $settings->transfer_charge_cap ?? 0;
+            $chargeCategory = 'External Transfer (Other Banks)';
         }
 
         if ($type == 'PERCENTAGE' || $type == 'PERCENT') {
@@ -421,10 +433,29 @@ class TransferPurchase extends Controller
             if ($cap > 0 && $charge > $cap) {
                 $charge = $cap;
             }
+            
+            \Log::info('Transfer Charge Calculation', [
+                'category' => $chargeCategory,
+                'type' => 'PERCENTAGE',
+                'percentage' => $value,
+                'amount' => $amount,
+                'calculated_charge' => $charge,
+                'cap' => $cap,
+                'final_charge' => $charge
+            ]);
+            
             return $charge;
         }
 
         // Default to Flat Fee
+        \Log::info('Transfer Charge Calculation', [
+            'category' => $chargeCategory,
+            'type' => 'FLAT',
+            'flat_fee' => $value,
+            'amount' => $amount,
+            'final_charge' => $value
+        ]);
+        
         return $value;
     }
 }
