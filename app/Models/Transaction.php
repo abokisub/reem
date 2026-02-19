@@ -16,6 +16,7 @@ class Transaction extends Model
         'category',
         'amount',
         'fee',
+        'provider_fee',
         'net_amount',
         'total_amount',
         'currency',
@@ -57,6 +58,7 @@ class Transaction extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'fee' => 'decimal:2',
+        'provider_fee' => 'decimal:2',
         'net_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'balance_before' => 'decimal:2',

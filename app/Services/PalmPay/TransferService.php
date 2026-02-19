@@ -170,6 +170,24 @@ class TransferService
 
             $palmpayReference = $response['data']['orderNo'] ?? null;
             $providerStatus = strtoupper($response['data']['orderStatus'] ?? 'UNKNOWN');
+            
+            // Extract PalmPay provider fee (in kobo)
+            $palmpayFee = 0;
+            $palmpayVat = 0;
+            if (isset($response['data']['fee'])) {
+                $palmpayFee = ($response['data']['fee']['fee'] ?? 0) / 100; // Convert kobo to naira
+                $palmpayVat = ($response['data']['fee']['vat'] ?? 0) / 100;
+            }
+            $totalProviderFee = $palmpayFee + $palmpayVat;
+            
+            // Log the provider fee for tracking
+            Log::info('PalmPay Provider Fee Charged', [
+                'transaction_id' => $transaction->transaction_id,
+                'palmpay_fee' => $palmpayFee,
+                'palmpay_vat' => $palmpayVat,
+                'total_provider_fee' => $totalProviderFee,
+                'our_fee_charged_to_customer' => $transaction->fee
+            ]);
 
             // --- SAFE MODE: Route by provider status ---
             if ($this->stateService->isDefinitiveFailure($providerStatus)) {
@@ -186,6 +204,12 @@ class TransferService
                     'palmpay_reference' => $palmpayReference,
                     'reconciliation_status' => 'pending',
                     'provider_reference' => $palmpayReference,
+                    'provider_fee' => $totalProviderFee,
+                    'metadata' => array_merge($transaction->metadata ?? [], [
+                        'palmpay_provider_fee' => $palmpayFee,
+                        'palmpay_vat' => $palmpayVat,
+                        'total_provider_fee' => $totalProviderFee,
+                    ]),
                 ]);
                 Log::info('SAFE MODE: Ambiguous status. Holding in processing.', [
                     'status' => $providerStatus,
@@ -198,6 +222,12 @@ class TransferService
                     'palmpay_reference' => $palmpayReference,
                     'provider_reference' => $palmpayReference,
                     'reconciliation_status' => 'reconciled',
+                    'provider_fee' => $totalProviderFee,
+                    'metadata' => array_merge($transaction->metadata ?? [], [
+                        'palmpay_provider_fee' => $palmpayFee,
+                        'palmpay_vat' => $palmpayVat,
+                        'total_provider_fee' => $totalProviderFee,
+                    ]),
                 ]);
                 $wallet = $transaction->fresh()->company->wallet;
                 $wallet->removePending($transaction->total_amount);
