@@ -421,9 +421,10 @@ class TransferPurchase extends Controller
             $cap = $settings->payout_palmpay_charge_cap ?? 0;
             $chargeCategory = 'Settlement Withdrawal';
         } else {
-            $type = $settings->transfer_charge_type ?? 'FLAT';
-            $value = $settings->transfer_charge_value ?? 0;
-            $cap = $settings->transfer_charge_cap ?? 0;
+            // External Transfer (Other Banks) - use payout_bank_* columns
+            $type = $settings->payout_bank_charge_type ?? 'FLAT';
+            $value = $settings->payout_bank_charge_value ?? 0;
+            $cap = $settings->payout_bank_charge_cap ?? 0;
             $chargeCategory = 'External Transfer (Other Banks)';
         }
 
