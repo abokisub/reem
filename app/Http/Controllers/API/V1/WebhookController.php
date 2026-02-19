@@ -5,7 +5,10 @@ namespace App\Http\Controllers\API\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\CompanyUser;
+use App\Models\CompanyWallet;
+use App\Models\User;
 use App\Models\GatewayWebhookLog;
+use Illuminate\Support\Facades\DB;
 use App\Models\LedgerAccount;
 use App\Models\Transaction;
 use App\Models\VirtualAccount;
@@ -120,6 +123,64 @@ class WebhookController extends Controller
             // For simplicity in our LedgerService (which currently handles atomic pairs):
             $this->ledger->recordEntry($tx->reference, $bankClearing->id, $companyWallet->id, $amount, "Gross Credit");
             $this->ledger->recordEntry($tx->reference, $companyWallet->id, $revenueAccount->id, $feeData['fee'], "Transaction Fee");
+
+            // --- LEGACY SYNC (For Dashboard & Admin compatibility) ---
+            // 1. Sync Company Wallet
+            $legacyWallet = CompanyWallet::firstOrCreate(
+                ['company_id' => $company->id, 'currency' => 'NGN'],
+                ['balance' => 0, 'ledger_balance' => 0, 'pending_balance' => 0]
+            );
+            $legacyWallet->increment('balance', (float) $tx->net_amount);
+            $legacyWallet->increment('ledger_balance', (float) $tx->net_amount);
+
+            // 2. Sync Company Owner User Balance
+            $owner = User::find($company->user_id);
+            if ($owner) {
+                // If it's a company user, the 'balance' accessor might already read from CompanyWallet,
+                // but we update the physical column for absolute consistency and historical queries.
+                $owner->increment('balance', (float) $tx->net_amount);
+            }
+            // ----------------------------------------------------------
+
+            // --- SETTLEMENT LOGIC (Enterprise Queue) ---
+            $settings = DB::table('settings')->first();
+            $autoSettlement = $settings && $settings->auto_settlement_enabled;
+
+            if ($autoSettlement) {
+                // Determine settlement date
+                $delayHours = $settings->settlement_delay_hours ?? 24;
+                $skipWeekends = $settings->settlement_skip_weekends ?? true;
+                $skipHolidays = $settings->settlement_skip_holidays ?? true;
+                $settlementTime = $settings->settlement_time ?? '02:00:00';
+
+                $scheduledDate = \App\Console\Commands\ProcessSettlements::calculateSettlementDate(
+                    now(),
+                    $delayHours,
+                    $skipWeekends,
+                    $skipHolidays,
+                    $settlementTime
+                );
+
+                // Queue for settlement
+                DB::table('settlement_queue')->insert([
+                    'company_id' => $company->id,
+                    'transaction_id' => $tx->id,
+                    'amount' => $tx->net_amount,
+                    'status' => 'pending',
+                    'transaction_date' => now(),
+                    'scheduled_settlement_date' => $scheduledDate,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                Log::info("Transaction Queued for Settlement (V1 Webhook)", ['tx' => $tx->reference, 'scheduled' => $scheduledDate]);
+            } else {
+                // Immediate Balance Update (Only if auto-settlement is OFF)
+                // We already incremented above for legacy compatibility, but 
+                // in some architectures, 'balance' is only updated after settlement.
+                // Keeping it as is for now since user wants consistency.
+            }
+            // ------------------------------------------
 
             // Update log
             $log->update(['status' => 'processed', 'processed_at' => now()]);
