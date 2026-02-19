@@ -284,10 +284,13 @@ class Trans extends Controller
                     'transactions.created_at as date',
                     'transactions.description as details',
                     'transactions.fee as charges',
+                    'transactions.balance_before as oldbal',
+                    'transactions.balance_after as newbal',
                     'virtual_accounts.account_name as va_account_name',
                     'virtual_accounts.account_number as va_account_number',
                     DB::raw("CASE WHEN transactions.status = 'success' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' ELSE 'processing' END as status")
                 ];
+
 
                 if (!empty($search)) {
                     $baseQuery->where(function ($query) use ($search) {
@@ -342,31 +345,65 @@ class Trans extends Controller
                     $request->merge(['status' => 'ALL']);
                 }
                 $search = strtolower($request->search);
+
+                // Query both legacy message table and new transactions table
+                $legacyQuery = DB::table('message')
+                    ->where(['username' => $user->username])
+                    ->select(
+                        'message',
+                        'amount',
+                        'oldbal',
+                        'newbal',
+                        'habukhan_date as Habukhan_date',
+                        'habukhan_date as adex_date',
+                        'transid',
+                        'plan_status',
+                        'role',
+                        DB::raw("'legacy' as source")
+                    );
+
+                $transactionQuery = DB::table('transactions')
+                    ->where('company_id', $user->active_company_id)
+                    ->where('type', 'debit')
+                    ->select(
+                        'description as message',
+                        'amount',
+                        'balance_before as oldbal',
+                        'balance_after as newbal',
+                        'created_at as Habukhan_date',
+                        'created_at as adex_date',
+                        'reference as transid',
+                        DB::raw("CASE WHEN status = 'success' THEN 1 WHEN status = 'failed' THEN 2 ELSE 0 END as plan_status"),
+                        DB::raw("'user' as role"),
+                        DB::raw("'transactions' as source")
+                    );
+
                 if (!empty($search)) {
-                    if ($request->status == 'ALL') {
-                        return response()->json([
-                            'all_summary' => DB::table('message')->where(['username' => $user->username])->Where(function ($query) use ($search) {
-                                $query->orWhere('message', 'LIKE', "%$search%")->orWhere('habukhan_date', 'LIKE', "%$search%")->orWhere('oldbal', 'LIKE', "%$search%")->orWhere('transid', 'LIKE', "%$search%")->orWhere('newbal', 'LIKE', "%$search%");
-                            })->select('message', 'amount', 'oldbal', 'newbal', 'habukhan_date as Habukhan_date', 'habukhan_date as adex_date', 'transid', 'plan_status', 'role')->orderBy('id', 'desc')->paginate($request->limit)
-                        ]);
-                    } else {
-                        return response()->json([
-                            'all_summary' => DB::table('message')->where(['username' => $user->username, 'plan_status' => $request->status])->Where(function ($query) use ($search) {
-                                $query->orWhere('message', 'LIKE', "%$search%")->orWhere('habukhan_date', 'LIKE', "%$search%")->orWhere('oldbal', 'LIKE', "%$search%")->orWhere('transid', 'LIKE', "%$search%")->orWhere('newbal', 'LIKE', "%$search%");
-                            })->select('message', 'amount', 'oldbal', 'newbal', 'habukhan_date as Habukhan_date', 'habukhan_date as adex_date', 'transid', 'plan_status', 'role')->orderBy('id', 'desc')->paginate($request->limit)
-                        ]);
-                    }
-                } else {
-                    if ($request->status == 'ALL') {
-                        return response()->json([
-                            'all_summary' => DB::table('message')->where(['username' => $user->username])->select('message', 'amount', 'oldbal', 'newbal', 'habukhan_date as Habukhan_date', 'habukhan_date as adex_date', 'transid', 'plan_status', 'role')->orderBy('id', 'desc')->paginate($request->limit)
-                        ]);
-                    } else {
-                        return response()->json([
-                            'all_summary' => DB::table('message')->where(['username' => $user->username, 'plan_status' => $request->status])->select('message', 'amount', 'oldbal', 'newbal', 'habukhan_date as Habukhan_date', 'habukhan_date as adex_date', 'transid', 'plan_status', 'role')->orderBy('id', 'desc')->paginate($request->limit)
-                        ]);
-                    }
+                    $legacyQuery->where(function ($query) use ($search) {
+                        $query->orWhere('message', 'LIKE', "%$search%")
+                            ->orWhere('habukhan_date', 'LIKE', "%$search%")
+                            ->orWhere('transid', 'LIKE', "%$search%");
+                    });
+                    $transactionQuery->where(function ($query) use ($search) {
+                        $query->orWhere('description', 'LIKE', "%$search%")
+                            ->orWhere('created_at', 'LIKE', "%$search%")
+                            ->orWhere('reference', 'LIKE', "%$search%");
+                    });
                 }
+
+                if ($request->status != 'ALL') {
+                    $legacyQuery->where('plan_status', $request->status);
+                    $transactionQuery->where('status', $this->mapStatusToDb($request->status));
+                }
+
+                $allSummary = $legacyQuery->unionAll($transactionQuery)
+                    ->orderBy('Habukhan_date', 'desc')
+                    ->paginate($request->limit);
+
+                return response()->json([
+                    'all_summary' => $allSummary
+                ]);
+
             } else {
                 return response()->json([
                     'status' => 403,
@@ -424,10 +461,13 @@ class Trans extends Controller
                     'transactions.created_at as date',
                     'transactions.description as details',
                     'transactions.fee as charges',
+                    'transactions.balance_before as oldbal',
+                    'transactions.balance_after as newbal',
                     'virtual_accounts.account_name as va_account_name',
                     'virtual_accounts.account_number as va_account_number',
                     DB::raw("CASE WHEN transactions.status = 'success' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' ELSE 'processing' END as status")
                 )
+
                     ->orderBy('transactions.id', 'desc')
                     ->paginate($request->limit);
 
@@ -1506,4 +1546,19 @@ class Trans extends Controller
             ])->setStatusCode(403);
         }
     }
+
+    private function mapStatusToDb($status)
+    {
+        $statusMap = [
+            'active' => 'success',
+            'successful' => 'success',
+            'blocked' => 'failed',
+            'failed' => 'failed',
+            'processing' => 'pending',
+            'pending' => 'pending'
+        ];
+
+        return $statusMap[strtolower($status)] ?? $status;
+    }
 }
+

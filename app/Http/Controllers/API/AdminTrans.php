@@ -495,10 +495,10 @@ class AdminTrans extends Controller
                 if ($check_user->count() > 0) {
                     $search = strtolower($request->search);
 
-                    // Query both old message table and new transactions table
+                    // Query from new transactions table
                     $query = DB::table('transactions')
                         ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
-                        ->leftJoin('users', 'companies.id', '=', 'users.active_company_id')
+                        ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
                         ->select(
                             'transactions.id',
                             'transactions.transaction_id as transid',
@@ -507,6 +507,7 @@ class AdminTrans extends Controller
                             'transactions.fee',
                             'transactions.type',
                             'transactions.category',
+                            'transactions.status',
                             'transactions.description as message',
                             'transactions.created_at',
                             'transactions.balance_before as oldbal',
@@ -535,9 +536,10 @@ class AdminTrans extends Controller
 
                     $transactions->through(function ($item) {
                         $item->display_category = Str::headline($item->category);
-                        $item->display_status = strtoupper($item->status);
+                        $item->display_status = strtoupper($item->status ?? 'pending');
                         return $item;
                     });
+
 
                     return response()->json([
                         'all_summary' => $transactions
@@ -1783,16 +1785,24 @@ class AdminTrans extends Controller
                     $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->format('Y-m-d');
                     $search = $request->search ?? '';
 
-                    // Get transactions from the new transactions table
+                    // Get transactions from the new transactions table joined with users
                     $query = DB::table('transactions')
-                        ->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
-                        ->orderBy('created_at', 'desc');
+                        ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
+                        ->whereBetween('transactions.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                        ->select(
+                            'transactions.*',
+                            'users.username as customer_name',
+                            'users.email as customer_account_number', // Using email as account identifier if account_number is not present
+                            'transactions.fee as charges'
+                        )
+                        ->orderBy('transactions.created_at', 'desc');
 
                     $query->where(function ($q) use ($search) {
-                        $q->where('reference', 'LIKE', "%$search%")
-                            ->orWhere('recipient_account_name', 'LIKE', "%$search%")
-                            ->orWhere('recipient_account_number', 'LIKE', "%$search%")
-                            ->orWhere('description', 'LIKE', "%$search%");
+                        $q->where('transactions.reference', 'LIKE', "%$search%")
+                            ->orWhere('transactions.recipient_account_name', 'LIKE', "%$search%")
+                            ->orWhere('transactions.recipient_account_number', 'LIKE', "%$search%")
+                            ->orWhere('transactions.description', 'LIKE', "%$search%")
+                            ->orWhere('users.username', 'LIKE', "%$search%");
                     });
 
                     $transactions = $query->paginate($request->limit ?? 50);
@@ -1986,6 +1996,71 @@ class AdminTrans extends Controller
                     }
 
                     return response()->json(['status' => 400, 'message' => 'Invalid action'])->setStatusCode(400);
+                }
+            }
+        }
+        return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
+    }
+
+    public function exportStatement(Request $request)
+    {
+        $allowed_origins = explode(',', config('app.habukhan_app_key'));
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
+            if (!empty($request->id)) {
+                $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where('type', 'ADMIN');
+
+                if ($check_user->count() > 0) {
+                    $startDate = $request->start_date ?? Carbon::now()->startOfMonth()->format('Y-m-d');
+                    $endDate = $request->end_date ?? Carbon::now()->endOfMonth()->format('Y-m-d');
+                    $search = $request->search ?? '';
+
+                    $transactions = DB::table('transactions')
+                        ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
+                        ->whereBetween('transactions.created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59'])
+                        ->select(
+                            'transactions.reference',
+                            'users.username as customer_name',
+                            'transactions.type',
+                            'transactions.amount',
+                            'transactions.fee',
+                            'transactions.status',
+                            'transactions.created_at',
+                            'transactions.description'
+                        )
+                        ->where(function ($q) use ($search) {
+                            $q->where('transactions.reference', 'LIKE', "%$search%")
+                                ->orWhere('users.username', 'LIKE', "%$search%")
+                                ->orWhere('transactions.description', 'LIKE', "%$search%");
+                        })
+                        ->orderBy('transactions.created_at', 'desc')
+                        ->get();
+
+                    $filename = "statement_" . $startDate . "_to_" . $endDate . ".csv";
+                    $handle = fopen('php://temp', 'r+');
+                    fputcsv($handle, ['Reference', 'Customer', 'Type', 'Amount', 'Charges', 'Status', 'Date', 'Description']);
+
+                    foreach ($transactions as $row) {
+                        fputcsv($handle, [
+                            $row->reference,
+                            $row->customer_name,
+                            $row->type,
+                            $row->amount,
+                            $row->fee,
+                            $row->status,
+                            $row->created_at,
+                            $row->description
+                        ]);
+                    }
+
+                    rewind($handle);
+                    $csv = stream_get_contents($handle);
+                    fclose($handle);
+
+                    return response($csv)
+                        ->header('Content-Type', 'text/csv')
+                        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
                 }
             }
         }

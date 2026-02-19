@@ -102,35 +102,46 @@ class AdminController extends Controller
         }
     }
     public function UserSystem(Request $request)
-        {
-            $explode_url = explode(',', config('app.habukhan_app_key'));
-            if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $explode_url)) {
-                if (!empty($request->id)) {
-                    $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
-                        $query->whereIn('type', ['admin', 'ADMIN']);
-                    });
-                    if ($check_user->count() > 0) {
+    {
+        $explode_url = explode(',', config('app.habukhan_app_key'));
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $explode_url)) {
+            if (!empty($request->id)) {
+                $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where(function ($query) {
+                    $query->whereIn('type', ['admin', 'ADMIN']);
+                });
+                if ($check_user->count() > 0) {
 
-                        // Calculate total revenue from company wallets (this is the actual business revenue)
-                        $total_revenue = DB::table('company_wallets')->sum('balance');
+                    // Calculate total revenue from successful customer deposits (virtual account credits)
+                    $total_revenue = DB::table('transactions')
+                        ->where('category', 'virtual_account_credit')
+                        ->where('status', 'success')
+                        ->sum('amount');
 
-                        // Get transaction statistics
-                        $total_transactions = DB::table('transactions')->count();
-                        $successful_transactions = DB::table('transactions')->where('status', 'success')->count();
-                        $failed_transactions = DB::table('transactions')->where('status', 'failed')->count();
-                        $pending_settlement = 0;
-                        if (Schema::hasTable('settlement_queue')) {
-                            $pending_settlement = DB::table('settlement_queue')->where('status', 'pending')->count();
-                        }
+                    // Get transaction statistics (filtered to customer deposits)
+                    $total_transactions = DB::table('transactions')
+                        ->where('category', 'virtual_account_credit')
+                        ->count();
+                    $successful_transactions = DB::table('transactions')
+                        ->where('category', 'virtual_account_credit')
+                        ->where('status', 'success')
+                        ->count();
+                    $failed_transactions = DB::table('transactions')
+                        ->where('category', 'virtual_account_credit')
+                        ->where('status', 'failed')
+                        ->count();
+                    $pending_settlement = 0;
+                    if (Schema::hasTable('settlement_queue')) {
+                        $pending_settlement = (float) DB::table('settlement_queue')->where('status', 'pending')->sum('amount');
+                    }
 
-                        // Get business statistics
-                        $active_businesses = DB::table('companies')->where('status', 'active')->count();
-                        $registered_businesses = DB::table('companies')->count();
-                        $pending_activations = DB::table('companies')->where('status', 'pending')->count();
-                        $total_virtual_accounts = DB::table('virtual_accounts')->count();
+                    // Get business statistics
+                    $active_businesses = DB::table('companies')->where('status', 'active')->count();
+                    $registered_businesses = DB::table('companies')->count();
+                    $pending_activations = DB::table('companies')->where('status', 'pending')->count();
+                    $total_virtual_accounts = DB::table('virtual_accounts')->count();
 
-                        try {
-                            $users_info = [
+                    try {
+                        $users_info = [
                             // New payment gateway metrics
                             'total_revenue' => $total_revenue,
                             'total_transactions' => $total_transactions,
@@ -201,42 +212,35 @@ class AdminController extends Controller
                                 DB::table('cable')->where('plan_status', 0)->count() +
                                 DB::table('bill')->where('plan_status', 0)->count() +
                                 DB::table('campaigns')->where('payout_status', 'pending')->where('status', 'closed')->count(),
-                            ];
-                        } catch (\Exception $e) {
-                            // If legacy tables don't exist, return payment gateway metrics only
-                            $users_info = [
-                                'total_revenue' => $total_revenue,
-                                'total_transactions' => $total_transactions,
-                                'successful_transactions' => $successful_transactions,
-                                'failed_transactions' => $failed_transactions,
-                                'pending_settlement' => $pending_settlement,
-                                'active_businesses' => $active_businesses,
-                                'registered_businesses' => $registered_businesses,
-                                'pending_activations' => $pending_activations,
-                                'total_virtual_accounts' => $total_virtual_accounts,
-                                'wallet_balance' => 0,
-                                'ref_balance' => 0,
-                                'all_user' => DB::table('users')->count(),
-                                'total_pending' => 0,
-                            ];
-                        }
-
-                        return response()->json([
-                            'status' => 'success',
-                            'user' => $users_info,
-                            'payment' => DB::table('habukhan_key')->first(),
-                        ]);
-                    } else {
-                        return response()->json([
-                            'status' => 403,
-                            'message' => 'Not Authorised'
-                        ])->setStatusCode(403);
+                        ];
+                    } catch (\Exception $e) {
+                        // If legacy tables don't exist, return payment gateway metrics only
+                        $users_info = [
+                            'total_revenue' => $total_revenue,
+                            'total_transactions' => $total_transactions,
+                            'successful_transactions' => $successful_transactions,
+                            'failed_transactions' => $failed_transactions,
+                            'pending_settlement' => $pending_settlement,
+                            'active_businesses' => $active_businesses,
+                            'registered_businesses' => $registered_businesses,
+                            'pending_activations' => $pending_activations,
+                            'total_virtual_accounts' => $total_virtual_accounts,
+                            'wallet_balance' => 0,
+                            'ref_balance' => 0,
+                            'all_user' => DB::table('users')->count(),
+                            'total_pending' => 0,
+                        ];
                     }
+
+                    return response()->json([
+                        'status' => 'success',
+                        'user' => $users_info,
+                        'payment' => DB::table('habukhan_key')->first(),
+                    ]);
                 } else {
-                    return redirect(config('app.error_500'));
                     return response()->json([
                         'status' => 403,
-                        'message' => 'Unable to Authenticate System'
+                        'message' => 'Not Authorised'
                     ])->setStatusCode(403);
                 }
             } else {
@@ -246,7 +250,14 @@ class AdminController extends Controller
                     'message' => 'Unable to Authenticate System'
                 ])->setStatusCode(403);
             }
+        } else {
+            return redirect(config('app.error_500'));
+            return response()->json([
+                'status' => 403,
+                'message' => 'Unable to Authenticate System'
+            ])->setStatusCode(403);
         }
+    }
     public function editUserDetails(Request $request)
     {
         $explode_url = explode(',', config('app.habukhan_app_key'));
@@ -3906,7 +3917,7 @@ class AdminController extends Controller
                         $updateData['company_id'] = 1;
                         DB::table('settings')->insert($updateData);
                     }
-                    
+
                     return response()->json(['status' => 'success', 'message' => 'Charges & Settlement Rules Updated']);
                 }
 

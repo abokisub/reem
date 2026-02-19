@@ -63,6 +63,7 @@ class UserDashboardController extends Controller
         // 1. Total Revenue, Daily Revenue (for charts), and Status Distribution
         $revenueQuery = DB::table('transactions')
             ->where('company_id', $user->active_company_id)
+            ->where('category', 'virtual_account_credit')
             ->where('type', 'credit');
 
         if ($startDate && $endDate) {
@@ -74,6 +75,7 @@ class UserDashboardController extends Controller
         // Status Distribution (Deposits)
         $statusDistribution = DB::table('transactions')
             ->where('company_id', $user->active_company_id)
+            ->where('category', 'virtual_account_credit')
             ->where('type', 'credit');
 
         if ($startDate && $endDate) {
@@ -89,6 +91,7 @@ class UserDashboardController extends Controller
         if ($startDate && $endDate) {
             $dailyRevenue = DB::table('transactions')
                 ->where('company_id', $user->active_company_id)
+                ->where('category', 'virtual_account_credit')
                 ->where('type', 'credit')
                 ->where('status', 'success')
                 ->whereBetween('created_at', [$startDate, $endDate])
@@ -109,6 +112,7 @@ class UserDashboardController extends Controller
         // 2. Total Transactions and Transaction Analytics
         $transactionsQuery = DB::table('transactions')
             ->where('company_id', $user->active_company_id)
+            ->where('category', 'virtual_account_credit')
             ->where('type', 'credit');
 
         if ($startDate && $endDate) {
@@ -121,6 +125,7 @@ class UserDashboardController extends Controller
         if ($startDate && $endDate) {
             $dailyTransactions = DB::table('transactions')
                 ->where('company_id', $user->active_company_id)
+                ->where('category', 'virtual_account_credit')
                 ->where('type', 'credit')
                 ->whereBetween('created_at', [$startDate, $endDate])
                 ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
@@ -154,6 +159,7 @@ class UserDashboardController extends Controller
 
             $prevRevenue = DB::table('transactions')
                 ->where('company_id', $user->active_company_id)
+                ->where('category', 'virtual_account_credit')
                 ->where('type', 'credit')
                 ->where('status', 'success')
                 ->whereBetween('created_at', [$prevStartDate, $prevEndDate])
