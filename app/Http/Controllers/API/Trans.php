@@ -812,11 +812,20 @@ class Trans extends Controller
                 'reference as transid',
                 'created_at as date',
                 'description as details',
-                DB::raw("CASE WHEN status = 'success' THEN 'active' WHEN status = 'failed' THEN 'blocked' ELSE status END as status")
+                'fee as charges',
+                'balance_before as oldbal',
+                'balance_after as newbal',
+                DB::raw("CASE WHEN status = 'success' THEN 'successful' WHEN status = 'failed' THEN 'failed' ELSE 'pending' END as status")
             )
             ->first();
 
         if ($trans) {
+            // Extract sender information from metadata
+            $metadata = json_decode($trans->metadata, true) ?? [];
+            $trans->sender_name = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? 'N/A';
+            $trans->sender_account = $metadata['sender_account'] ?? 'N/A';
+            $trans->sender_bank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? 'N/A';
+            
             return response()->json([
                 'trans' => $trans
             ]);
