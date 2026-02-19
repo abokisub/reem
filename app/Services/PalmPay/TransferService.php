@@ -51,7 +51,7 @@ class TransferService
 
                 // 1. Calculate Charges BEFORE provider call
                 $amount = $transferData['amount'];
-                $feeResults = $this->feeService->calculateFee($companyId, $amount);
+                $feeResults = $this->feeService->calculateFee($companyId, $amount, 'transfer');
                 $fee = (float) $feeResults['fee'];
                 $totalAmount = $amount + $fee;
 
