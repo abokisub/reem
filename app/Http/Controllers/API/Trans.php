@@ -473,12 +473,22 @@ class Trans extends Controller
                     ->orderBy('transactions.id', 'desc')
                     ->paginate($request->limit);
 
-                // Extract sender_name from metadata for each transaction
+                // Extract customer info based on transaction type
                 foreach ($transactions as $transaction) {
                     $metadata = json_decode($transaction->metadata, true);
-                    $transaction->customer_name = $metadata['sender_name'] ?? $transaction->va_account_name ?? 'Unknown';
-                    $transaction->customer_account = $metadata['sender_account'] ?? '';
-                    $transaction->customer_bank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+                    
+                    // For credit transactions (deposits), show sender info
+                    if ($transaction->type === 'credit') {
+                        $transaction->customer_name = $metadata['sender_name'] ?? $transaction->va_account_name ?? 'Unknown';
+                        $transaction->customer_account = $metadata['sender_account'] ?? '';
+                        $transaction->customer_bank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+                    } 
+                    // For debit transactions (transfers/withdrawals), show recipient info
+                    else {
+                        $transaction->customer_name = $transaction->recipient_account_name ?? 'Unknown Recipient';
+                        $transaction->customer_account = $transaction->recipient_account_number ?? '';
+                        $transaction->customer_bank = $transaction->recipient_bank_name ?? '';
+                    }
                     
                     // Keep metadata as object for frontend access
                     $transaction->metadata = $metadata;
