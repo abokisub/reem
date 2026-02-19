@@ -499,6 +499,7 @@ class AdminTrans extends Controller
                     $query = DB::table('transactions')
                         ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
                         ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
+                        ->leftJoin('company_users', 'transactions.company_user_id', '=', 'company_users.id')
                         ->select(
                             'transactions.id',
                             'transactions.transaction_id as transid',
@@ -509,12 +510,22 @@ class AdminTrans extends Controller
                             'transactions.category',
                             'transactions.status',
                             'transactions.description as message',
+                            'transactions.metadata',
                             'transactions.created_at',
                             'transactions.balance_before as oldbal',
                             'transactions.balance_after as newbal',
                             'users.username',
                             'companies.name as company_name',
-                            DB::raw("CASE WHEN transactions.status = 'success' THEN 1 WHEN transactions.status = 'failed' THEN 2 ELSE 0 END as plan_status")
+                            'companies.business_name',
+                            'company_users.name as customer_name',
+                            'company_users.email as customer_email',
+                            'company_users.phone as customer_phone',
+                            DB::raw("CASE 
+                                WHEN transactions.status = 'success' THEN 'success'
+                                WHEN transactions.status = 'pending' THEN 'pending'
+                                WHEN transactions.status = 'failed' THEN 'failed'
+                                ELSE 'pending'
+                            END as plan_status")
                         );
 
                     if (!empty($search)) {
@@ -524,7 +535,9 @@ class AdminTrans extends Controller
                                 ->orWhere('transactions.description', 'LIKE', "%$search%")
                                 ->orWhere('transactions.amount', 'LIKE', "%$search%")
                                 ->orWhere('users.username', 'LIKE', "%$search%")
-                                ->orWhere('companies.name', 'LIKE', "%$search%");
+                                ->orWhere('companies.name', 'LIKE', "%$search%")
+                                ->orWhere('company_users.name', 'LIKE', "%$search%")
+                                ->orWhere('company_users.phone', 'LIKE', "%$search%");
                         });
                     }
 
@@ -535,8 +548,33 @@ class AdminTrans extends Controller
                     $transactions = $query->orderBy('transactions.id', 'desc')->paginate($request->limit ?? 20);
 
                     $transactions->through(function ($item) {
+                        // Decode metadata
+                        $metadata = is_string($item->metadata) ? json_decode($item->metadata, true) : $item->metadata;
+                        
+                        // Extract beneficiary info from metadata or customer info
+                        $item->phone = $metadata['recipient_account'] ?? 
+                                      $metadata['account_number'] ?? 
+                                      $metadata['phone'] ?? 
+                                      $metadata['beneficiary_account'] ??
+                                      $item->customer_phone ?? 
+                                      null;
+                        
+                        $item->phone_account = $metadata['recipient_name'] ?? 
+                                              $metadata['account_name'] ?? 
+                                              $metadata['beneficiary_name'] ??
+                                              $item->customer_name ?? 
+                                              null;
+                        
+                        // Set display values
                         $item->display_category = Str::headline($item->category);
                         $item->display_status = strtoupper($item->status ?? 'pending');
+                        
+                        // Set merchant/user display name
+                        $item->merchant_display = $item->business_name ?? $item->company_name ?? $item->username ?? 'N/A';
+                        
+                        // Format date
+                        $item->plan_date = $item->created_at;
+                        
                         return $item;
                     });
 
