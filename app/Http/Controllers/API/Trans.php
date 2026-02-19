@@ -373,7 +373,8 @@ class Trans extends Controller
                         'created_at as Habukhan_date',
                         'created_at as adex_date',
                         'reference as transid',
-                        DB::raw("CASE WHEN status = 'success' THEN 1 WHEN status = 'failed' THEN 2 ELSE 0 END as plan_status"),
+                        'transaction_type',
+                        DB::raw("CASE WHEN status = 'successful' THEN 1 WHEN status = 'failed' THEN 2 ELSE 0 END as plan_status"),
                         DB::raw("'user' as role"),
                         DB::raw("'transactions' as source")
                     );
