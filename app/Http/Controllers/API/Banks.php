@@ -348,7 +348,7 @@ class Banks extends Controller
 
             // 2. Attempt Sync from PalmPay
             try {
-                $transferService = new \App\Services\PalmPay\TransferService();
+                $transferService = app(\App\Services\PalmPay\TransferService::class);
                 $palmPayBanks = $transferService->getBankList();
 
                 if (!empty($palmPayBanks)) {
