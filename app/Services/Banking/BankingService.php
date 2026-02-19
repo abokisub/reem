@@ -87,6 +87,14 @@ class BankingService
             // Initiate transfer
             $transaction = $transferService->initiateTransfer($companyId, $transferData);
             
+            // Check if transaction failed
+            if ($transaction->status === 'failed') {
+                return [
+                    'status' => 'fail',
+                    'message' => $transaction->error_message ?? 'Transfer failed'
+                ];
+            }
+            
             return [
                 'status' => $transaction->status,
                 'message' => 'Transfer initiated successfully',

@@ -195,6 +195,17 @@ class TransferPurchase extends Controller
                 $companyWallet->debit($total_deduction);
                 $new_wallet = $companyWallet->balance;
 
+                // Determine transaction type based on account details
+                $isSettlementWithdrawal = false;
+                $company = \App\Models\Company::find($lockedUser->active_company_id);
+                if ($company && 
+                    $company->settlement_account_number == $request->account_number && 
+                    $company->bank_code == $request->bank_code) {
+                    $isSettlementWithdrawal = true;
+                }
+                
+                $transactionType = $isSettlementWithdrawal ? 'settlement_withdrawal' : 'transfer';
+                
                 // Record Transaction (PENDING)
                 \App\Models\Transaction::create([
                     'user_id' => $lockedUser->id,
@@ -202,6 +213,7 @@ class TransferPurchase extends Controller
                     'reference' => $transid,
                     'type' => 'debit',
                     'category' => 'transfer_out',
+                    'transaction_type' => $transactionType,
                     'amount' => $amount,
                     'fee' => $charge,
                     'total_amount' => $total_deduction,
