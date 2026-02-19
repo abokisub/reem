@@ -112,6 +112,8 @@ class ReconciliationService
             ['provider_ref' => $providerRef, 'internal_ref' => $internalRef, 'provider_amount' => $pAmount, 'internal_amount' => $iAmount],
             'critical'
         );
+    }
+
     /**
      * Auto-reconcile failed transactions by querying the provider
      */
