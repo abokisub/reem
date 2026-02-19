@@ -36,6 +36,9 @@ class Kernel extends ConsoleKernel
         // Automated Reconciliation (every 10 minutes)
         $schedule->command('reconcile:auto')->everyTenMinutes()->withoutOverlapping();
 
+        // Cleanup old logs (webhook and API request logs older than 48 hours)
+        $schedule->command('logs:cleanup')->hourly();
+
         // Sandbox reset (24-hour cycle)
         if (config('app.env') === 'sandbox' || config('app.sandbox_mode', false)) {
             $schedule->command('sandbox:reset')->dailyAt('00:00');

@@ -36,6 +36,28 @@ class CompanyLogsController extends Controller
                 ]);
             }
 
+            // Check if user is admin
+            $isAdmin = strtoupper($user->type) === 'ADMIN';
+
+            if ($isAdmin) {
+                // Admin can see all webhook logs with company information
+                $logs = DB::table('webhook_logs')
+                    ->leftJoin('companies', 'webhook_logs.company_id', '=', 'companies.id')
+                    ->select(
+                        'webhook_logs.*',
+                        'companies.name as company_name',
+                        'companies.business_name'
+                    )
+                    ->orderBy('webhook_logs.created_at', 'desc')
+                    ->paginate($request->limit ?? 50);
+
+                return response()->json([
+                    'status' => 'success',
+                    'webhook_logs' => $logs
+                ]);
+            }
+
+            // Regular company user - show only their logs
             $companyId = $user->active_company_id ?? null;
 
             if (!$companyId) {
@@ -49,21 +71,19 @@ class CompanyLogsController extends Controller
             $logs = DB::table('webhook_logs')
                 ->where('company_id', $companyId)
                 ->orderBy('created_at', 'desc')
-                ->limit(100)
-                ->get();
+                ->paginate($request->limit ?? 50);
 
             return response()->json([
                 'status' => 'success',
-                'data' => $logs,
-                'count' => $logs->count()
+                'data' => $logs
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
-                'status' => 'success',
+                'status' => 'error',
                 'data' => [],
                 'message' => $e->getMessage()
-            ]);
+            ], 500);
         }
     }
 
@@ -95,14 +115,33 @@ class CompanyLogsController extends Controller
                 ]);
             }
 
+            // Check if user is admin
+            $isAdmin = strtoupper($user->type) === 'ADMIN';
+
+            if ($isAdmin) {
+                // Admin can see all API request logs with company information
+                $logs = DB::table('api_request_logs')
+                    ->leftJoin('companies', 'api_request_logs.company_id', '=', 'companies.id')
+                    ->select(
+                        'api_request_logs.*',
+                        'companies.name as company_name',
+                        'companies.business_name'
+                    )
+                    ->orderBy('api_request_logs.created_at', 'desc')
+                    ->paginate($request->limit ?? 50);
+
+                return response()->json([
+                    'status' => 'success',
+                    'api_logs' => $logs
+                ]);
+            }
+
+            // Regular company user - show only their logs
             $companyId = $user->active_company_id ?? null;
 
             // Get API request logs
-            // Note: Most logs have NULL company_id, so we return all logs for now
-            // TODO: Update API logging middleware to capture company_id
             $query = DB::table('api_request_logs')
-                ->orderBy('created_at', 'desc')
-                ->limit(100);
+                ->orderBy('created_at', 'desc');
             
             // If company_id exists, try to filter by it, but also include NULL records
             if ($companyId) {
@@ -112,20 +151,19 @@ class CompanyLogsController extends Controller
                 });
             }
             
-            $logs = $query->get();
+            $logs = $query->paginate($request->limit ?? 50);
 
             return response()->json([
                 'status' => 'success',
-                'data' => $logs,
-                'count' => $logs->count()
+                'data' => $logs
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
-                'status' => 'success',
+                'status' => 'error',
                 'data' => [],
                 'message' => $e->getMessage()
-            ]);
+            ], 500);
         }
     }
 
