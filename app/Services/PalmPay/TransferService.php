@@ -265,8 +265,38 @@ class TransferService
                 'transaction_id' => $transaction->transaction_id,
                 'error' => $e->getMessage()
             ]);
-            // Exceptions (network, 500) are ambiguous — don't reverse blindly
-            $transaction->update(['reconciliation_status' => 'pending']);
+            
+            // Check if this is a definitive failure error from PalmPay
+            $errorMessage = $e->getMessage();
+            $isDefinitiveFailure = false;
+            
+            // Map PalmPay error codes to definitive failures
+            $definitiveErrorCodes = [
+                'MC200001', // Insufficient balance
+                'MC200002', // Invalid account
+                'MC200003', // Account not found
+                'MC200004', // Invalid beneficiary
+                'MC200005', // Transaction rejected
+            ];
+            
+            foreach ($definitiveErrorCodes as $code) {
+                if (str_contains($errorMessage, $code)) {
+                    $isDefinitiveFailure = true;
+                    break;
+                }
+            }
+            
+            if ($isDefinitiveFailure) {
+                // This is a definitive failure - refund immediately
+                Log::warning('SAFE MODE: Definitive failure from PalmPay error code. Triggering reversal.', [
+                    'error' => $errorMessage,
+                    'transaction_id' => $transaction->transaction_id
+                ]);
+                $this->handleFailedTransfer($transaction, $errorMessage);
+            } else {
+                // Network errors, timeouts, etc. are ambiguous — don't reverse blindly
+                $transaction->update(['reconciliation_status' => 'pending']);
+            }
         }
     }
 
