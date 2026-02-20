@@ -562,7 +562,7 @@ class MerchantApiController extends Controller
             'current_page' => $virtualAccounts->currentPage(),
             'data' => $virtualAccounts->items()->map(function ($va) {
                 return $this->formatVa($va);
-            }),
+            })->toArray(),
             'total' => $virtualAccounts->total(),
             'per_page' => $virtualAccounts->perPage(),
             'last_page' => $virtualAccounts->lastPage()
@@ -577,8 +577,12 @@ class MerchantApiController extends Controller
     {
         $company = $request->attributes->get('company');
 
-        $virtualAccount = VirtualAccount::where('uuid', $vaId)
-            ->where('company_id', $company->id)
+        // Try to find by UUID first, then by account_number
+        $virtualAccount = VirtualAccount::where('company_id', $company->id)
+            ->where(function($query) use ($vaId) {
+                $query->where('uuid', $vaId)
+                      ->orWhere('account_number', $vaId);
+            })
             ->with('companyUser')
             ->first();
 
@@ -597,8 +601,12 @@ class MerchantApiController extends Controller
     {
         $company = $request->attributes->get('company');
 
-        $virtualAccount = VirtualAccount::where('uuid', $vaId)
-            ->where('company_id', $company->id)
+        // Try to find by UUID first, then by account_number
+        $virtualAccount = VirtualAccount::where('company_id', $company->id)
+            ->where(function($query) use ($vaId) {
+                $query->where('uuid', $vaId)
+                      ->orWhere('account_number', $vaId);
+            })
             ->first();
 
         if (!$virtualAccount) {
@@ -617,7 +625,7 @@ class MerchantApiController extends Controller
         ]);
 
         return $this->respond(true, 'Virtual account deleted successfully', [
-            'virtual_account_id' => $vaId,
+            'virtual_account_id' => $virtualAccount->uuid,
             'account_number' => $virtualAccount->account_number,
             'status' => 'deactivated',
             'deleted_at' => now()->toIso8601String()
