@@ -62,13 +62,13 @@
     </div>
 
     <div class="section">
-        <div class="section-title">CUSTOMER INFORMATION</div>
+        <div class="section-title">{{ $is_credit ? 'SENDER DETAILS' : 'RECIPIENT DETAILS' }}</div>
         <div class="row">
             <span class="label">Name:</span>
             <span class="value">{{ $customer['name'] }}</span>
         </div>
         <div class="row">
-            <span class="label">Account:</span>
+            <span class="label">Account Number:</span>
             <span class="value">{{ $customer['account'] }}</span>
         </div>
         <div class="row">
@@ -78,7 +78,11 @@
     </div>
 
     <div class="section">
-        <div class="section-title">COMPANY INFORMATION</div>
+        <div class="section-title">MERCHANT INFO</div>
+        <div class="row">
+            <span class="label">Username:</span>
+            <span class="value">{{ $company['username'] }}</span>
+        </div>
         <div class="row">
             <span class="label">Company:</span>
             <span class="value">{{ $company['name'] }}</span>
@@ -89,7 +93,7 @@
         </div>
     </div>
 
-    @if($description !== 'N/A')
+    @if($description !== '-')
     <div class="section">
         <div class="section-title">DESCRIPTION</div>
         <div style="padding: 10px;">{{ $description }}</div>
