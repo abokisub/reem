@@ -26,8 +26,12 @@ class ReceiptService
         // Determine if this is a credit (deposit) or debit (transfer/withdrawal) transaction
         $isCredit = $transaction->type === 'credit' || $transaction->transaction_type === 'va_deposit';
         
-        // Get company information
-        $company = $transaction->company;
+        // Get company information - reload from database to ensure we have all attributes
+        $company = \App\Models\Company::find($transaction->company_id);
+        if (!$company) {
+            throw new \Exception('Company not found for transaction');
+        }
+        
         $companyName = $company->company_name ?? $company->name ?? '';
         $companyEmail = $company->email ?? '';
         $companyUsername = $company->username ?? '';
@@ -36,8 +40,9 @@ class ReceiptService
         if ($transaction->transaction_type === 'settlement_withdrawal' || $transaction->transaction_type === 'company_withdrawal') {
             // For settlement/company withdrawals: sender is the company's settlement account
             $senderName = $companyName;
-            $senderAccount = $company->settlement_account_number ?? $company->account_number ?? '';
-            $senderBank = $company->settlement_bank_name ?? $company->bank_name ?? 'PalmPay';
+            // Explicitly check settlement account first, then fallback to regular account
+            $senderAccount = $company->settlement_account_number ?: ($company->account_number ?: '');
+            $senderBank = $company->settlement_bank_name ?: ($company->bank_name ?: 'PalmPay');
             
             // Recipient is the external bank account
             $recipientName = $transaction->recipient_account_name ?? $metadata['recipient_name'] ?? '';
