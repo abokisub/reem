@@ -460,7 +460,8 @@ class Trans extends Controller
                     $query->where('transaction_type', $request->transaction_type);
                 } else {
                     // Default: show only customer-facing types
-                    $query->whereIn('transaction_type', ['va_deposit', 'api_transfer', 'company_withdrawal', 'refund']);
+                    // Include 'transfer' and 'settlement_withdrawal' for company transfers
+                    $query->whereIn('transaction_type', ['va_deposit', 'api_transfer', 'company_withdrawal', 'refund', 'transfer', 'settlement_withdrawal']);
                 }
 
                 // Apply search filters
