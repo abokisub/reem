@@ -133,8 +133,7 @@ class CompanyLogsController extends Controller
                     ->leftJoin('companies', 'api_request_logs.company_id', '=', 'companies.id')
                     ->select(
                         'api_request_logs.*',
-                        'companies.name as company_name',
-                        'companies.business_name'
+                        'companies.name as company_name'
                     )
                     ->orderBy('api_request_logs.created_at', 'desc')
                     ->paginate($request->limit ?? 50);
