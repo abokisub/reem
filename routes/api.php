@@ -795,9 +795,12 @@ Route::prefix('v1')->group(function () {
 
         // Customers (End Users)
         Route::post('/customers', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'createCustomer']);
+        Route::get('/customers/{customerId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getCustomer']);
+        Route::put('/customers/{customerId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'updateCustomer']);
 
         // Virtual Accounts
         Route::post('/virtual-accounts', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'createVirtualAccount']);
+        Route::put('/virtual-accounts/{vaId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'updateVirtualAccount']);
 
         // Transactions (Ledger History)
         Route::get('/transactions', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getTransactions']);
@@ -814,8 +817,8 @@ Route::prefix('v1')->group(function () {
 // Phase 5: KYC & Document Management Routes
 // ============================================
 
-// Company KYC Routes (Authenticated Companies)
-Route::middleware(['auth.token'])->prefix('v1/kyc')->group(function () {
+// Company KYC Routes (V1 API - Use MerchantAuth)
+Route::middleware([\App\Http\Middleware\V1\MerchantAuth::class])->prefix('v1/kyc')->group(function () {
     Route::get('/status', [App\Http\Controllers\API\V1\KycController::class, 'getStatus']);
     Route::post('/submit/{section}', [App\Http\Controllers\API\V1\KycController::class, 'submitSection']);
     Route::post('/verify-bvn', [App\Http\Controllers\API\V1\KycController::class, 'verifyBVN']);

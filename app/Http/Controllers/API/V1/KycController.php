@@ -28,25 +28,26 @@ class KycController extends Controller
     public function getStatus(Request $request)
     {
         try {
-            $companyId = Auth::user()->company_id;
+            // Get company from MerchantAuth middleware
+            $company = $request->attributes->get('company');
 
-            if (!$companyId) {
+            if (!$company) {
                 return response()->json([
-                    'success' => false,
+                    'status' => false,
                     'message' => 'Company not found',
                 ], 404);
             }
 
-            $status = $this->kycService->getKycStatus($companyId);
+            $status = $this->kycService->getKycStatus($company->id);
 
             return response()->json([
-                'success' => true,
+                'status' => true,
                 'data' => $status,
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => $e->getMessage(),
             ], 400);
         }
@@ -64,32 +65,33 @@ class KycController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'errors' => $validator->errors(),
             ], 422);
         }
 
         try {
-            $companyId = Auth::user()->company_id;
+            // Get company from MerchantAuth middleware
+            $company = $request->attributes->get('company');
 
-            if (!$companyId) {
+            if (!$company) {
                 return response()->json([
-                    'success' => false,
+                    'status' => false,
                     'message' => 'Company not found',
                 ], 404);
             }
 
-            $result = $this->kycService->submitKycSection($companyId, $section, $request->data);
+            $result = $this->kycService->submitKycSection($company->id, $section, $request->data);
 
             return response()->json([
-                'success' => true,
+                'status' => true,
                 'message' => $result['message'],
                 'data' => $result['approval'],
             ], 201);
 
         } catch (\Exception $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => $e->getMessage(),
             ], 400);
         }
@@ -107,20 +109,23 @@ class KycController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'errors' => $validator->errors(),
             ], 422);
         }
 
         try {
-            $companyId = Auth::user()->company_id ?? null;
+            // Get company from MerchantAuth middleware
+            $company = $request->attributes->get('company');
+            $companyId = $company ? $company->id : null;
+            
             $result = $this->kycService->verifyBVN($request->bvn, $companyId);
 
             return response()->json($result);
 
         } catch (\Exception $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => $e->getMessage(),
             ], 400);
         }
@@ -138,20 +143,23 @@ class KycController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'errors' => $validator->errors(),
             ], 422);
         }
 
         try {
-            $companyId = Auth::user()->company_id ?? null;
+            // Get company from MerchantAuth middleware
+            $company = $request->attributes->get('company');
+            $companyId = $company ? $company->id : null;
+            
             $result = $this->kycService->verifyNIN($request->nin, $companyId);
 
             return response()->json($result);
 
         } catch (\Exception $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => $e->getMessage(),
             ], 400);
         }
@@ -170,7 +178,7 @@ class KycController extends Controller
 
         if ($validator->fails()) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'errors' => $validator->errors(),
             ], 422);
         }
@@ -185,7 +193,7 @@ class KycController extends Controller
 
         } catch (\Exception $e) {
             return response()->json([
-                'success' => false,
+                'status' => false,
                 'message' => $e->getMessage(),
             ], 400);
         }
