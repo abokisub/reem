@@ -218,12 +218,14 @@ class WebhookHandler
                 'virtual_account_id' => $virtualAccount->id,
                 'type' => 'credit',
                 'category' => 'virtual_account_credit',
+                'transaction_type' => 'va_deposit', // CRITICAL: Set transaction_type for RA Transactions filtering
                 'amount' => $amount,
                 'fee' => $fee,
                 'net_amount' => $netAmount,
                 'total_amount' => $amount,
                 'currency' => 'NGN',
                 'status' => 'success',
+                'settlement_status' => 'settled', // Deposits are immediately settled
                 'reference' => Transaction::generateReference(),
                 'palmpay_reference' => $palmpayReference,
                 'description' => $narration,
