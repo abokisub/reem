@@ -321,32 +321,34 @@ export default function WalletSummary() {
                     </Box>
                 </Box>
 
-                {/* Transactions Table */}
-                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 700 }}>
-                    Transaction History
-                </Typography>
-                <Card sx={{ borderRadius: 2, boxShadow: theme.customShadows.z8 }}>
-                    <Tabs
-                        value={activeTab}
-                        onChange={handleTabChange}
-                        sx={{ px: 2, pt: 1, borderBottom: `1px solid ${theme.palette.divider}` }}
-                    >
-                        {WALLET_TABS.map((tab) => (
-                            <Tab
-                                disableRipple
-                                key={tab.value}
-                                label={tab.label}
-                                value={tab.value}
-                                sx={{
-                                    textTransform: 'none',
-                                    fontWeight: 700,
-                                    minWidth: 100
-                                }}
-                            />
-                        ))}
-                    </Tabs>
+                {/* Transaction History - Hidden to avoid confusion, use RA Transactions page instead */}
+                {false && (
+                    <>
+                        <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 700 }}>
+                            Transaction History
+                        </Typography>
+                        <Card sx={{ borderRadius: 2, boxShadow: theme.customShadows.z8 }}>
+                            <Tabs
+                                value={activeTab}
+                                onChange={handleTabChange}
+                                sx={{ px: 2, pt: 1, borderBottom: `1px solid ${theme.palette.divider}` }}
+                            >
+                                {WALLET_TABS.map((tab) => (
+                                    <Tab
+                                        disableRipple
+                                        key={tab.value}
+                                        label={tab.label}
+                                        value={tab.value}
+                                        sx={{
+                                            textTransform: 'none',
+                                            fontWeight: 700,
+                                            minWidth: 100
+                                        }}
+                                    />
+                                ))}
+                            </Tabs>
 
-                    <PlanToolbar filterName={filterName} onFilterName={handleFilterByName} />
+                            <PlanToolbar filterName={filterName} onFilterName={handleFilterByName} />
 
                     <Scrollbar>
                         <TableContainer sx={{ minWidth: 1400 }}>
@@ -649,7 +651,9 @@ export default function WalletSummary() {
                         onPageChange={(e, page) => initialize(page, rowsPerPage, filterName, activeTab)}
                         onRowsPerPageChange={handleChangeRowsPerPage}
                     />
-                </Card>
+                        </Card>
+                    </>
+                )}
             </Container>
         </Page>
     );
