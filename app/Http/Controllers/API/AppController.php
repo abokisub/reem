@@ -186,9 +186,9 @@ class AppController extends Controller
                 'delay_hours' => $useCustomSettlement ? (float) $customDelayHours : (property_exists($settings, 'settlement_delay_hours') ? (float) $settings->settlement_delay_hours : 24),
                 'skip_weekends' => property_exists($settings, 'settlement_skip_weekends') ? (bool) $settings->settlement_skip_weekends : true,
                 'skip_holidays' => property_exists($settings, 'settlement_skip_holidays') ? (bool) $settings->settlement_skip_holidays : true,
-                'settlement_time' => property_exists($settings, 'settlement_time') ? $settings->settlement_time : '02:00:00',
+                'settlement_time' => property_exists($settings, 'settlement_time') ? $settings->settlement_time : '03:00:00',
                 'minimum_amount' => $useCustomSettlement ? (float) $customMinimum : (property_exists($settings, 'settlement_minimum_amount') ? (float) $settings->settlement_minimum_amount : 100.00),
-                'description' => 'T+1 Settlement: Funds settle next business day at 2am. Transactions from Friday/Saturday/Sunday settle on Monday. Holidays are skipped.',
+                'description' => 'T+1 Settlement: Funds settle next business day at 3am (PalmPay settles at 2am). Transactions from Friday/Saturday/Sunday settle on Monday. Holidays are skipped.',
             ];
 
             return response()->json([

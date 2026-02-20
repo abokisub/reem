@@ -151,22 +151,24 @@ class ProcessSettlements extends Command
 
     /**
      * Calculate settlement date using T+1 rules (PalmPay standard)
-     * T+1 = Next business day at settlement time (default 2am)
+     * T+1 = Next business day at settlement time (default 3am)
      * Skips weekends and holidays
      * 
      * Examples:
-     * - Monday transaction → Tuesday 2am
-     * - Friday transaction → Monday 2am (skips weekend)
-     * - Saturday transaction → Monday 2am
-     * - Sunday transaction → Monday 2am
-     * - Holiday transaction → Next business day 2am
+     * - Monday transaction → Tuesday 3am
+     * - Friday transaction → Monday 3am (skips weekend)
+     * - Saturday transaction → Monday 3am
+     * - Sunday transaction → Monday 3am
+     * - Holiday transaction → Next business day 3am
+     * 
+     * Note: We settle at 3am because PalmPay settles at 2am
      */
     public static function calculateSettlementDate(
         Carbon $transactionDate,
         int $delayHours = 24, // Kept for backward compatibility but T+1 overrides this
         bool $skipWeekends = true,
         bool $skipHolidays = true,
-        string $settlementTime = '02:00:00'
+        string $settlementTime = '03:00:00'
     ): Carbon {
         // T+1 Settlement: Start with next day
         $settlementDate = $transactionDate->copy()->addDay();
