@@ -859,3 +859,20 @@ Route::middleware(['auth.token'])->prefix('sandbox/kyc')->group(function () {
     Route::post('/mock-verify-nin', [App\Http\Controllers\API\Sandbox\KycController::class, 'mockVerifyNIN']);
     Route::post('/mock-verify-cac', [App\Http\Controllers\API\Sandbox\KycController::class, 'mockVerifyCAC']);
 });
+
+// ============================================
+// Webhook Management System Routes
+// ============================================
+
+// Admin webhook routes (full visibility)
+Route::middleware(['auth.token'])->prefix('admin')->group(function () {
+    Route::get('/webhooks', [App\Http\Controllers\Admin\AdminWebhookController::class, 'index']);
+    Route::get('/webhooks/{webhook}', [App\Http\Controllers\Admin\AdminWebhookController::class, 'show']);
+    Route::post('/webhooks/{webhook}/retry', [App\Http\Controllers\Admin\AdminWebhookController::class, 'retry']);
+});
+
+// Company webhook routes (sanitized view)
+Route::middleware(['auth.token'])->group(function () {
+    Route::get('/webhooks', [App\Http\Controllers\API\CompanyWebhookController::class, 'index']);
+    Route::get('/webhooks/{webhook}', [App\Http\Controllers\API\CompanyWebhookController::class, 'show']);
+});

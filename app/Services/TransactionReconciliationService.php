@@ -4,388 +4,276 @@ namespace App\Services;
 
 use App\Models\Transaction;
 use App\Models\TransactionStatusLog;
-use App\Services\PalmPay\VirtualAccountService;
+use App\Services\PalmPay\TransferService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Transaction Reconciliation Service
- * 
- * Handles status reconciliation between internal transaction records and external payment providers.
- * Implements the canonical status source pattern where transactions.status is authoritative.
- * 
- * @package App\Services
- */
 class TransactionReconciliationService
 {
-    /**
-     * @var VirtualAccountService
-     */
-    protected $palmPayService;
-
-    /**
-     * Provider status to system status mapping
-     * 
-     * @var array
-     */
-    private const PROVIDER_STATUS_MAP = [
-        'SUCCESS' => 'successful',
-        'COMPLETED' => 'successful',
-        'FAILED' => 'failed',
-        'REJECTED' => 'failed',
-        'PENDING' => 'pending',
-        'INITIATED' => 'pending',
-        'PROCESSING' => 'processing',
-        'REVERSED' => 'reversed',
-        'REFUNDED' => 'reversed',
-    ];
-
-    /**
-     * Constructor
-     */
-    public function __construct()
+    private TransferService $transferService;
+    
+    public function __construct(TransferService $transferService)
     {
-        $this->palmPayService = new VirtualAccountService();
+        $this->transferService = $transferService;
     }
-
+    
     /**
-     * Reconcile transaction from webhook data
-     * 
-     * Processes provider webhook and updates transaction atomically.
-     * Uses DB transaction to ensure status and settlement_status are updated together.
-     * Logs all changes to transaction_status_logs with source='webhook'.
-     * 
-     * @param array $webhookData Webhook payload containing provider_reference and status
-     * @return bool Success/failure result
+     * Reconcile all pending/processing transactions with provider
      */
-    public function reconcileFromWebhook(array $webhookData): bool
+    public function reconcileAll(): array
     {
-        $providerReference = $webhookData['provider_reference'] ?? null;
-        $providerStatus = $webhookData['status'] ?? null;
-
-        if (!$providerReference || !$providerStatus) {
-            Log::warning('Webhook received with missing required fields', [
-                'webhook_data' => $webhookData
-            ]);
-            return false;
-        }
-
-        // Find transaction by provider reference
-        $transaction = Transaction::where('provider_reference', $providerReference)
-            ->first();
-
-        if (!$transaction) {
-            Log::warning('Webhook received for unknown transaction', [
-                'provider_reference' => $providerReference,
-                'provider_status' => $providerStatus
-            ]);
-            return false;
-        }
-
-        // Map provider status to system status
-        $newStatus = $this->mapProviderStatus($providerStatus);
-
-        // Only update if status has changed
-        if ($transaction->status !== $newStatus) {
-            $this->updateTransactionStatus($transaction, $newStatus, [
-                'source' => 'webhook',
-                'provider_status' => $providerStatus,
-                'webhook_data' => $webhookData,
-            ]);
-            return true;
-        } else {
-            Log::info('Webhook received but status unchanged', [
-                'transaction_ref' => $transaction->transaction_ref,
-                'current_status' => $transaction->status,
-                'provider_status' => $providerStatus
-            ]);
-            return true;
-        }
-    }
-
-    /**
-     * Map provider status to system status
-     * 
-     * Converts external provider status codes to the 5-state system model:
-     * pending, processing, successful, failed, reversed
-     * 
-     * @param string $providerStatus Provider's status code
-     * @return string System status
-     */
-    public function mapProviderStatus(string $providerStatus): string
-    {
-        $normalizedStatus = strtoupper(trim($providerStatus));
+        $results = [
+            'checked' => 0,
+            'confirmed_success' => 0,
+            'confirmed_failure' => 0,
+            'timeout' => 0,
+            'errors' => []
+        ];
         
-        return self::PROVIDER_STATUS_MAP[$normalizedStatus] ?? 'failed';
-    }
-
-    /**
-     * Update transaction status atomically
-     * 
-     * Updates transaction status and settlement_status within a database transaction.
-     * Logs all status changes to TransactionStatusLog for audit trail.
-     * Updates reconciliation_status and reconciled_at when status reaches final state.
-     * 
-     * @param Transaction $transaction Transaction to update
-     * @param string $newStatus New status value
-     * @param array $metadata Additional metadata about the status change
-     * @return bool Success indicator
-     */
-    private function updateTransactionStatus(
-        Transaction $transaction,
-        string $newStatus,
-        array $metadata = []
-    ): bool {
-        $oldStatus = $transaction->status;
-        $source = $metadata['source'] ?? 'webhook';
-
-        try {
-            DB::transaction(function () use ($transaction, $newStatus, $oldStatus, $metadata, $source) {
-                // Determine settlement_status based on new status
-                $settlementStatus = $this->determineSettlementStatus($newStatus, $transaction->transaction_type);
-
-                // Prepare update data
-                $updateData = [
-                    'status' => $newStatus,
-                    'settlement_status' => $settlementStatus,
-                    'processed_at' => now(),
-                ];
-
-                // Update reconciliation_status if status reaches final state
-                if (in_array($newStatus, ['successful', 'failed', 'reversed'])) {
-                    $updateData['reconciliation_status'] = 'reconciled';
-                    $updateData['reconciled_at'] = now();
-                }
-
-                // Update transaction
-                $transaction->update($updateData);
-
-                // Log status change to audit trail
-                TransactionStatusLog::create([
-                    'transaction_id' => $transaction->id,
-                    'old_status' => $oldStatus,
-                    'new_status' => $newStatus,
-                    'source' => $source,
-                    'metadata' => array_merge($metadata, [
-                        'settlement_status' => $settlementStatus,
-                    ]),
-                    'changed_at' => now(),
-                ]);
-            });
-
-            Log::info('Transaction status reconciled', [
-                'transaction_ref' => $transaction->transaction_ref,
-                'session_id' => $transaction->session_id,
-                'old_status' => $oldStatus,
-                'new_status' => $newStatus,
-                'settlement_status' => $transaction->settlement_status,
-                'source' => $source,
-            ]);
-
-            return true;
-        } catch (\Exception $e) {
-            Log::error('Failed to update transaction status', [
-                'transaction_ref' => $transaction->transaction_ref,
-                'old_status' => $oldStatus,
-                'new_status' => $newStatus,
-                'error' => $e->getMessage(),
-            ]);
-
-            return false;
-        }
-    }
-
-    /**
-     * Determine settlement status based on transaction status
-     * 
-     * Implements business rules for settlement_status calculation:
-     * - Internal types (fee_charge, kyc_charge, manual_adjustment): not_applicable
-     * - Failed/reversed transactions: not_applicable
-     * - Successful transactions: settled
-     * - Pending/processing transactions: unsettled
-     * 
-     * @param string $status Transaction status
-     * @param string|null $transactionType Transaction type
-     * @return string Settlement status
-     */
-    public function determineSettlementStatus(string $status, ?string $transactionType = null): string
-    {
-        // Internal accounting entries don't require settlement
-        if ($transactionType && in_array($transactionType, ['fee_charge', 'kyc_charge', 'manual_adjustment'])) {
-            return 'not_applicable';
-        }
-
-        // Failed/reversed transactions don't settle
-        if (in_array($status, ['failed', 'reversed'])) {
-            return 'not_applicable';
-        }
-
-        // Successful transactions are settled
-        if ($status === 'successful') {
-            return 'settled';
-        }
-
-        // Default to unsettled for pending/processing
-        return 'unsettled';
-    }
-
-    /**
-     * Run scheduled reconciliation for stale transactions
-     * 
-     * Queries provider status for transactions stuck in 'processing' or 'pending' state
-     * with reconciliation_status = 'pending'. This catches transactions where webhooks
-     * were missed or failed.
-     * 
-     * For each transaction:
-     * - Queries provider for current status
-     * - If provider confirms SUCCESS: updates to 'successful' and 'settled'
-     * - If provider confirms FAILURE: updates to 'failed' and 'not_applicable'
-     * - If provider returns TIMEOUT: keeps status as 'processing'
-     * 
-     * @return int Count of successfully reconciled transactions
-     */
-    public function runScheduledReconciliation(): int
-    {
-        Log::info('Starting scheduled transaction reconciliation');
-
-        // Find transactions where status IN ('processing', 'pending') AND reconciliation_status = 'pending'
-        $staleTransactions = Transaction::whereIn('status', ['processing', 'pending'])
-            ->where('reconciliation_status', 'pending')
-            ->whereNotNull('provider_reference')
-            ->get();
-
-        if ($staleTransactions->isEmpty()) {
-            Log::info('No stale transactions found for reconciliation');
-            return 0;
-        }
-
-        Log::info('Found stale transactions for reconciliation', [
-            'count' => $staleTransactions->count()
-        ]);
-
-        $reconciledCount = 0;
-        $failedCount = 0;
-        $timeoutCount = 0;
-
-        foreach ($staleTransactions as $transaction) {
+        // Find transactions needing reconciliation
+        $transactions = Transaction::where(function($query) {
+            $query->where('status', 'processing')
+                  ->orWhere('status', 'pending');
+        })
+        ->where('reconciliation_status', 'pending')
+        ->where('reconciliation_attempt_count', '<', 10) // Max 10 attempts
+        ->orderBy('created_at', 'asc')
+        ->limit(100) // Process in batches
+        ->get();
+        
+        foreach ($transactions as $transaction) {
+            $results['checked']++;
+            
             try {
-                $providerStatus = $this->queryProviderStatus($transaction->provider_reference);
+                $result = $this->reconcileTransaction($transaction);
                 
-                if ($providerStatus === null) {
-                    // Provider timeout - keep status as 'processing'
-                    $timeoutCount++;
-                    Log::warning('Provider timeout for transaction', [
-                        'transaction_ref' => $transaction->transaction_ref,
-                        'provider_reference' => $transaction->provider_reference
-                    ]);
-                    continue;
-                }
-
-                $newStatus = $this->mapProviderStatus($providerStatus);
-
-                // Only update if status has changed
-                if ($transaction->status !== $newStatus) {
-                    // Determine settlement_status based on new status
-                    $settlementStatus = $this->determineSettlementStatus($newStatus, $transaction->transaction_type);
-
-                    // Use DB transaction for atomicity
-                    DB::transaction(function () use ($transaction, $newStatus, $settlementStatus, $providerStatus) {
-                        $oldStatus = $transaction->status;
-
-                        // Update transaction status and settlement_status
-                        $transaction->update([
-                            'status' => $newStatus,
-                            'settlement_status' => $settlementStatus,
-                            'reconciliation_status' => 'reconciled',
-                            'reconciled_at' => now(),
-                            'processed_at' => now(),
-                        ]);
-
-                        // Log status change to audit trail
-                        TransactionStatusLog::create([
-                            'transaction_id' => $transaction->id,
-                            'old_status' => $oldStatus,
-                            'new_status' => $newStatus,
-                            'source' => 'scheduled_reconciliation',
-                            'metadata' => [
-                                'provider_status' => $providerStatus,
-                                'settlement_status' => $settlementStatus,
-                                'stale_duration_hours' => now()->diffInHours($transaction->updated_at),
-                            ],
-                            'changed_at' => now(),
-                        ]);
-                    });
-
-                    $reconciledCount++;
-
-                    Log::info('Transaction reconciled via scheduled job', [
-                        'transaction_ref' => $transaction->transaction_ref,
-                        'old_status' => $transaction->status,
-                        'new_status' => $newStatus,
-                        'settlement_status' => $settlementStatus,
-                    ]);
+                if ($result['status'] === 'success') {
+                    $results['confirmed_success']++;
+                } elseif ($result['status'] === 'failure') {
+                    $results['confirmed_failure']++;
+                } elseif ($result['status'] === 'timeout') {
+                    $results['timeout']++;
                 }
             } catch (\Exception $e) {
-                $failedCount++;
-                Log::error('Reconciliation failed for transaction', [
-                    'transaction_ref' => $transaction->transaction_ref,
-                    'provider_reference' => $transaction->provider_reference,
-                    'error' => $e->getMessage(),
-                    'trace' => $e->getTraceAsString()
+                $results['errors'][] = [
+                    'transaction_id' => $transaction->id,
+                    'error' => $e->getMessage()
+                ];
+                Log::error('Reconciliation error', [
+                    'transaction_id' => $transaction->id,
+                    'error' => $e->getMessage()
                 ]);
             }
         }
-
-        Log::info('Scheduled reconciliation completed', [
-            'total_checked' => $staleTransactions->count(),
-            'reconciled' => $reconciledCount,
-            'timeouts' => $timeoutCount,
-            'failed' => $failedCount
-        ]);
-
-        return $reconciledCount;
+        
+        return $results;
     }
-
+    
     /**
-     * Query provider for transaction status
-     * 
-     * Calls the payment provider API to get current transaction status.
-     * Currently supports PalmPay provider.
-     * 
-     * @param string $providerReference Provider's transaction reference
-     * @return string|null Provider status or null if query failed
+     * Reconcile single transaction with provider
      */
-    public function queryProviderStatus(string $providerReference): ?string
+    public function reconcileTransaction(Transaction $transaction): array
+    {
+        // Increment attempt count
+        $transaction->increment('reconciliation_attempt_count');
+        $transaction->update(['last_reconciliation_at' => now()]);
+        
+        // Query provider status endpoint
+        $providerStatus = $this->queryProviderStatus($transaction);
+        
+        if ($providerStatus['status'] === 'SUCCESS') {
+            return $this->handleProviderSuccess($transaction, $providerStatus);
+        } elseif ($providerStatus['status'] === 'FAILED') {
+            return $this->handleProviderFailure($transaction, $providerStatus);
+        } elseif ($providerStatus['status'] === 'TIMEOUT' || $providerStatus['status'] === 'PENDING') {
+            return $this->handleProviderTimeout($transaction);
+        }
+        
+        return ['status' => 'unknown'];
+    }
+    
+    /**
+     * Query provider status endpoint
+     */
+    private function queryProviderStatus(Transaction $transaction): array
     {
         try {
-            Log::info('Querying provider status', [
-                'provider_reference' => $providerReference
-            ]);
-
-            $response = $this->palmPayService->queryPayInOrder($providerReference);
-
-            if ($response['success'] && isset($response['data']['status'])) {
-                return $response['data']['status'];
+            // Use provider_reference to query status
+            if (!$transaction->provider_reference) {
+                return ['status' => 'UNKNOWN', 'message' => 'No provider reference'];
             }
-
-            if ($response['success'] && isset($response['data'][0]['status'])) {
-                // Handle array response format
-                return $response['data'][0]['status'];
-            }
-
-            Log::warning('Provider query returned no status', [
-                'provider_reference' => $providerReference,
-                'response' => $response
-            ]);
-
-            return null;
+            
+            // Query PalmPay status endpoint
+            $response = $this->transferService->queryTransactionStatus(
+                $transaction->provider_reference
+            );
+            
+            return [
+                'status' => $response['status'] ?? 'UNKNOWN',
+                'message' => $response['message'] ?? '',
+                'provider_data' => $response
+            ];
         } catch (\Exception $e) {
-            Log::error('Failed to query provider status', [
-                'provider_reference' => $providerReference,
+            Log::error('Provider status query failed', [
+                'transaction_id' => $transaction->id,
                 'error' => $e->getMessage()
             ]);
-
-            return null;
+            
+            return ['status' => 'TIMEOUT', 'message' => $e->getMessage()];
         }
+    }
+    
+    /**
+     * Handle provider confirmed success
+     */
+    private function handleProviderSuccess(Transaction $transaction, array $providerStatus): array
+    {
+        DB::beginTransaction();
+        
+        try {
+            $oldStatus = $transaction->status;
+            $oldSettlementStatus = $transaction->settlement_status;
+            
+            // Update transaction status
+            $transaction->update([
+                'status' => 'successful',
+                'settlement_status' => 'settled',
+                'reconciliation_status' => 'completed',
+                'reconciliation_completed_at' => now()
+            ]);
+            
+            // Log status change
+            TransactionStatusLog::create([
+                'transaction_id' => $transaction->id,
+                'old_status' => $oldStatus,
+                'new_status' => 'successful',
+                'old_settlement_status' => $oldSettlementStatus,
+                'new_settlement_status' => 'settled',
+                'changed_by' => 'system_reconciliation',
+                'reason' => 'Provider confirmed success',
+                'metadata' => json_encode([
+                    'provider_status' => $providerStatus['status'],
+                    'provider_message' => $providerStatus['message'] ?? '',
+                    'reconciliation_attempt' => $transaction->reconciliation_attempt_count
+                ])
+            ]);
+            
+            DB::commit();
+            
+            Log::info('Transaction reconciled to success', [
+                'transaction_id' => $transaction->id,
+                'transaction_ref' => $transaction->transaction_ref,
+                'old_status' => $oldStatus,
+                'new_status' => 'successful'
+            ]);
+            
+            return ['status' => 'success', 'transaction' => $transaction];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+    
+    /**
+     * Handle provider confirmed failure
+     */
+    private function handleProviderFailure(Transaction $transaction, array $providerStatus): array
+    {
+        DB::beginTransaction();
+        
+        try {
+            $oldStatus = $transaction->status;
+            $oldSettlementStatus = $transaction->settlement_status;
+            
+            // Trigger safe ledger reversal
+            $this->reverseLedgerEntries($transaction);
+            
+            // Update transaction status
+            $transaction->update([
+                'status' => 'failed',
+                'settlement_status' => 'not_applicable',
+                'reconciliation_status' => 'completed',
+                'reconciliation_completed_at' => now()
+            ]);
+            
+            // Log status change
+            TransactionStatusLog::create([
+                'transaction_id' => $transaction->id,
+                'old_status' => $oldStatus,
+                'new_status' => 'failed',
+                'old_settlement_status' => $oldSettlementStatus,
+                'new_settlement_status' => 'not_applicable',
+                'changed_by' => 'system_reconciliation',
+                'reason' => 'Provider confirmed failure',
+                'metadata' => json_encode([
+                    'provider_status' => $providerStatus['status'],
+                    'provider_message' => $providerStatus['message'] ?? '',
+                    'reconciliation_attempt' => $transaction->reconciliation_attempt_count,
+                    'ledger_reversed' => true
+                ])
+            ]);
+            
+            DB::commit();
+            
+            Log::info('Transaction reconciled to failure', [
+                'transaction_id' => $transaction->id,
+                'transaction_ref' => $transaction->transaction_ref,
+                'old_status' => $oldStatus,
+                'new_status' => 'failed'
+            ]);
+            
+            return ['status' => 'failure', 'transaction' => $transaction];
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
+    }
+    
+    /**
+     * Handle provider timeout/pending
+     */
+    private function handleProviderTimeout(Transaction $transaction): array
+    {
+        // Keep status as processing, will retry later
+        Log::info('Transaction still pending at provider', [
+            'transaction_id' => $transaction->id,
+            'transaction_ref' => $transaction->transaction_ref,
+            'attempt_count' => $transaction->reconciliation_attempt_count
+        ]);
+        
+        return ['status' => 'timeout', 'transaction' => $transaction];
+    }
+    
+    /**
+     * Reverse ledger entries for failed transaction
+     */
+    private function reverseLedgerEntries(Transaction $transaction): void
+    {
+        // Find all ledger entries for this transaction
+        $ledgerEntries = DB::table('ledger_entries')
+            ->where('transaction_id', $transaction->id)
+            ->get();
+        
+        foreach ($ledgerEntries as $entry) {
+            // Create reversal entry
+            DB::table('ledger_entries')->insert([
+                'transaction_id' => $transaction->id,
+                'company_id' => $entry->company_id,
+                'customer_id' => $entry->customer_id,
+                'entry_type' => $entry->entry_type === 'debit' ? 'credit' : 'debit',
+                'amount' => $entry->amount,
+                'balance_before' => null, // Will be calculated
+                'balance_after' => null,  // Will be calculated
+                'description' => 'Reversal: ' . $entry->description,
+                'reference' => $transaction->transaction_ref . '_reversal',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+        }
+        
+        Log::info('Ledger entries reversed', [
+            'transaction_id' => $transaction->id,
+            'entries_reversed' => $ledgerEntries->count()
+        ]);
     }
 }
