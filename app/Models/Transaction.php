@@ -41,17 +41,45 @@ class Transaction extends Model
         'is_refunded',
         'refund_transaction_id',
         'provider',
-        'provider_reference',
         'reconciliation_status',
         'reconciled_at',
-        'error_message',
+        // New fields from transaction normalization
+        'session_id',
+        'transaction_ref',
+        'transaction_type',
+        'settlement_status',
     ];
 
     protected static function booted()
     {
         static::creating(function ($transaction) {
+            // Legacy fields - keep existing logic
             $transaction->transaction_id = $transaction->transaction_id ?? self::generateTransactionId();
             $transaction->reference = $transaction->reference ?? self::generateReference();
+            
+            // Transaction normalization fields - use TransactionValidator
+            $validator = new \App\Validators\TransactionValidator();
+            
+            // Auto-generate session_id if not provided
+            if (!$transaction->session_id) {
+                $transaction->session_id = 'sess_' . \Illuminate\Support\Str::uuid();
+            }
+            
+            // Auto-generate transaction_ref if not provided
+            if (!$transaction->transaction_ref) {
+                $transaction->transaction_ref = self::generateTransactionRef();
+            }
+            
+            // Calculate net_amount automatically
+            $transaction->net_amount = $transaction->amount - ($transaction->fee ?? 0);
+            
+            // Set default settlement_status based on type and status
+            if (!$transaction->settlement_status && $transaction->transaction_type && $transaction->status) {
+                $transaction->settlement_status = self::determineSettlementStatus(
+                    $transaction->transaction_type,
+                    $transaction->status
+                );
+            }
         });
     }
 
@@ -85,6 +113,15 @@ class Transaction extends Model
     }
 
     /**
+     * Get the customer (alias for companyUser)
+     * Transaction belongs to CompanyUser as customer
+     */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(CompanyUser::class, 'company_user_id');
+    }
+
+    /**
      * Get the user (Legacy)
      */
     public function user(): BelongsTo
@@ -114,6 +151,95 @@ class Transaction extends Model
     public static function generateReference(): string
     {
         return 'REF' . strtoupper(uniqid()) . rand(1000, 9999);
+    }
+
+    /**
+     * Generate unique transaction reference (TXN + 12 uppercase alphanumeric)
+     */
+    private static function generateTransactionRef(): string
+    {
+        return 'TXN' . strtoupper(\Illuminate\Support\Str::random(12));
+    }
+
+    /**
+     * Determine settlement status based on transaction type and status
+     * 
+     * @param string $type Transaction type
+     * @param string $status Transaction status
+     * @return string Settlement status
+     */
+    private static function determineSettlementStatus(string $type, string $status): string
+    {
+        // Internal accounting entries don't require settlement
+        if (in_array($type, ['fee_charge', 'kyc_charge', 'manual_adjustment'])) {
+            return 'not_applicable';
+        }
+        
+        // Failed/reversed transactions don't settle
+        if (in_array($status, ['failed', 'reversed'])) {
+            return 'not_applicable';
+        }
+        
+        // Successful transactions are settled
+        if ($status === 'successful') {
+            return 'settled';
+        }
+        
+        // Default to unsettled for pending/processing
+        return 'unsettled';
+    }
+
+    /**
+     * Scope: Filter to customer-facing transaction types
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeCustomerFacing($query)
+    {
+        return $query->whereIn('transaction_type', [
+            'va_deposit',
+            'api_transfer',
+            'company_withdrawal',
+            'refund'
+        ]);
+    }
+
+    /**
+     * Scope: Filter to internal transaction types
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeInternal($query)
+    {
+        return $query->whereIn('transaction_type', [
+            'fee_charge',
+            'kyc_charge',
+            'manual_adjustment'
+        ]);
+    }
+
+    /**
+     * Scope: Filter to settled transactions
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeSettled($query)
+    {
+        return $query->where('settlement_status', 'settled');
+    }
+
+    /**
+     * Scope: Filter to unsettled transactions
+     * 
+     * @param \Illuminate\Database\Eloquent\Builder $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeUnsettled($query)
+    {
+        return $query->where('settlement_status', 'unsettled');
     }
 
     /**
