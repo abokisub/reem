@@ -42,9 +42,7 @@ echo "Starting reset process...\n";
 echo "\n";
 
 try {
-    DB::beginTransaction();
-    
-    // Disable foreign key checks temporarily
+    // Disable foreign key checks temporarily (TRUNCATE auto-commits, so no transaction needed)
     echo "Disabling foreign key checks...\n";
     DB::statement('SET FOREIGN_KEY_CHECKS=0');
     echo "\n";
@@ -143,8 +141,6 @@ try {
     }
     echo "\n";
     
-    DB::commit();
-    
     echo "========================================\n";
     echo "✅ RESET COMPLETE!\n";
     echo "========================================\n";
@@ -188,11 +184,17 @@ try {
     echo "\n";
     
 } catch (\Exception $e) {
-    DB::rollBack();
+    // Re-enable foreign keys if error occurred
+    try {
+        DB::statement('SET FOREIGN_KEY_CHECKS=1');
+    } catch (\Exception $fkError) {
+        // Ignore FK re-enable error
+    }
+    
     echo "\n";
     echo "❌ ERROR: " . $e->getMessage() . "\n";
     echo "\n";
-    echo "Reset failed. Database rolled back.\n";
+    echo "Reset failed.\n";
     echo "\n";
     exit(1);
 }
