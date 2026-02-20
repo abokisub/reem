@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 class CompanyLogsController extends Controller
 {
     /**
-     * Get company webhook logs
+     * Get company webhook logs (incoming webhooks from PalmPay)
      * 
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
@@ -40,15 +40,18 @@ class CompanyLogsController extends Controller
             $isAdmin = strtoupper($user->type) === 'ADMIN';
 
             if ($isAdmin) {
-                // Admin can see all webhook logs with company information
-                $logs = DB::table('webhook_logs')
-                    ->leftJoin('companies', 'webhook_logs.company_id', '=', 'companies.id')
+                // Admin can see all incoming PalmPay webhooks with company information
+                $logs = DB::table('palmpay_webhooks')
+                    ->leftJoin('transactions', 'palmpay_webhooks.transaction_id', '=', 'transactions.id')
+                    ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
                     ->select(
-                        'webhook_logs.*',
+                        'palmpay_webhooks.*',
                         'companies.name as company_name',
-                        'companies.business_name'
+                        'companies.business_name',
+                        'transactions.transaction_id as transaction_ref',
+                        'transactions.amount as transaction_amount'
                     )
-                    ->orderBy('webhook_logs.created_at', 'desc')
+                    ->orderBy('palmpay_webhooks.created_at', 'desc')
                     ->paginate($request->limit ?? 50);
 
                 return response()->json([
@@ -57,7 +60,7 @@ class CompanyLogsController extends Controller
                 ]);
             }
 
-            // Regular company user - show only their logs
+            // Regular company user - show only their webhooks
             $companyId = $user->active_company_id ?? null;
 
             if (!$companyId) {
@@ -67,10 +70,16 @@ class CompanyLogsController extends Controller
                 ]);
             }
 
-            // Get webhook logs for this company from webhook_logs table
-            $logs = DB::table('webhook_logs')
-                ->where('company_id', $companyId)
-                ->orderBy('created_at', 'desc')
+            // Get incoming PalmPay webhooks for this company
+            $logs = DB::table('palmpay_webhooks')
+                ->leftJoin('transactions', 'palmpay_webhooks.transaction_id', '=', 'transactions.id')
+                ->where('transactions.company_id', $companyId)
+                ->select(
+                    'palmpay_webhooks.*',
+                    'transactions.transaction_id as transaction_ref',
+                    'transactions.amount as transaction_amount'
+                )
+                ->orderBy('palmpay_webhooks.created_at', 'desc')
                 ->paginate($request->limit ?? 50);
 
             return response()->json([
