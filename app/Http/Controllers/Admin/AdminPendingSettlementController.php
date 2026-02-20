@@ -51,7 +51,6 @@ class AdminPendingSettlementController extends Controller
                     'transactions.created_at',
                     'transactions.company_id',
                     'transactions.settlement_status',
-                    'transactions.settled_at',
                     'companies.name as company_name',
                     'companies.email as company_email',
                     'virtual_accounts.palmpay_account_number as va_account_number',
