@@ -63,7 +63,7 @@ class MerchantApiController extends Controller
             'last_name' => $request->last_name,
             'email' => $request->email,
             'phone' => $request->phone_number,
-            'kyc_status' => 'not_submitted',
+            'kyc_status' => 'unverified',
             'is_test' => $request->attributes->get('is_test', false),
         ]);
 
