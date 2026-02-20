@@ -28,11 +28,6 @@ class ProcessSettlements extends Command
                 return 0;
             }
 
-            // Get withdrawal fee configuration
-            $withdrawalFeeType = $settings->payout_palmpay_charge_type ?? 'FLAT';
-            $withdrawalFeeValue = $settings->payout_palmpay_charge_value ?? 10;
-            $withdrawalFeeCap = $settings->payout_palmpay_charge_cap ?? null;
-
             $now = now();
             
             // Get pending settlements that are due
@@ -68,20 +63,9 @@ class ProcessSettlements extends Command
                         throw new \Exception("Transaction not found: {$settlement->transaction_id}");
                     }
 
-                    // Calculate withdrawal fee
-                    $withdrawalFee = 0;
-                    if ($withdrawalFeeType === 'PERCENT' || $withdrawalFeeType === 'PERCENTAGE') {
-                        $withdrawalFee = ($settlement->amount * $withdrawalFeeValue) / 100;
-                        if ($withdrawalFeeCap && $withdrawalFee > $withdrawalFeeCap) {
-                            $withdrawalFee = $withdrawalFeeCap;
-                        }
-                    } else {
-                        // FLAT fee
-                        $withdrawalFee = $withdrawalFeeValue;
-                    }
-
-                    // Net amount after fee deduction
-                    $netAmount = $settlement->amount - $withdrawalFee;
+                    // Settlement is just releasing held funds - NO FEE
+                    // The customer already paid fees when they deposited
+                    $netAmount = $settlement->amount;
 
                     // Get company wallet
                     $wallet = CompanyWallet::where('company_id', $settlement->company_id)
@@ -93,7 +77,7 @@ class ProcessSettlements extends Command
                         throw new \Exception("Wallet not found for company: {$settlement->company_id}");
                     }
 
-                    // Credit the wallet with net amount (after fee deduction)
+                    // Credit the wallet with full amount (no fee deduction)
                     $balanceBefore = $wallet->balance;
                     $wallet->credit($netAmount);
                     $wallet->save();
@@ -105,8 +89,6 @@ class ProcessSettlements extends Command
                         'metadata' => array_merge($transaction->metadata ?? [], [
                             'settled_at' => $now->toDateTimeString(),
                             'settlement_delay_hours' => $this->calculateDelayHours($settlement->transaction_date, $now),
-                            'settlement_withdrawal_fee' => $withdrawalFee,
-                            'settlement_net_amount' => $netAmount,
                         ]),
                     ]);
 
@@ -116,12 +98,12 @@ class ProcessSettlements extends Command
                         ->update([
                             'status' => 'completed',
                             'actual_settlement_date' => $now,
-                            'settlement_note' => "Settled successfully. Amount: {$settlement->amount} NGN, Fee: {$withdrawalFee} NGN, Net: {$netAmount} NGN",
+                            'settlement_note' => "Settled successfully. Amount: {$netAmount} NGN",
                         ]);
 
                     DB::commit();
 
-                    $this->info("✓ Settled: {$settlement->amount} NGN (Fee: {$withdrawalFee} NGN, Net: {$netAmount} NGN) for company {$settlement->company_id}");
+                    $this->info("✓ Settled: {$netAmount} NGN for company {$settlement->company_id}");
                     $processed++;
 
                 } catch (\Exception $e) {
