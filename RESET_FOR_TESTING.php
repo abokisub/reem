@@ -44,43 +44,60 @@ echo "\n";
 try {
     DB::beginTransaction();
     
-    // 1. Clear transactions table
-    echo "1. Clearing transactions table...\n";
+    // Disable foreign key checks temporarily
+    echo "Disabling foreign key checks...\n";
+    DB::statement('SET FOREIGN_KEY_CHECKS=0');
+    echo "\n";
+    
+    // 1. Clear disputes table first (has FK to transactions)
+    echo "1. Clearing disputes table...\n";
+    $disputeCount = DB::table('disputes')->count();
+    DB::table('disputes')->truncate();
+    echo "   ✅ Deleted {$disputeCount} disputes\n";
+    echo "\n";
+    
+    // 2. Clear transactions table
+    echo "2. Clearing transactions table...\n";
     $transactionCount = DB::table('transactions')->count();
     DB::table('transactions')->truncate();
     echo "   ✅ Deleted {$transactionCount} transactions\n";
     echo "\n";
     
-    // 2. Clear transaction_status_logs table
-    echo "2. Clearing transaction status logs...\n";
+    // 3. Clear transaction_status_logs table
+    echo "3. Clearing transaction status logs...\n";
     $statusLogCount = DB::table('transaction_status_logs')->count();
     DB::table('transaction_status_logs')->truncate();
     echo "   ✅ Deleted {$statusLogCount} status log entries\n";
     echo "\n";
     
-    // 3. Clear webhook_events table
-    echo "3. Clearing webhook events...\n";
+    // 4. Clear webhook_events table
+    echo "4. Clearing webhook events...\n";
     $webhookCount = DB::table('webhook_events')->count();
     DB::table('webhook_events')->truncate();
     echo "   ✅ Deleted {$webhookCount} webhook events\n";
     echo "\n";
     
-    // 4. Clear palmpay_webhooks table (legacy)
-    echo "4. Clearing PalmPay webhook logs...\n";
+    // 5. Clear palmpay_webhooks table (legacy)
+    echo "5. Clearing PalmPay webhook logs...\n";
     $palmpayWebhookCount = DB::table('palmpay_webhooks')->count();
     DB::table('palmpay_webhooks')->truncate();
     echo "   ✅ Deleted {$palmpayWebhookCount} PalmPay webhook logs\n";
     echo "\n";
     
-    // 5. Clear settlement_queue table
-    echo "5. Clearing settlement queue...\n";
+    // 6. Clear settlement_queue table
+    echo "6. Clearing settlement queue...\n";
     $settlementCount = DB::table('settlement_queue')->count();
     DB::table('settlement_queue')->truncate();
     echo "   ✅ Deleted {$settlementCount} settlement queue entries\n";
     echo "\n";
     
-    // 6. Reset company balances to zero
-    echo "6. Resetting company balances to zero...\n";
+    // Re-enable foreign key checks
+    echo "Re-enabling foreign key checks...\n";
+    DB::statement('SET FOREIGN_KEY_CHECKS=1');
+    echo "\n";
+    
+    // 7. Reset company balances to zero
+    echo "7. Resetting company balances to zero...\n";
     $companies = DB::table('companies')->get();
     foreach ($companies as $company) {
         DB::table('companies')
@@ -93,8 +110,8 @@ try {
     }
     echo "\n";
     
-    // 7. Reset user balances to zero
-    echo "7. Resetting user balances to zero...\n";
+    // 8. Reset user balances to zero
+    echo "8. Resetting user balances to zero...\n";
     $users = DB::table('users')->where('role', '!=', 'admin')->get();
     foreach ($users as $user) {
         DB::table('users')
@@ -107,8 +124,8 @@ try {
     }
     echo "\n";
     
-    // 8. Clear API request logs (optional - keeps last 100)
-    echo "8. Clearing old API request logs...\n";
+    // 9. Clear API request logs (optional - keeps last 100)
+    echo "9. Clearing old API request logs...\n";
     $apiLogCount = DB::table('api_request_logs')->count();
     if ($apiLogCount > 100) {
         $keepIds = DB::table('api_request_logs')
@@ -133,6 +150,7 @@ try {
     echo "========================================\n";
     echo "\n";
     echo "Summary:\n";
+    echo "  • Disputes deleted: {$disputeCount}\n";
     echo "  • Transactions deleted: {$transactionCount}\n";
     echo "  • Status logs deleted: {$statusLogCount}\n";
     echo "  • Webhook events deleted: {$webhookCount}\n";
