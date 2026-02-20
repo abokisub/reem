@@ -2130,3 +2130,4 @@ class AdminTrans extends Controller
             ], 500);
         }
     }
+}
