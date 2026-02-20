@@ -192,19 +192,23 @@ export default function RATransactionDetails() {
     // Determine if this is a credit (deposit) or debit (transfer/withdrawal) transaction
     const isCredit = transaction.type === 'credit';
     
+    // PROFESSIONAL STANDARD FOR RECEIPTS:
+    // For CREDIT (deposits): SENDER = external customer, RECIPIENT = company virtual account
+    // For DEBIT (transfers/withdrawals): SENDER = company virtual account (master wallet), RECIPIENT = destination account
+    
     // For credit transactions (deposits), show sender info
-    // For debit transactions (transfers), show company info as sender
+    // For debit transactions (transfers), show company virtual account as sender
     const senderName = isCredit 
         ? (metadata.sender_name || metadata.sender_account_name || transaction.customer_name || transaction.va_account_name || 'N/A')
-        : (transaction.company_name || `${systemName} Business`);
+        : (transaction.company_virtual_account_name || transaction.company_name || `${systemName} Business`);
     
     const senderAccount = isCredit 
         ? (metadata.sender_account || transaction.customer_account || 'N/A')
-        : (transaction.company_account_number || transaction.va_account_number || 'N/A');
+        : (transaction.company_virtual_account_number || transaction.va_account_number || 'N/A');
     
     const senderBank = isCredit 
         ? (metadata.sender_bank || metadata.sender_bank_name || transaction.customer_bank || 'N/A')
-        : 'PalmPay';
+        : (transaction.company_virtual_bank_name || 'PalmPay');
     
     // Recipient information
     const recipientName = isCredit 
