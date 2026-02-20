@@ -281,14 +281,19 @@ class Trans extends Controller
                 $selectFields = [
                     'transactions.*',
                     'transactions.reference as transid',
+                    'transactions.transaction_ref',
+                    'transactions.session_id',
+                    'transactions.transaction_type',
                     'transactions.created_at as date',
                     'transactions.description as details',
                     'transactions.fee as charges',
+                    'transactions.net_amount',
                     'transactions.balance_before as oldbal',
                     'transactions.balance_after as newbal',
+                    'transactions.settlement_status',
                     'virtual_accounts.account_name as va_account_name',
                     'virtual_accounts.account_number as va_account_number',
-                    DB::raw("CASE WHEN transactions.status = 'success' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' ELSE 'processing' END as status")
+                    DB::raw("CASE WHEN transactions.status = 'successful' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' WHEN transactions.status = 'pending' THEN 'pending' ELSE 'processing' END as status")
                 ];
 
 
@@ -369,13 +374,19 @@ class Trans extends Controller
                     ->select(
                         'description as message',
                         'amount',
+                        'fee as charges',
+                        'net_amount',
                         'balance_before as oldbal',
                         'balance_after as newbal',
                         'created_at as Habukhan_date',
                         'created_at as adex_date',
                         'reference as transid',
+                        'transaction_ref',
+                        'session_id',
                         'transaction_type',
-                        DB::raw("CASE WHEN status = 'successful' THEN 1 WHEN status = 'failed' THEN 2 ELSE 0 END as plan_status"),
+                        'settlement_status',
+                        DB::raw("CASE WHEN status = 'successful' THEN 1 WHEN status = 'failed' THEN 2 WHEN status = 'pending' THEN 0 ELSE 0 END as plan_status"),
+                        DB::raw("status as status"),
                         DB::raw("'user' as role"),
                         DB::raw("'transactions' as source")
                     );
