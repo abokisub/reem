@@ -94,17 +94,17 @@ try {
     DB::statement('SET FOREIGN_KEY_CHECKS=1');
     echo "\n";
     
-    // 7. Reset company balances to zero
-    echo "7. Resetting company balances to zero...\n";
-    $companies = DB::table('companies')->get();
-    foreach ($companies as $company) {
-        DB::table('companies')
-            ->where('id', $company->id)
+    // 7. Reset company wallet balances to zero
+    echo "7. Resetting company wallet balances to zero...\n";
+    $wallets = DB::table('company_wallets')->get();
+    foreach ($wallets as $wallet) {
+        DB::table('company_wallets')
+            ->where('id', $wallet->id)
             ->update([
                 'balance' => 0,
                 'updated_at' => now()
             ]);
-        echo "   ✅ Reset balance for company: {$company->name} (ID: {$company->id})\n";
+        echo "   ✅ Reset balance for wallet ID: {$wallet->id} (Company ID: {$wallet->company_id})\n";
     }
     echo "\n";
     
@@ -152,7 +152,7 @@ try {
     echo "  • Webhook events deleted: {$webhookCount}\n";
     echo "  • PalmPay webhooks deleted: {$palmpayWebhookCount}\n";
     echo "  • Settlement queue cleared: {$settlementCount}\n";
-    echo "  • Companies reset: " . count($companies) . "\n";
+    echo "  • Company wallets reset: " . count($wallets) . "\n";
     echo "  • Users reset: " . count($users) . "\n";
     echo "\n";
     echo "Preserved:\n";
