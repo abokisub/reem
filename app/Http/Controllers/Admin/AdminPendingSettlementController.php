@@ -34,13 +34,13 @@ class AdminPendingSettlementController extends Controller
                 $endDate = $now;
             }
             
-            // Get pending settlements (unsettled VA deposits)
-            $pendingSettlements = DB::table('transactions')
+            // Get all VA deposits for the period (regardless of settlement status)
+            // This allows admin to see what will be settled and force early settlement
+            $allTransactions = DB::table('transactions')
                 ->join('companies', 'transactions.company_id', '=', 'companies.id')
                 ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
                 ->where('transactions.transaction_type', 'va_deposit')
                 ->where('transactions.status', 'success')
-                ->where('transactions.settlement_status', 'unsettled')
                 ->whereBetween('transactions.created_at', [$startDate, $endDate])
                 ->select(
                     'transactions.id',
@@ -50,6 +50,8 @@ class AdminPendingSettlementController extends Controller
                     'transactions.net_amount',
                     'transactions.created_at',
                     'transactions.company_id',
+                    'transactions.settlement_status',
+                    'transactions.settled_at',
                     'companies.name as company_name',
                     'companies.email as company_email',
                     'virtual_accounts.palmpay_account_number as va_account_number',
@@ -58,23 +60,37 @@ class AdminPendingSettlementController extends Controller
                 ->orderBy('transactions.created_at', 'desc')
                 ->get();
             
-            // Calculate totals
-            $totalTransactions = $pendingSettlements->count();
-            $totalGrossAmount = $pendingSettlements->sum('amount');
-            $totalFees = $pendingSettlements->sum('fee');
-            $totalNetAmount = $pendingSettlements->sum('net_amount');
+            // Separate into settled and unsettled
+            $pendingSettlements = $allTransactions->where('settlement_status', 'unsettled');
+            $settledTransactions = $allTransactions->where('settlement_status', 'settled');
             
-            // Group by company for summary
-            $companySummary = $pendingSettlements->groupBy('company_id')->map(function ($transactions, $companyId) {
+            // Calculate totals (only for unsettled to show what needs processing)
+            $totalTransactions = $allTransactions->count();
+            $totalPending = $pendingSettlements->count();
+            $totalSettled = $settledTransactions->count();
+            $totalGrossAmount = $allTransactions->sum('amount');
+            $totalFees = $allTransactions->sum('fee');
+            $totalNetAmount = $allTransactions->sum('net_amount');
+            $pendingGrossAmount = $pendingSettlements->sum('amount');
+            $pendingNetAmount = $pendingSettlements->sum('net_amount');
+            
+            // Group by company for summary (all transactions)
+            $companySummary = $allTransactions->groupBy('company_id')->map(function ($transactions, $companyId) {
                 $first = $transactions->first();
+                $unsettled = $transactions->where('settlement_status', 'unsettled');
+                $settled = $transactions->where('settlement_status', 'settled');
+                
                 return [
                     'company_id' => $companyId,
                     'company_name' => $first->company_name,
                     'company_email' => $first->company_email,
                     'transaction_count' => $transactions->count(),
+                    'pending_count' => $unsettled->count(),
+                    'settled_count' => $settled->count(),
                     'total_gross' => $transactions->sum('amount'),
                     'total_fees' => $transactions->sum('fee'),
                     'total_net' => $transactions->sum('net_amount'),
+                    'pending_net' => $unsettled->sum('net_amount'),
                 ];
             })->values();
             
@@ -87,12 +103,16 @@ class AdminPendingSettlementController extends Controller
                 ],
                 'summary' => [
                     'total_transactions' => $totalTransactions,
+                    'pending_transactions' => $totalPending,
+                    'settled_transactions' => $totalSettled,
                     'total_gross_amount' => $totalGrossAmount,
                     'total_fees' => $totalFees,
                     'total_net_amount' => $totalNetAmount,
+                    'pending_gross_amount' => $pendingGrossAmount,
+                    'pending_net_amount' => $pendingNetAmount,
                 ],
                 'company_summary' => $companySummary,
-                'transactions' => $pendingSettlements,
+                'transactions' => $allTransactions,
             ]);
             
         } catch (\Exception $e) {
