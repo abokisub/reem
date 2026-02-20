@@ -50,7 +50,7 @@ class AdminPendingSettlementController extends Controller
                     'transactions.net_amount',
                     'transactions.created_at',
                     'transactions.company_id',
-                    'companies.company_name',
+                    'companies.name as company_name',
                     'companies.email as company_email',
                     'virtual_accounts.palmpay_account_number as va_account_number',
                     'virtual_accounts.palmpay_account_name as va_account_name'
