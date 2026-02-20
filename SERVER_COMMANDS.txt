@@ -1,0 +1,47 @@
+========================================
+SIMPLE SERVER COMMANDS - RUN THESE NOW
+========================================
+
+Step 1: Pull Latest Changes
+----------------------------
+cd app.pointwave.ng
+git pull origin main
+
+
+Step 2: Fix Migration State
+----------------------------
+bash MARK_PHASE3_MIGRATED.sh
+
+
+Step 3: Verify Migrations
+----------------------------
+php artisan migrate:status | grep "2026_02_21"
+
+(All 4 should show "Ran")
+
+
+Step 4: Deploy Frontend
+----------------------------
+bash DEPLOY_COMPLETE_FRONTEND_NOW.sh
+
+
+Step 5: Test in Browser
+----------------------------
+1. Login to company dashboard
+2. Go to RA Transactions page
+3. Check new columns display correctly
+4. Go to Wallet Summary page
+5. Check new columns display correctly
+6. Login to admin dashboard
+7. Go to Statement page
+8. Check new columns display correctly
+
+
+DONE! ✓
+========================================
+
+If you see any errors, check:
+- storage/logs/laravel.log
+- Browser console (F12)
+
+The system is working - Phase 3 is optional!
