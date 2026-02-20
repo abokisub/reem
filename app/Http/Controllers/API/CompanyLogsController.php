@@ -49,14 +49,15 @@ class CompanyLogsController extends Controller
                         'companies.name as company_name',
                         'companies.business_name',
                         'transactions.transaction_id as transaction_ref',
-                        'transactions.amount as transaction_amount'
+                        'transactions.amount as transaction_amount',
+                        'palmpay_webhooks.created_at as sent_at'
                     )
                     ->orderBy('palmpay_webhooks.created_at', 'desc')
                     ->paginate($request->limit ?? 50);
 
                 return response()->json([
                     'status' => 'success',
-                    'data' => $logs
+                    'webhook_logs' => $logs
                 ]);
             }
 
