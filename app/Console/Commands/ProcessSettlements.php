@@ -150,41 +150,63 @@ class ProcessSettlements extends Command
     }
 
     /**
-     * Calculate settlement date based on delay hours
-     * Skips weekends and holidays based on settings
+     * Calculate settlement date using T+1 rules (PalmPay standard)
+     * T+1 = Next business day at settlement time (default 2am)
+     * Skips weekends and holidays
      * 
-     * IMPORTANT: settlementTime is ONLY used when delay is 24+ hours (full days)
-     * For delays under 24 hours, the exact time is preserved
+     * Examples:
+     * - Monday transaction → Tuesday 2am
+     * - Friday transaction → Monday 2am (skips weekend)
+     * - Saturday transaction → Monday 2am
+     * - Sunday transaction → Monday 2am
+     * - Holiday transaction → Next business day 2am
      */
     public static function calculateSettlementDate(
         Carbon $transactionDate,
-        int $delayHours,
+        int $delayHours = 24, // Kept for backward compatibility but T+1 overrides this
         bool $skipWeekends = true,
         bool $skipHolidays = true,
         string $settlementTime = '02:00:00'
     ): Carbon {
-        // Add delay hours
-        $settlementDate = $transactionDate->copy()->addHours($delayHours);
+        // T+1 Settlement: Start with next day
+        $settlementDate = $transactionDate->copy()->addDay();
+        
+        // Set settlement time (default 2am)
+        list($hour, $minute, $second) = explode(':', $settlementTime);
+        $settlementDate->setTime((int)$hour, (int)$minute, (int)$second);
 
-        // If skip weekends is enabled
+        // Skip weekends if enabled
         if ($skipWeekends) {
-            // If settlement falls on weekend, move to next Monday
+            // If settlement falls on Saturday, move to Monday
+            // If settlement falls on Sunday, move to Monday
             while ($settlementDate->isWeekend()) {
                 $settlementDate->addDay();
             }
         }
 
-        // Only set specific settlement time if delay is 24+ hours (full day settlement)
-        // For shorter delays (minutes/hours), preserve the exact calculated time
-        if ($delayHours >= 24) {
-            list($hour, $minute, $second) = explode(':', $settlementTime);
-            $settlementDate->setTime((int)$hour, (int)$minute, (int)$second);
-        }
-
-        // If skip holidays is enabled (you can add holiday checking logic here)
+        // Skip holidays if enabled
         if ($skipHolidays) {
-            // TODO: Check against holidays table if needed
-            // For now, we just handle weekends
+            // Check against holidays table
+            $holidays = DB::table('holidays')
+                ->whereDate('holiday_date', $settlementDate->toDateString())
+                ->exists();
+            
+            // If settlement date is a holiday, move to next business day
+            while ($holidays) {
+                $settlementDate->addDay();
+                
+                // Also skip weekends after moving from holiday
+                if ($skipWeekends) {
+                    while ($settlementDate->isWeekend()) {
+                        $settlementDate->addDay();
+                    }
+                }
+                
+                // Check if new date is also a holiday
+                $holidays = DB::table('holidays')
+                    ->whereDate('holiday_date', $settlementDate->toDateString())
+                    ->exists();
+            }
         }
 
         return $settlementDate;
