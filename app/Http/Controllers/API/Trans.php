@@ -538,6 +538,23 @@ class Trans extends Controller
                             'Unknown';
                         $transaction->customer_account = $metadata['sender_account'] ?? '';
                         $transaction->customer_bank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+                        
+                        // Add virtual account details for recipient section (CRITICAL FIX)
+                        if ($transaction->virtualAccount) {
+                            $transaction->va_account_name = $transaction->virtualAccount->palmpay_account_name 
+                                ?? $transaction->virtualAccount->account_name 
+                                ?? '';
+                            $transaction->va_account_number = $transaction->virtualAccount->palmpay_account_number 
+                                ?? $transaction->virtualAccount->account_number 
+                                ?? '';
+                            $transaction->va_bank_name = $transaction->virtualAccount->palmpay_bank_name 
+                                ?? $transaction->virtualAccount->bank_name 
+                                ?? 'PalmPay';
+                        } else {
+                            $transaction->va_account_name = '';
+                            $transaction->va_account_number = '';
+                            $transaction->va_bank_name = 'PalmPay';
+                        }
                     } 
                     // For debit transactions (transfers/withdrawals), show recipient info
                     else {
