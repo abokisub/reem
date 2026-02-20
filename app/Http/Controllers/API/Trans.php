@@ -562,6 +562,21 @@ class Trans extends Controller
                         $transaction->customer_name = $transaction->recipient_account_name ?? 'Unknown Recipient';
                         $transaction->customer_account = $transaction->recipient_account_number ?? '';
                         $transaction->customer_bank = $transaction->recipient_bank_name ?? '';
+                        
+                        // Add company settlement account for sender details (CRITICAL FIX for settlement withdrawals)
+                        if ($transaction->company) {
+                            $transaction->company_account_number = $transaction->company->settlement_account_number 
+                                ?: $transaction->company->account_number 
+                                ?: '';
+                            $transaction->company_bank_name = $transaction->company->settlement_bank_name 
+                                ?: $transaction->company->bank_name 
+                                ?: 'PalmPay';
+                            $transaction->company_name = $transaction->company->name ?? '';
+                        } else {
+                            $transaction->company_account_number = '';
+                            $transaction->company_bank_name = 'PalmPay';
+                            $transaction->company_name = '';
+                        }
                     }
                     
                     // Ensure no N/A values - use empty string or 0 instead
