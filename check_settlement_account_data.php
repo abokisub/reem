@@ -49,7 +49,8 @@ if ($virtualAccount) {
 }
 
 // Check transaction metadata
-$metadata = json_decode($transaction->metadata, true) ?? [];
+$metadata = is_string($transaction->metadata) ? json_decode($transaction->metadata, true) : $transaction->metadata;
+$metadata = $metadata ?? [];
 echo "Transaction Metadata:\n";
 echo "---------------------\n";
 print_r($metadata);
