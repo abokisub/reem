@@ -434,15 +434,16 @@ class Trans extends Controller
                 $search = strtolower($request->search);
                 $query = DB::table('transactions')
                     ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
+                    ->leftJoin('settlement_queue', 'transactions.id', '=', 'settlement_queue.transaction_id')
                     ->where('transactions.company_id', $user->active_company_id);
 
                 if (!empty($search)) {
                     $query->where(function ($q) use ($search) {
-                        $q->orWhere('amount', 'LIKE', "%$search%")
-                            ->orWhere('created_at', 'LIKE', "%$search%")
-                            ->orWhere('reference', 'LIKE', "%$search%")
-                            ->orWhere('description', 'LIKE', "%$search%")
-                            ->orWhere('status', 'LIKE', "%$search%");
+                        $q->orWhere('transactions.amount', 'LIKE', "%$search%")
+                            ->orWhere('transactions.created_at', 'LIKE', "%$search%")
+                            ->orWhere('transactions.reference', 'LIKE', "%$search%")
+                            ->orWhere('transactions.description', 'LIKE', "%$search%")
+                            ->orWhere('transactions.status', 'LIKE', "%$search%");
                     });
                 }
 
@@ -453,7 +454,7 @@ class Trans extends Controller
                         'pending' => 'pending'
                     ];
                     $dbStatus = $statusMap[strtolower($request->status)] ?? $request->status;
-                    $query->where('status', $dbStatus);
+                    $query->where('transactions.status', $dbStatus);
                 }
 
                 // Map new schema columns to legacy frontend expectations
@@ -467,6 +468,7 @@ class Trans extends Controller
                     'transactions.balance_after as newbal',
                     'virtual_accounts.account_name as va_account_name',
                     'virtual_accounts.account_number as va_account_number',
+                    'settlement_queue.status as settlement_status',
                     DB::raw("CASE WHEN transactions.status = 'success' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' ELSE 'processing' END as status")
                 )
 

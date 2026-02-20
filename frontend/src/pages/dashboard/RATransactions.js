@@ -218,7 +218,8 @@ export default function RATransactions() {
                                                 status,
                                                 charges,
                                                 created_at,
-                                                date
+                                                date,
+                                                settlement_status
                                             } = row;
 
                                             const displayDate = date || created_at || 'N/A';
@@ -253,8 +254,27 @@ export default function RATransactions() {
                                                 statusColor = 'info';
                                             }
 
-                                            // Settlement status
-                                            let settlementText = statusText === 'successful' ? 'Successful' : statusText === 'failed' ? 'Failed' : 'Pending';
+                                            // Settlement status - use actual settlement_status from API
+                                            let settlementText = 'Pending';
+                                            let settlementColor = 'warning';
+                                            
+                                            if (settlement_status === 'completed') {
+                                                settlementText = 'Successful';
+                                                settlementColor = 'success';
+                                            } else if (settlement_status === 'failed') {
+                                                settlementText = 'Failed';
+                                                settlementColor = 'error';
+                                            } else if (settlement_status === 'processing') {
+                                                settlementText = 'Processing';
+                                                settlementColor = 'info';
+                                            } else if (settlement_status === 'pending') {
+                                                settlementText = 'Pending';
+                                                settlementColor = 'warning';
+                                            } else {
+                                                // No settlement record - transaction might not require settlement
+                                                settlementText = 'N/A';
+                                                settlementColor = 'default';
+                                            }
 
                                             const handleDownloadReceipt = async () => {
                                                 try {
@@ -326,7 +346,7 @@ export default function RATransactions() {
                                                                 width: 8,
                                                                 height: 8,
                                                                 borderRadius: '50%',
-                                                                bgcolor: `${statusColor}.main`
+                                                                bgcolor: `${settlementColor}.main`
                                                             }} />
                                                             <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
                                                                 {sentenceCase(settlementText)}
