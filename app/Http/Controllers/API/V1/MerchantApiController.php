@@ -38,6 +38,7 @@ class MerchantApiController extends Controller
 
     /**
      * Create a new customer (company_user)
+     * Basic info only - KYC documents are optional for upgrade later
      */
     public function createCustomer(Request $request)
     {
@@ -48,25 +49,12 @@ class MerchantApiController extends Controller
             'last_name' => 'required|string',
             'email' => 'required|email',
             'phone_number' => 'required|string',
-            'address' => 'required|string',
-            'state' => 'required|string',
-            'city' => 'required|string',
-            'postal_code' => 'required|string',
-            'date_of_birth' => 'required|date_format:Y-m-d',
-            'id_type' => 'required|string|in:bvn,nin',
-            'id_number' => 'required|string',
-            'id_card' => 'required|file|mimes:jpg,png,pdf|max:5120',
-            'utility_bill' => 'required|file|mimes:jpg,png,pdf|max:5120',
             'external_customer_id' => 'sometimes|string',
         ]);
 
         if ($validator->fails()) {
             return $this->respond(false, $validator->errors()->first(), [], 422);
         }
-
-        // Handle File Uploads
-        $idCardPath = $request->file('id_card')->store('kyc/id_cards', 'public');
-        $utilityBillPath = $request->file('utility_bill')->store('kyc/utility_bills', 'public');
 
         $customer = CompanyUser::create([
             'company_id' => $company->id,
@@ -75,21 +63,16 @@ class MerchantApiController extends Controller
             'last_name' => $request->last_name,
             'email' => $request->email,
             'phone' => $request->phone_number,
-            'address' => $request->address,
-            'state' => $request->state,
-            'city' => $request->city,
-            'postal_code' => $request->postal_code,
-            'date_of_birth' => $request->date_of_birth,
-            'id_type' => $request->id_type,
-            'id_number' => $request->id_number,
-            'id_card_path' => $idCardPath,
-            'utility_bill_path' => $utilityBillPath,
-            'kyc_status' => 'pending',
+            'kyc_status' => 'not_submitted',
             'is_test' => $request->attributes->get('is_test', false),
         ]);
 
         return $this->respond(true, 'Customer created successfully', [
             'customer_id' => $customer->uuid,
+            'email' => $customer->email,
+            'first_name' => $customer->first_name,
+            'last_name' => $customer->last_name,
+            'phone' => $customer->phone,
             'kyc_status' => $customer->kyc_status,
             'created_at' => $customer->created_at->toIso8601String()
         ], 201);
