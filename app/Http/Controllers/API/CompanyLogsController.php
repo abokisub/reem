@@ -47,7 +47,6 @@ class CompanyLogsController extends Controller
                     ->select(
                         'palmpay_webhooks.*',
                         'companies.name as company_name',
-                        'companies.business_name',
                         'transactions.transaction_id as transaction_ref',
                         'transactions.amount as transaction_amount',
                         'palmpay_webhooks.created_at as sent_at'
