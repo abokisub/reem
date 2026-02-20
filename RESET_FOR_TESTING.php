@@ -108,22 +108,8 @@ try {
     }
     echo "\n";
     
-    // 8. Reset user balances to zero
-    echo "8. Resetting user balances to zero...\n";
-    $users = DB::table('users')->where('role', '!=', 'admin')->get();
-    foreach ($users as $user) {
-        DB::table('users')
-            ->where('id', $user->id)
-            ->update([
-                'balance' => 0,
-                'updated_at' => now()
-            ]);
-        echo "   ✅ Reset balance for user: {$user->username} (ID: {$user->id})\n";
-    }
-    echo "\n";
-    
-    // 9. Clear API request logs (optional - keeps last 100)
-    echo "9. Clearing old API request logs...\n";
+    // 8. Clear API request logs (optional - keeps last 100)
+    echo "8. Clearing old API request logs...\n";
     $apiLogCount = DB::table('api_request_logs')->count();
     if ($apiLogCount > 100) {
         $keepIds = DB::table('api_request_logs')
@@ -153,7 +139,6 @@ try {
     echo "  • PalmPay webhooks deleted: {$palmpayWebhookCount}\n";
     echo "  • Settlement queue cleared: {$settlementCount}\n";
     echo "  • Company wallets reset: " . count($wallets) . "\n";
-    echo "  • Users reset: " . count($users) . "\n";
     echo "\n";
     echo "Preserved:\n";
     echo "  ✅ Company accounts\n";
