@@ -36,6 +36,9 @@ class Kernel extends ConsoleKernel
         // Automated Reconciliation (every 10 minutes)
         $schedule->command('reconcile:auto')->everyTenMinutes()->withoutOverlapping();
 
+        // Transaction Reconciliation (every 5 minutes)
+        $schedule->command('transactions:reconcile')->everyFiveMinutes()->withoutOverlapping();
+
         // Cleanup old logs (webhook and API request logs older than 48 hours)
         $schedule->command('logs:cleanup')->hourly();
 
