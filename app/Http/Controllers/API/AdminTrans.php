@@ -2109,7 +2109,6 @@ class AdminTrans extends Controller
         }
         return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
     }
-}
 
     /**
      * Generate receipt for any transaction (admin only)
