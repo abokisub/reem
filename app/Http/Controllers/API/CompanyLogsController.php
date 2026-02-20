@@ -23,7 +23,12 @@ class CompanyLogsController extends Controller
             if (!$userId) {
                 return response()->json([
                     'status' => 'success',
-                    'data' => []
+                    'webhook_logs' => [
+                        'data' => [],
+                        'total' => 0,
+                        'per_page' => $request->limit ?? 50,
+                        'current_page' => 1
+                    ]
                 ]);
             }
 
@@ -32,7 +37,12 @@ class CompanyLogsController extends Controller
             if (!$user) {
                 return response()->json([
                     'status' => 'success',
-                    'data' => []
+                    'webhook_logs' => [
+                        'data' => [],
+                        'total' => 0,
+                        'per_page' => $request->limit ?? 50,
+                        'current_page' => 1
+                    ]
                 ]);
             }
 
@@ -47,7 +57,7 @@ class CompanyLogsController extends Controller
                     ->select(
                         'palmpay_webhooks.*',
                         'companies.name as company_name',
-                        'transactions.transaction_id as transaction_ref',
+                        'transactions.reference as transaction_ref',
                         'transactions.amount as transaction_amount',
                         'palmpay_webhooks.created_at as sent_at'
                     )
@@ -66,7 +76,12 @@ class CompanyLogsController extends Controller
             if (!$companyId) {
                 return response()->json([
                     'status' => 'success',
-                    'data' => []
+                    'webhook_logs' => [
+                        'data' => [],
+                        'total' => 0,
+                        'per_page' => $request->limit ?? 50,
+                        'current_page' => 1
+                    ]
                 ]);
             }
 
@@ -76,21 +91,27 @@ class CompanyLogsController extends Controller
                 ->where('transactions.company_id', $companyId)
                 ->select(
                     'palmpay_webhooks.*',
-                    'transactions.transaction_id as transaction_ref',
-                    'transactions.amount as transaction_amount'
+                    'transactions.reference as transaction_ref',
+                    'transactions.amount as transaction_amount',
+                    'palmpay_webhooks.created_at as sent_at'
                 )
                 ->orderBy('palmpay_webhooks.created_at', 'desc')
                 ->paginate($request->limit ?? 50);
 
             return response()->json([
                 'status' => 'success',
-                'data' => $logs
+                'webhook_logs' => $logs
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'status' => 'error',
-                'data' => [],
+                'webhook_logs' => [
+                    'data' => [],
+                    'total' => 0,
+                    'per_page' => $request->limit ?? 50,
+                    'current_page' => 1
+                ],
                 'message' => $e->getMessage()
             ], 500);
         }
