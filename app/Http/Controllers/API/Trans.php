@@ -357,13 +357,19 @@ class Trans extends Controller
                     ->select(
                         'message',
                         'amount',
+                        DB::raw("NULL as charges"),
+                        DB::raw("NULL as net_amount"),
                         'oldbal',
                         'newbal',
                         'habukhan_date as Habukhan_date',
                         'habukhan_date as adex_date',
                         'transid',
+                        DB::raw("NULL as transaction_ref"),
+                        DB::raw("NULL as session_id"),
                         DB::raw("NULL as transaction_type"),
+                        DB::raw("NULL as settlement_status"),
                         'plan_status',
+                        DB::raw("NULL as status"),
                         'role',
                         DB::raw("'legacy' as source")
                     );
