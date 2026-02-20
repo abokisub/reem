@@ -201,7 +201,7 @@ export default function RATransactions() {
                     <PlanToolbar filterName={filterName} onFilterName={handleFilterByName} />
 
                     <Scrollbar>
-                        <TableContainer sx={{ minWidth: 800 }}>
+                        <TableContainer sx={{ minWidth: 1600 }}>
                             <Table>
                                 <TransHead
                                     order={'desc'}

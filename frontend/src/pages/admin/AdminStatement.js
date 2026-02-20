@@ -252,7 +252,7 @@ export default function AdminStatement() {
                     </Box>
 
                     <Scrollbar>
-                        <TableContainer sx={{ minWidth: 1000 }}>
+                        <TableContainer sx={{ minWidth: 1800 }}>
                             <Table>
                                 <TransHead headLabel={TABLE_HEAD} rowCount={transactions.length} />
                                 <TableBody>

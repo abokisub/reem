@@ -349,7 +349,7 @@ export default function WalletSummary() {
                     <PlanToolbar filterName={filterName} onFilterName={handleFilterByName} />
 
                     <Scrollbar>
-                        <TableContainer sx={{ minWidth: 800 }}>
+                        <TableContainer sx={{ minWidth: 1400 }}>
                             <Table>
                                 <TransHead
                                     order={'desc'}
