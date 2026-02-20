@@ -34,13 +34,13 @@ class AdminPendingSettlementController extends Controller
                 $endDate = $now;
             }
             
-            // Get all VA deposits for the period (regardless of settlement status)
+            // Get all transactions for the period (regardless of settlement status)
             // This allows admin to see what will be settled and force early settlement
             $allTransactions = DB::table('transactions')
                 ->join('companies', 'transactions.company_id', '=', 'companies.id')
                 ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
-                ->where('transactions.transaction_type', 'va_deposit')
-                ->where('transactions.status', 'success')
+                ->whereIn('transactions.transaction_type', ['va_deposit', 'settlement_withdrawal', 'transfer'])
+                ->where('transactions.status', 'successful')
                 ->whereBetween('transactions.created_at', [$startDate, $endDate])
                 ->select(
                     'transactions.id',
@@ -51,6 +51,9 @@ class AdminPendingSettlementController extends Controller
                     'transactions.created_at',
                     'transactions.company_id',
                     'transactions.settlement_status',
+                    'transactions.transaction_type',
+                    'transactions.recipient_account_name',
+                    'transactions.recipient_account_number',
                     'companies.name as company_name',
                     'companies.email as company_email',
                     'virtual_accounts.palmpay_account_number as va_account_number',
@@ -163,8 +166,8 @@ class AdminPendingSettlementController extends Controller
             
             // Get pending settlements
             $pendingTransactions = DB::table('transactions')
-                ->where('transaction_type', 'va_deposit')
-                ->where('status', 'success')
+                ->whereIn('transaction_type', ['va_deposit', 'settlement_withdrawal', 'transfer'])
+                ->where('status', 'successful')
                 ->where('settlement_status', 'unsettled')
                 ->whereBetween('created_at', [$startDate, $endDate])
                 ->get();
