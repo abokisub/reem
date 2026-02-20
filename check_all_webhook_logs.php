@@ -15,9 +15,10 @@ if ($total > 0) {
     echo "=== RECENT WEBHOOK LOGS ===\n";
     $logs = DB::table('palmpay_webhooks')
         ->join('companies', 'palmpay_webhooks.company_id', '=', 'companies.id')
+        ->join('users', 'companies.user_id', '=', 'users.id')
         ->select(
             'palmpay_webhooks.*',
-            'companies.company_name'
+            'users.name as company_name'
         )
         ->orderBy('palmpay_webhooks.created_at', 'desc')
         ->limit(5)
