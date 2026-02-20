@@ -43,13 +43,16 @@ import axios from '../../utils/axios';
 // ----------------------------------------------------------------------
 
 const TABLE_HEAD = [
+    { id: 'transaction_ref', label: 'Transaction Ref', alignRight: false },
     { id: 'session_id', label: 'Session ID', alignRight: false },
+    { id: 'type', label: 'Type', alignRight: false },
     { id: 'customer', label: 'Customer', alignRight: false },
     { id: 'amount', label: 'Amount (₦)', alignRight: false },
-    { id: 'date', label: 'Date', alignRight: false },
+    { id: 'fee', label: 'Fee (₦)', alignRight: false },
+    { id: 'net_amount', label: 'Net Amount (₦)', alignRight: false },
     { id: 'status', label: 'Status', alignRight: false },
     { id: 'settlement', label: 'Settlement', alignRight: false },
-    { id: 'charges', label: 'Fee', alignRight: false },
+    { id: 'date', label: 'Date', alignRight: false },
     { id: 'action', label: 'Actions', alignRight: true },
 ];
 
@@ -212,19 +215,30 @@ export default function RATransactions() {
                                         {transactions.map((row, index) => {
                                             const {
                                                 id,
+                                                transaction_ref,
+                                                session_id,
+                                                transaction_type,
                                                 transid,
                                                 customer_name,
                                                 amount,
                                                 status,
+                                                fee,
                                                 charges,
+                                                net_amount,
                                                 created_at,
                                                 date,
                                                 settlement_status
                                             } = row;
 
-                                            const displayDate = date || created_at || 'N/A';
+                                            // Use new fields with fallback to legacy
+                                            const displayTransactionRef = transaction_ref || transid || '';
+                                            const displaySessionId = session_id || '';
+                                            const displayFee = fee !== undefined ? fee : (charges || 0);
+                                            const displayNetAmount = net_amount !== undefined ? net_amount : (amount - displayFee);
+                                            const displayDate = date || created_at || '';
+                                            
                                             const formatDate = (dateStr) => {
-                                                if (!dateStr || dateStr === 'N/A') return 'N/A';
+                                                if (!dateStr) return '';
                                                 const d = new Date(dateStr);
                                                 const day = String(d.getDate()).padStart(2, '0');
                                                 const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -235,6 +249,15 @@ export default function RATransactions() {
                                                 return `${day}/${month}/${year} ${hours}:${minutes}:${seconds} WAT`;
                                             };
 
+                                            // Transaction type labels
+                                            const typeLabels = {
+                                                'va_deposit': 'VA Deposit',
+                                                'api_transfer': 'Transfer',
+                                                'company_withdrawal': 'Withdrawal',
+                                                'refund': 'Refund'
+                                            };
+                                            const displayType = typeLabels[transaction_type] || sentenceCase(transaction_type || 'transaction');
+
                                             // Standardize status and color
                                             let statusText = 'pending';
                                             let statusColor = 'warning';
@@ -242,6 +265,7 @@ export default function RATransactions() {
                                             const successStatus = ['successful', 'success', 1, '1', 'Completed', 'completed'];
                                             const failedStatus = ['failed', 2, '2', 'Failed'];
                                             const processingStatus = ['processing', 0, '0', 'Processing'];
+                                            const pendingStatus = ['pending', 'Pending'];
 
                                             if (successStatus.includes(status)) {
                                                 statusText = 'successful';
@@ -252,28 +276,31 @@ export default function RATransactions() {
                                             } else if (processingStatus.includes(status)) {
                                                 statusText = 'processing';
                                                 statusColor = 'info';
+                                            } else if (pendingStatus.includes(status)) {
+                                                statusText = 'pending';
+                                                statusColor = 'warning';
                                             }
 
                                             // Settlement status - use actual settlement_status from API
-                                            let settlementText = 'Pending';
+                                            let settlementText = 'Unsettled';
                                             let settlementColor = 'warning';
                                             
-                                            if (settlement_status === 'completed') {
-                                                settlementText = 'Successful';
+                                            if (settlement_status === 'settled') {
+                                                settlementText = 'Settled';
                                                 settlementColor = 'success';
+                                            } else if (settlement_status === 'unsettled') {
+                                                settlementText = 'Unsettled';
+                                                settlementColor = 'warning';
+                                            } else if (settlement_status === 'not_applicable') {
+                                                settlementText = 'Not Applicable';
+                                                settlementColor = 'default';
                                             } else if (settlement_status === 'failed') {
                                                 settlementText = 'Failed';
                                                 settlementColor = 'error';
-                                            } else if (settlement_status === 'processing') {
-                                                settlementText = 'Processing';
-                                                settlementColor = 'info';
-                                            } else if (settlement_status === 'pending') {
-                                                settlementText = 'Pending';
-                                                settlementColor = 'warning';
                                             } else {
-                                                // No settlement record - transaction might not require settlement
-                                                settlementText = 'N/A';
-                                                settlementColor = 'default';
+                                                // Fallback for legacy data
+                                                settlementText = 'Unsettled';
+                                                settlementColor = 'warning';
                                             }
 
                                             const handleDownloadReceipt = async () => {
@@ -299,31 +326,68 @@ export default function RATransactions() {
                                                 }
                                             };
 
+                                            const handleCopyTransactionRef = () => {
+                                                navigator.clipboard.writeText(displayTransactionRef);
+                                                enqueueSnackbar('Transaction reference copied', { variant: 'success' });
+                                            };
+
                                             const handleCopySessionId = () => {
-                                                navigator.clipboard.writeText(transid);
+                                                navigator.clipboard.writeText(displaySessionId);
                                                 enqueueSnackbar('Session ID copied', { variant: 'success' });
                                             };
 
                                             return (
-                                                <TableRow hover key={transid || index}>
+                                                <TableRow hover key={displayTransactionRef || index}>
                                                     <TableCell>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                            <Typography variant="subtitle2" sx={{ fontWeight: 600, fontFamily: 'monospace' }}>
-                                                                {transid || 'N/A'}
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="subtitle2" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                                                                {displayTransactionRef || '—'}
                                                             </Typography>
-                                                            <IconButton size="small" onClick={handleCopySessionId}>
-                                                                <Iconify icon="eva:copy-outline" width={16} />
-                                                            </IconButton>
+                                                            {displayTransactionRef && (
+                                                                <IconButton size="small" onClick={handleCopyTransactionRef}>
+                                                                    <Iconify icon="eva:copy-outline" width={14} />
+                                                                </IconButton>
+                                                            )}
                                                         </Box>
                                                     </TableCell>
-                                                    <TableCell sx={{ color: 'text.primary', fontWeight: 600 }}>
-                                                        {customer_name || 'Unknown'}
+                                                    <TableCell>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                                                                {displaySessionId || '—'}
+                                                            </Typography>
+                                                            {displaySessionId && (
+                                                                <IconButton size="small" onClick={handleCopySessionId}>
+                                                                    <Iconify icon="eva:copy-outline" width={14} />
+                                                                </IconButton>
+                                                            )}
+                                                        </Box>
                                                     </TableCell>
-                                                    <TableCell sx={{ fontWeight: 800, color: 'success.main', fontSize: '0.95rem' }}>
+                                                    <TableCell>
+                                                        <Label
+                                                            variant="soft"
+                                                            color="info"
+                                                            sx={{
+                                                                textTransform: 'capitalize',
+                                                                fontWeight: 700,
+                                                                px: 1,
+                                                                fontSize: '0.7rem',
+                                                                borderRadius: 0.75
+                                                            }}
+                                                        >
+                                                            {displayType}
+                                                        </Label>
+                                                    </TableCell>
+                                                    <TableCell sx={{ color: 'text.primary', fontWeight: 600 }}>
+                                                        {customer_name || '—'}
+                                                    </TableCell>
+                                                    <TableCell sx={{ fontWeight: 800, color: 'success.main', fontSize: '0.9rem' }}>
                                                         ₦{fCurrency(amount)}
                                                     </TableCell>
-                                                    <TableCell sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.875rem' }}>
-                                                        {formatDate(displayDate)}
+                                                    <TableCell sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.85rem' }}>
+                                                        ₦{fCurrency(displayFee)}
+                                                    </TableCell>
+                                                    <TableCell sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.9rem' }}>
+                                                        ₦{fCurrency(displayNetAmount)}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Label
@@ -333,14 +397,14 @@ export default function RATransactions() {
                                                                 textTransform: 'uppercase',
                                                                 fontWeight: 800,
                                                                 px: 1.2,
-                                                                fontSize: '0.75rem',
+                                                                fontSize: '0.7rem',
                                                                 borderRadius: 0.75
                                                             }}
                                                         >
                                                             {statusText}
                                                         </Label>
                                                     </TableCell>
-                                                    <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
+                                                    <TableCell>
                                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                                             <Box sx={{
                                                                 width: 8,
@@ -348,13 +412,13 @@ export default function RATransactions() {
                                                                 borderRadius: '50%',
                                                                 bgcolor: `${settlementColor}.main`
                                                             }} />
-                                                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
-                                                                {sentenceCase(settlementText)}
+                                                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
+                                                                {settlementText}
                                                             </Typography>
                                                         </Box>
                                                     </TableCell>
-                                                    <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                                                        ₦{fCurrency(charges || 0)}
+                                                    <TableCell sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.8rem' }}>
+                                                        {formatDate(displayDate) || '—'}
                                                     </TableCell>
                                                     <TableCell align="right">
                                                         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
@@ -389,7 +453,7 @@ export default function RATransactions() {
                                 ) : (
                                     <TableBody>
                                         <TableRow>
-                                            <TableCell align="center" colSpan={8} sx={{ py: 8 }}>
+                                            <TableCell align="center" colSpan={11} sx={{ py: 8 }}>
                                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>Loading transactions...</Typography>
                                             </TableCell>
                                         </TableRow>
@@ -399,7 +463,7 @@ export default function RATransactions() {
                                 {isNotFound && (
                                     <TableBody>
                                         <TableRow>
-                                            <TableCell align="center" colSpan={8} sx={{ py: 8 }}>
+                                            <TableCell align="center" colSpan={11} sx={{ py: 8 }}>
                                                 <SearchNotFound searchQuery={filterName} />
                                             </TableCell>
                                         </TableRow>
