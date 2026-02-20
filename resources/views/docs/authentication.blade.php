@@ -163,8 +163,17 @@
         </nav>
 
         <section class="section">
-            <h2>Getting Your API Credentials</h2>
-            <p>After completing KYC verification, you'll receive your API credentials from the dashboard:</p>
+            <h2>Overview</h2>
+            <p>All API requests to PointWave require authentication using three credentials: Business ID, API Key, and Secret Key. These credentials are provided after your account is approved.</p>
+
+            <div class="alert info">
+                <strong>💡 Getting Started:</strong> Sign up at <a href="https://app.pointwave.ng/register" style="color: #667eea;">app.pointwave.ng/register</a>, complete KYC verification, and receive your credentials within 24 hours.
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>API Credentials</h2>
+            <p>After approval, you'll receive three credentials from your dashboard:</p>
 
             <table>
                 <thead>
@@ -177,46 +186,56 @@
                 <tbody>
                     <tr>
                         <td><strong>Business ID</strong></td>
-                        <td><code>40 characters (hex)</code></td>
-                        <td>Identifies your business</td>
+                        <td>40-character hex string</td>
+                        <td>Identifies your business account</td>
                     </tr>
                     <tr>
                         <td><strong>API Key</strong></td>
-                        <td><code>40 characters (hex)</code></td>
-                        <td>Public key for requests</td>
+                        <td>40-character hex string</td>
+                        <td>Public key for API requests</td>
                     </tr>
                     <tr>
                         <td><strong>Secret Key</strong></td>
-                        <td><code>120 characters (hex)</code></td>
-                        <td>Private key for authentication</td>
+                        <td>120-character hex string</td>
+                        <td>Private key for authentication (keep secure!)</td>
                     </tr>
                 </tbody>
             </table>
 
             <div class="alert warning">
-                <strong>⚠️ Security Warning:</strong> Never expose your Secret Key in client-side code, public
-                repositories, or logs. Keep it secure on your server.
+                <strong>⚠️ Security Warning:</strong> Never expose your Secret Key in client-side code, public repositories, or logs. Store it securely on your server only.
             </div>
         </section>
 
         <section class="section">
-            <h2>Test vs Live Credentials</h2>
-            <p>You have separate credentials for testing and production:</p>
+            <h2>Environments</h2>
+            <p>PointWave provides separate credentials for testing and production:</p>
 
-            <h3>Test Mode (Sandbox)</h3>
-            <ul style="margin-left: 20px; margin-top: 10px;">
-                <li>Use when <code>is_test</code> flag is enabled in your account</li>
-                <li>Starts with 2,000,000 NGN balance</li>
-                <li>All transactions are simulated</li>
-                <li>No real money involved</li>
-            </ul>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Environment</th>
+                        <th>Base URL</th>
+                        <th>Purpose</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Sandbox</strong></td>
+                        <td><code>https://app.pointwave.ng/api/gateway</code></td>
+                        <td>Testing with simulated transactions (₦2M balance)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Production</strong></td>
+                        <td><code>https://app.pointwave.ng/api/gateway</code></td>
+                        <td>Live transactions with real money</td>
+                    </tr>
+                </tbody>
+            </table>
 
-            <h3>Live Mode (Production)</h3>
-            <ul style="margin-left: 20px; margin-top: 10px;">
-                <li>Real transactions with actual money</li>
-                <li>Requires completed KYC verification</li>
-                <li>Account must be activated by admin</li>
-            </ul>
+            <div class="alert info">
+                <strong>💡 Tip:</strong> Use sandbox credentials (test mode) during development. Switch to live credentials when ready for production.
+            </div>
         </section>
 
         <section class="section">
@@ -280,48 +299,30 @@
         </section>
 
         <section class="section">
-            <h2>Example: cURL</h2>
-            <div class="code-block"><code>curl -X POST https://app.pointwave.ng/api/gateway/virtual-accounts \
-  -H "Authorization: Bearer d8a3151a8993c157c1a4ee5ecda8983107004b1f..." \
-  -H "x-business-id: 3450968aa027e86e3ff5b0169dc17edd7694a846" \
-  -H "x-api-key: 7db8dbb3991382487a1fc388a05d96a7139d92ba" \
-  -H "Content-Type: application/json" \
-  -H "Idempotency-Key: $(uuidgen)" \
-  -d '{
-    "first_name": "John",
-    "last_name": "Doe",
-    "email": "john@example.com",
-    "phone_number": "08012345678",
-    "account_type": "static"
-  }'</code></div>
-        </section>
-
-        <section class="section">
-            <h2>Example: PHP</h2>
+            <h2>Example Request (PHP)</h2>
             <div class="code-block"><code>&lt;?php
 
-$businessId = '3450968aa027e86e3ff5b0169dc17edd7694a846';
-$apiKey = '7db8dbb3991382487a1fc388a05d96a7139d92ba';
-$secretKey = 'd8a3151a8993c157c1a4ee5ecda8983107004b1f...';
+$businessId = 'your_business_id_here';
+$apiKey = 'your_api_key_here';
+$secretKey = 'your_secret_key_here';
 
-$ch = curl_init('https://app.pointwave.ng/api/gateway/virtual-accounts');
+$ch = curl_init('https://app.pointwave.ng/api/gateway/customers');
 
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_POST => true,
     CURLOPT_HTTPHEADER => [
-        "Authorization: Bearer $secretKey",
-        "x-business-id: $businessId",
-        "x-api-key: $apiKey",
-        "Content-Type: application/json",
-        "Idempotency-Key: " . uniqid('req_', true)
+        'Authorization: Bearer ' . $secretKey,
+        'x-api-key: ' . $apiKey,
+        'x-business-id: ' . $businessId,
+        'Content-Type: application/json',
+        'Idempotency-Key: ' . uniqid('req_', true)
     ],
     CURLOPT_POSTFIELDS => json_encode([
         'first_name' => 'John',
         'last_name' => 'Doe',
         'email' => 'john@example.com',
-        'phone_number' => '08012345678',
-        'account_type' => 'static'
+        'phone_number' => '08012345678'
     ])
 ]);
 
@@ -330,47 +331,76 @@ $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
 $data = json_decode($response, true);
-print_r($data);</code></div>
+print_r($data);
+?&gt;</code></div>
         </section>
 
         <section class="section">
-            <h2>Example: JavaScript (Node.js)</h2>
+            <h2>Example Request (Python/Django)</h2>
+            <div class="code-block"><code>import requests
+import uuid
+
+business_id = 'your_business_id_here'
+api_key = 'your_api_key_here'
+secret_key = 'your_secret_key_here'
+
+headers = {
+    'Authorization': f'Bearer {secret_key}',
+    'x-api-key': api_key,
+    'x-business-id': business_id,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': str(uuid.uuid4())
+}
+
+payload = {
+    'first_name': 'John',
+    'last_name': 'Doe',
+    'email': 'john@example.com',
+    'phone_number': '08012345678'
+}
+
+response = requests.post(
+    'https://app.pointwave.ng/api/gateway/customers',
+    headers=headers,
+    json=payload
+)
+
+print(response.status_code)
+print(response.json())</code></div>
+        </section>
+
+        <section class="section">
+            <h2>Example Request (Node.js)</h2>
             <div class="code-block"><code>const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
-const businessId = '3450968aa027e86e3ff5b0169dc17edd7694a846';
-const apiKey = '7db8dbb3991382487a1fc388a05d96a7139d92ba';
-const secretKey = 'd8a3151a8993c157c1a4ee5ecda8983107004b1f...';
+const businessId = 'your_business_id_here';
+const apiKey = 'your_api_key_here';
+const secretKey = 'your_secret_key_here';
 
-async function createVirtualAccount() {
-  try {
-    const response = await axios.post(
-      'https://app.pointwave.ng/api/gateway/virtual-accounts',
-      {
-        first_name: 'John',
-        last_name: 'Doe',
-        email: 'john@example.com',
-        phone_number: '08012345678',
-        account_type: 'static'
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${secretKey}`,
-          'x-business-id': businessId,
-          'x-api-key': apiKey,
-          'Content-Type': 'application/json',
-          'Idempotency-Key': uuidv4()
-        }
-      }
-    );
-    
-    console.log(response.data);
-  } catch (error) {
-    console.error(error.response.data);
-  }
-}
+const headers = {
+    'Authorization': `Bearer ${secretKey}`,
+    'x-api-key': apiKey,
+    'x-business-id': businessId,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': uuidv4()
+};
 
-createVirtualAccount();</code></div>
+const payload = {
+    first_name: 'John',
+    last_name: 'Doe',
+    email: 'john@example.com',
+    phone_number: '08012345678'
+};
+
+axios.post('https://app.pointwave.ng/api/gateway/customers', payload, { headers })
+    .then(response => {
+        console.log(response.status);
+        console.log(response.data);
+    })
+    .catch(error => {
+        console.error(error.response.data);
+    });</code></div>
         </section>
 
         <section class="section">

@@ -36,11 +36,8 @@
 <body>
     <header>
         <div class="container">
-            <h1>Virtual Accounts</h1>
-            <p>Create and manage PalmPay virtual accounts for your customers</p>
-            <p style="margin-top: 10px; font-size: 0.95rem; opacity: 0.9;">
-                <strong>🏦 Provider:</strong> PalmPay | <strong>⏰ Settlement:</strong> T+1 (Next business day at 3:00 AM)
-            </p>
+            <h1>🏘️ Virtual Accounts</h1>
+            <p>Create virtual bank accounts for your customers - STEP 2 of integration</p>
         </div>
     </header>
 
@@ -54,21 +51,20 @@
 
         <section class="section">
             <h2>Overview</h2>
-            <p>Virtual accounts allow your customers to receive payments via bank transfer. Each customer gets a unique PalmPay account number that automatically credits their balance when they receive payments.</p>
+            <p style="font-size: 1.1rem; margin-bottom: 20px;">Virtual accounts allow your customers to receive payments via bank transfer. Each customer gets a unique account number that automatically credits their balance when they receive payments.</p>
 
-            <div class="alert info">
-                <strong>🏦 PalmPay Integration:</strong> All virtual accounts are created on PalmPay's infrastructure, providing reliable payment processing with T+1 settlement (funds settle next business day at 2:00 AM, excluding weekends and holidays).
+            <div class="alert warning">
+                <strong>⚠️ PREREQUISITE:</strong> You must create a customer first using <code>/v1/customers</code> endpoint. You'll need the <code>customer_id</code> to create a virtual account.
             </div>
 
             <h3>Key Features</h3>
             <ul style="margin-left: 20px; margin-top: 10px;">
-                <li>✅ Instant PalmPay account creation</li>
+                <li>✅ Instant account creation</li>
                 <li>✅ Real-time payment notifications via webhooks</li>
-                <li>✅ T+1 settlement schedule (configurable)</li>
+                <li>✅ Configurable settlement schedule</li>
                 <li>✅ BVN/NIN verification for KYC compliance</li>
                 <li>✅ Static and dynamic accounts</li>
-                <li>✅ Automatic customer deduplication</li>
-                <li>✅ Tier 1 (₦300K limit) and Tier 3 (₦5M limit) support</li>
+                <li>✅ Multiple bank support</li>
             </ul>
         </section>
 
@@ -80,7 +76,11 @@
                 <code>/v1/virtual-accounts</code>
             </div>
 
-            <p>Creates a virtual account for a customer. If the customer doesn't exist, they will be created automatically.</p>
+            <p>Creates a virtual account for an existing customer. The customer can receive payments to this account.</p>
+
+            <div class="alert warning">
+                <strong>⚠️ REQUIRED:</strong> You must have a <code>customer_id</code> from creating a customer first. See <a href="{{ route('docs.customers') }}" style="color: #e65100;">Customers Documentation</a>.
+            </div>
 
             <h3>Request Parameters</h3>
             <table>
@@ -94,28 +94,10 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td><code>first_name</code></td>
+                        <td><code>customer_id</code></td>
                         <td>string</td>
                         <td><span class="badge required">Required</span></td>
-                        <td>Customer's first name</td>
-                    </tr>
-                    <tr>
-                        <td><code>last_name</code></td>
-                        <td>string</td>
-                        <td><span class="badge required">Required</span></td>
-                        <td>Customer's last name</td>
-                    </tr>
-                    <tr>
-                        <td><code>email</code></td>
-                        <td>string</td>
-                        <td><span class="badge required">Required</span></td>
-                        <td>Customer's email address</td>
-                    </tr>
-                    <tr>
-                        <td><code>phone_number</code></td>
-                        <td>string</td>
-                        <td><span class="badge required">Required</span></td>
-                        <td>Customer's phone number (e.g., 08012345678)</td>
+                        <td>Customer ID from step 1</td>
                     </tr>
                     <tr>
                         <td><code>account_type</code></td>
@@ -130,35 +112,13 @@
                         <td>Expected amount for dynamic accounts</td>
                     </tr>
                     <tr>
-                        <td><code>id_type</code></td>
-                        <td>string</td>
-                        <td><span class="badge optional">Optional</span></td>
-                        <td><code>bvn</code> or <code>nin</code></td>
-                    </tr>
-                    <tr>
-                        <td><code>id_number</code></td>
-                        <td>string</td>
-                        <td><span class="badge optional">Optional</span></td>
-                        <td>Customer's BVN or NIN</td>
-                    </tr>
-                    <tr>
-                        <td><code>external_reference</code></td>
-                        <td>string</td>
-                        <td><span class="badge optional">Optional</span></td>
-                        <td>Your unique reference for this account</td>
-                    </tr>
-                    <tr>
                         <td><code>bank_codes</code></td>
                         <td>array</td>
                         <td><span class="badge optional">Optional</span></td>
-                        <td>Array of bank codes (default: ["100033"])</td>
+                        <td>Array of bank codes (default: ["999129"])</td>
                     </tr>
                 </tbody>
             </table>
-
-            <div class="alert info">
-                <strong>💡 Note:</strong> If <code>id_number</code> (BVN/NIN) is not provided, the system will use your company's RC number (aggregator mode). This requires PalmPay approval.
-            </div>
 
             <h3>Account Types</h3>
             <table>
@@ -183,24 +143,117 @@
                 </tbody>
             </table>
 
-            <h3>Request Example</h3>
-            <div class="code-block"><code>POST /v1/virtual-accounts
-Content-Type: application/json
-Authorization: Bearer YOUR_SECRET_KEY
-x-business-id: YOUR_BUSINESS_ID
-x-api-key: YOUR_API_KEY
-Idempotency-Key: unique-request-id
-
-{
-  "first_name": "Jamil",
-  "last_name": "Abubakar",
-  "email": "jamil@example.com",
-  "phone_number": "08078889419",
+            <h3>Example Request (Static Account)</h3>
+            <div class="code-block"><code>{
+  "customer_id": "1efdfc4845a7327bc9271ff0daafdae551d07524",
   "account_type": "static",
-  "external_reference": "customer-12345"
+  "bank_codes": ["999129"]
 }</code></div>
 
-            <h3>Success Response (201 Created)</h3>
+            <h3>Example Request (Dynamic Account)</h3>
+            <div class="code-block"><code>{
+  "customer_id": "1efdfc4845a7327bc9271ff0daafdae551d07524",
+  "account_type": "dynamic",
+  "amount": 50000,
+  "bank_codes": ["999129"]
+}</code></div>
+
+            <h3>Example Request (PHP)</h3>
+            <div class="code-block"><code>&lt;?php
+// Use customer_id from previous step
+$customerId = '1efdfc4845a7327bc9271ff0daafdae551d07524';
+
+$ch = curl_init('https://app.pointwave.ng/api/gateway/virtual-accounts');
+
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_HTTPHEADER => [
+        'Authorization: Bearer ' . $secretKey,
+        'x-api-key: ' . $apiKey,
+        'x-business-id: ' . $businessId,
+        'Content-Type: application/json',
+        'Idempotency-Key: ' . uniqid('req_', true)
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        'customer_id' => $customerId,
+        'account_type' => 'static',
+        'bank_codes' => ['999129']
+    ])
+]);
+
+$response = curl_exec($ch);
+$data = json_decode($response, true);
+curl_close($ch);
+
+// Store account details
+$accountNumber = $data['data']['virtual_accounts'][0]['account_number'];
+$accountName = $data['data']['virtual_accounts'][0]['account_name'];
+
+echo "Account Number: " . $accountNumber . "\n";
+echo "Account Name: " . $accountName;
+?&gt;</code></div>
+
+            <h3>Example Request (Python/Django)</h3>
+            <div class="code-block"><code>import requests
+import uuid
+
+customer_id = '1efdfc4845a7327bc9271ff0daafdae551d07524'
+
+headers = {
+    'Authorization': f'Bearer {secret_key}',
+    'x-api-key': api_key,
+    'x-business-id': business_id,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': str(uuid.uuid4())
+}
+
+payload = {
+    'customer_id': customer_id,
+    'account_type': 'static',
+    'bank_codes': ['999129']
+}
+
+response = requests.post(
+    'https://app.pointwave.ng/api/gateway/virtual-accounts',
+    headers=headers,
+    json=payload
+)
+
+data = response.json()
+account_number = data['data']['virtual_accounts'][0]['account_number']
+print(f"Account Number: {account_number}")</code></div>
+
+            <h3>Example Request (Node.js)</h3>
+            <div class="code-block"><code>const axios = require('axios');
+const { v4: uuidv4 } = require('uuid');
+
+const customerId = '1efdfc4845a7327bc9271ff0daafdae551d07524';
+
+const headers = {
+    'Authorization': `Bearer ${secretKey}`,
+    'x-api-key': apiKey,
+    'x-business-id': businessId,
+    'Content-Type': 'application/json',
+    'Idempotency-Key': uuidv4()
+};
+
+const payload = {
+    customer_id: customerId,
+    account_type: 'static',
+    bank_codes: ['999129']
+};
+
+axios.post('https://app.pointwave.ng/api/gateway/virtual-accounts', payload, { headers })
+    .then(response => {
+        const accountNumber = response.data.data.virtual_accounts[0].account_number;
+        console.log(`Account Number: ${accountNumber}`);
+    })
+    .catch(error => {
+        console.error(error.response.data);
+    });</code></div>
+
+            <h3>✅ Successful Response (201 Created)</h3>
             <div class="code-block"><code>{
   "status": true,
   "request_id": "f01cd2ef-5de9-4a16-a3b2-ed273851bb4a",
@@ -213,86 +266,16 @@ Idempotency-Key: unique-request-id
     },
     "virtual_accounts": [
       {
-        "bank_code": "100033",
-        "bank_name": "PalmPay",
+        "bank_code": "999129",
+        "bank_name": "PointWave MFB",
         "account_number": "6690945661",
-        "account_name": "YourBusiness-Jamil Abubakar(PointWave)",
+        "account_name": "YourBusiness-Jamil Abubakar",
         "account_type": "static",
-        "virtual_account_id": "PWV_VA_71B1A38C2F"
+        "virtual_account_id": "PWV_VA_71B1A38C2F",
+        "status": "active"
       }
     ]
   }
-}</code></div>
-        </section>
-
-        <section class="section">
-            <h2>Customer Deduplication</h2>
-            <p>The system automatically prevents duplicate customers:</p>
-
-            <h3>Deduplication Logic</h3>
-            <ol style="margin-left: 20px; margin-top: 10px;">
-                <li><strong>By Email:</strong> If a customer with the same email exists, returns existing customer</li>
-                <li><strong>By Phone:</strong> If a customer with the same phone exists, returns existing customer</li>
-                <li><strong>By Virtual Account:</strong> If a virtual account already exists for this customer and bank, returns existing account</li>
-            </ol>
-
-            <div class="alert success">
-                <strong>✅ Benefit:</strong> You can safely call the API multiple times without creating duplicates. The system will return the existing customer/account.
-            </div>
-        </section>
-
-        <section class="section">
-            <h2>Get Customer Details</h2>
-            
-            <div class="endpoint">
-                <span class="method get">GET</span>
-                <code>/v1/customers/{customer_id}</code>
-            </div>
-
-            <h3>Request Example</h3>
-            <div class="code-block"><code>GET /v1/customers/1efdfc4845a7327bc9271ff0daafdae551d07524
-Authorization: Bearer YOUR_SECRET_KEY
-x-business-id: YOUR_BUSINESS_ID
-x-api-key: YOUR_API_KEY</code></div>
-
-            <h3>Success Response (200 OK)</h3>
-            <div class="code-block"><code>{
-  "status": true,
-  "request_id": "abc123...",
-  "message": "Customer details retrieved",
-  "data": {
-    "uuid": "1efdfc4845a7327bc9271ff0daafdae551d07524",
-    "first_name": "Jamil",
-    "last_name": "Abubakar",
-    "email": "jamil@example.com",
-    "phone": "08078889419",
-    "created_at": "2026-02-17T21:22:00Z"
-  }
-}</code></div>
-        </section>
-
-        <section class="section">
-            <h2>Update Customer</h2>
-            
-            <div class="endpoint">
-                <span class="method post">POST</span>
-                <code>/v1/customers/{customer_id}</code>
-            </div>
-
-            <p>Update customer information. All fields are optional.</p>
-
-            <h3>Request Example</h3>
-            <div class="code-block"><code>POST /v1/customers/1efdfc4845a7327bc9271ff0daafdae551d07524
-Content-Type: application/json
-Authorization: Bearer YOUR_SECRET_KEY
-x-business-id: YOUR_BUSINESS_ID
-x-api-key: YOUR_API_KEY
-Idempotency-Key: unique-request-id
-
-{
-  "first_name": "Jamil",
-  "last_name": "Abubakar Bashir",
-  "phone_number": "08078889420"
 }</code></div>
         </section>
 
@@ -308,12 +291,12 @@ Idempotency-Key: unique-request-id
                 </thead>
                 <tbody>
                     <tr>
-                        <td>PalmPay</td>
-                        <td><code>100033</code></td>
+                        <td>PointWave MFB</td>
+                        <td><code>999129</code></td>
                         <td>✅ Active (Default)</td>
                     </tr>
                     <tr>
-                        <td>Blooms MFB</td>
+                        <td>Alternative Bank</td>
                         <td><code>090743</code></td>
                         <td>✅ Active</td>
                     </tr>
@@ -322,12 +305,9 @@ Idempotency-Key: unique-request-id
 
             <p style="margin-top: 15px;">To create accounts on multiple banks, pass an array of bank codes:</p>
             <div class="code-block"><code>{
-  "first_name": "John",
-  "last_name": "Doe",
-  "email": "john@example.com",
-  "phone_number": "08012345678",
+  "customer_id": "1efdfc4845a7327bc9271ff0daafdae551d07524",
   "account_type": "static",
-  "bank_codes": ["100033", "090743"]
+  "bank_codes": ["999129", "090743"]
 }</code></div>
         </section>
 
@@ -336,10 +316,10 @@ Idempotency-Key: unique-request-id
             <p>When a customer receives a payment to their virtual account:</p>
 
             <ol style="margin-left: 20px; margin-top: 10px;">
-                <li>Payment is received by the bank (PalmPay)</li>
-                <li>Bank sends webhook notification to PointPay</li>
-                <li>PointPay processes the payment and credits customer balance</li>
-                <li>PointPay sends webhook notification to your system</li>
+                <li>Payment is received by the bank</li>
+                <li>Bank sends webhook notification to PointWave</li>
+                <li>PointWave processes the payment and credits customer balance</li>
+                <li>PointWave sends webhook notification to your system</li>
                 <li>Customer balance is updated in real-time</li>
             </ol>
 
@@ -381,12 +361,12 @@ Idempotency-Key: unique-request-id
         <section class="section">
             <h2>Best Practices</h2>
             <ul style="margin-left: 20px;">
-                <li>✅ Always use <code>external_reference</code> to track accounts in your system</li>
+                <li>✅ Always create customers first before virtual accounts</li>
                 <li>✅ Store the <code>customer_id</code> and <code>virtual_account_id</code> in your database</li>
                 <li>✅ Use static accounts for wallets and recurring payments</li>
                 <li>✅ Use dynamic accounts for one-time payments and invoices</li>
                 <li>✅ Implement webhook handlers to receive payment notifications</li>
-                <li>✅ Handle duplicate requests gracefully (system auto-deduplicates)</li>
+                <li>✅ Use Idempotency-Key to prevent duplicate accounts</li>
             </ul>
         </section>
     </div>

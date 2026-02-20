@@ -131,11 +131,8 @@
 <body>
     <header>
         <div class="container">
-            <h1>Webhooks</h1>
-            <p>Receive real-time notifications for PalmPay payment events</p>
-            <p style="margin-top: 10px; font-size: 0.95rem; opacity: 0.9;">
-                <strong>🏦 Provider:</strong> PalmPay | <strong>🔔 Events:</strong> Deposits, Transfers, KYC Updates
-            </p>
+            <h1>🔏 Webhooks</h1>
+            <p>Receive real-time notifications for payment events</p>
         </div>
     </header>
 
@@ -149,23 +146,16 @@
 
         <section class="section">
             <h2>Overview</h2>
-            <p>Webhooks allow you to receive real-time notifications when events occur in your PointPay account. Instead
-                of polling our API, we'll send HTTP POST requests to your server when important events happen.</p>
-
-            <div class="alert info">
-                <strong>🏦 PalmPay Integration:</strong> All webhook events are triggered by PalmPay's real-time payment
-                processing system. This ensures you receive instant notifications for deposits, transfers, and KYC
-                updates.
-            </div>
+            <p>Webhooks allow you to receive real-time notifications when events occur in your PointWave account. Instead of polling our API, we'll send HTTP POST requests to your server when important events happen.</p>
 
             <h3>Common Use Cases</h3>
             <ul style="margin-left: 20px; margin-top: 10px;">
-                <li>✅ Customer receives payment to PalmPay virtual account</li>
-                <li>✅ Transfer completed successfully via PalmPay</li>
+                <li>✅ Customer receives payment to virtual account</li>
+                <li>✅ Transfer completed successfully</li>
                 <li>✅ Transfer failed</li>
                 <li>✅ Account balance updated</li>
                 <li>✅ KYC status changed (BVN/NIN verification)</li>
-                <li>✅ Settlement processed (T+1 schedule)</li>
+                <li>✅ Settlement processed</li>
             </ul>
         </section>
 
@@ -244,14 +234,14 @@ Authorization: Bearer YOUR_SECRET_KEY
     "customer_id": "1efdfc4845a7327bc9271ff0daafdae551d07524",
     "virtual_account": {
       "account_number": "6690945661",
-      "bank_name": "PalmPay"
+      "bank_name": "PointWave MFB"
     },
     "amount": 5000.00,
     "currency": "NGN",
     "sender_name": "John Doe",
     "sender_account": "0123456789",
     "sender_bank": "GTBank",
-    "reference": "PALMPAY-REF-12345",
+    "reference": "REF-12345",
     "narration": "Payment for services",
     "status": "successful",
     "created_at": "2026-02-17T21:30:00Z"
@@ -282,8 +272,8 @@ Authorization: Bearer YOUR_SECRET_KEY
 
         <section class="section">
             <h2>Signature Verification</h2>
-            <p>Every webhook includes an <code>X-PointPay-Signature</code> header for security. Always verify this
-                signature to ensure the webhook came from PointPay.</p>
+            <p>Every webhook includes an <code>X-PointWave-Signature</code> header for security. Always verify this
+                signature to ensure the webhook came from PointWave.</p>
 
             <h3>Verification Process</h3>
             <ol style="margin-left: 20px; margin-top: 10px;">
@@ -303,7 +293,7 @@ $webhookSecret = 'your_webhook_secret_here';
 $payload = file_get_contents('php://input');
 
 // Get signature from header
-$receivedSignature = $_SERVER['HTTP_X_POINTPAY_SIGNATURE'] ?? '';
+$receivedSignature = $_SERVER['HTTP_X_POINTWAVE_SIGNATURE'] ?? '';
 
 // Compute expected signature
 $expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
@@ -350,43 +340,98 @@ function handleTransferFailed($data) {
     // Notify user
 }</code></div>
 
+            <h3>Python/Django Example</h3>
+            <div class="code-block"><code>import hmac
+import hashlib
+import json
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
+def webhook_handler(request):
+    # Get raw POST body
+    payload = request.body
+    
+    # Get signature from header
+    signature_header = request.META.get('HTTP_X_POINTWAVE_SIGNATURE')
+    
+    # Your webhook secret
+    webhook_secret = 'your_webhook_secret_here'
+    
+    # Calculate expected signature
+    calculated_signature = hmac.new(
+        webhook_secret.encode(),
+        payload,
+        hashlib.sha256
+    ).hexdigest()
+    
+    # Verify signature
+    if hmac.compare_digest(calculated_signature, signature_header):
+        # Signature is valid
+        data = json.loads(payload)
+        
+        # Handle event
+        if data['event'] == 'payment.received':
+            customer_id = data['data']['customer_id']
+            amount = data['data']['amount']
+            
+            # Your business logic
+            credit_customer_wallet(customer_id, amount)
+        
+        return JsonResponse({'status': 'success'})
+    else:
+        # Invalid signature
+        return JsonResponse(
+            {'status': 'error', 'message': 'Invalid signature'},
+            status=400
+        )</code></div>
+
             <h3>Node.js Example</h3>
             <div class="code-block"><code>const crypto = require('crypto');
 const express = require('express');
 const app = express();
 
-const webhookSecret = 'your_webhook_secret_here';
-
-app.post('/webhooks/pointpay', express.raw({type: 'application/json'}), (req, res) => {
-  const signature = req.headers['x-pointpay-signature'];
-  const payload = req.body.toString();
-  
-  // Verify signature
-  const expectedSignature = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(payload)
-    .digest('hex');
-  
-  if (signature !== expectedSignature) {
-    return res.status(401).json({ error: 'Invalid signature' });
-  }
-  
-  // Parse and handle event
-  const event = JSON.parse(payload);
-  
-  switch (event.event) {
-    case 'payment.received':
-      handlePaymentReceived(event.data);
-      break;
-    case 'transfer.success':
-      handleTransferSuccess(event.data);
-      break;
-    case 'transfer.failed':
-      handleTransferFailed(event.data);
-      break;
-  }
-  
-  res.status(200).json({ status: 'success' });
+app.post('/webhook', express.raw({type: 'application/json'}), (req, res) => {
+    // Get raw body
+    const payload = req.body;
+    
+    // Get signature from header
+    const signatureHeader = req.headers['x-pointwave-signature'];
+    
+    // Your webhook secret
+    const webhookSecret = 'your_webhook_secret_here';
+    
+    // Calculate expected signature
+    const calculatedSignature = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(payload)
+        .digest('hex');
+    
+    // Verify signature
+    if (crypto.timingSafeEqual(
+        Buffer.from(calculatedSignature),
+        Buffer.from(signatureHeader)
+    )) {
+        // Signature is valid
+        const data = JSON.parse(payload);
+        
+        // Handle event
+        if (data.event === 'payment.received') {
+            const customerId = data.data.customer_id;
+            const amount = data.data.amount;
+            
+            // Your business logic
+            creditCustomerWallet(customerId, amount);
+        }
+        
+        res.json({status: 'success'});
+    } else {
+        // Invalid signature
+        res.status(400).json({
+            status: 'error',
+            message: 'Invalid signature'
+        });
+    }
 });
 
 app.listen(3000);</code></div>
@@ -394,7 +439,7 @@ app.listen(3000);</code></div>
 
         <section class="section">
             <h2>Retry Logic</h2>
-            <p>If your webhook endpoint fails to respond with HTTP 200, PointPay will retry:</p>
+            <p>If your webhook endpoint fails to respond with HTTP 200, PointWave will retry:</p>
 
             <table>
                 <thead>
