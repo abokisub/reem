@@ -50,21 +50,45 @@ class CompanyLogsController extends Controller
             $isAdmin = strtoupper($user->type) === 'ADMIN';
 
             if ($isAdmin) {
-                // Admin can see all incoming PalmPay webhooks with company information
-                $logs = DB::table('palmpay_webhooks')
+                // Admin can see all webhooks (both incoming and outgoing)
+                // Build UNION query to combine both webhook types
+                $incomingQuery = DB::table('palmpay_webhooks')
                     ->leftJoin('transactions', 'palmpay_webhooks.transaction_id', '=', 'transactions.id')
                     ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
                     ->leftJoin('users', 'companies.user_id', '=', 'users.id')
                     ->select(
                         'palmpay_webhooks.id',
+                        DB::raw("'incoming' as direction"),
                         'palmpay_webhooks.event_type',
                         'palmpay_webhooks.status',
-                        'palmpay_webhooks.created_at as sent_at',
-                        'users.name as company_name',
+                        'palmpay_webhooks.created_at',
                         DB::raw("'N/A' as webhook_url"),
-                        DB::raw("'N/A' as http_status")
-                    )
-                    ->orderBy('palmpay_webhooks.created_at', 'desc')
+                        DB::raw("'N/A' as http_status"),
+                        DB::raw("1 as attempt_number"),
+                        'users.name as company_name'
+                    );
+
+                $outgoingQuery = DB::table('webhook_logs')
+                    ->leftJoin('companies', 'webhook_logs.company_id', '=', 'companies.id')
+                    ->select(
+                        'webhook_logs.id',
+                        DB::raw("'outgoing' as direction"),
+                        'webhook_logs.event_type',
+                        'webhook_logs.status',
+                        'webhook_logs.created_at',
+                        'webhook_logs.webhook_url',
+                        DB::raw("CAST(webhook_logs.http_status AS CHAR) as http_status"),
+                        'webhook_logs.attempt_number',
+                        'companies.name as company_name'
+                    );
+
+                // Combine queries with UNION
+                $combinedQuery = $incomingQuery->unionAll($outgoingQuery);
+                
+                // Wrap in subquery for ordering and pagination
+                $logs = DB::table(DB::raw("({$combinedQuery->toSql()}) as combined_webhooks"))
+                    ->mergeBindings($combinedQuery)
+                    ->orderBy('created_at', 'desc')
                     ->paginate($request->limit ?? 50);
 
                 return response()->json([
@@ -73,7 +97,7 @@ class CompanyLogsController extends Controller
                 ]);
             }
 
-            // Regular company user - show only their webhooks
+            // Regular company user - show only their webhooks (both incoming and outgoing)
             $companyId = $user->active_company_id ?? null;
 
             if (!$companyId) {
@@ -88,17 +112,45 @@ class CompanyLogsController extends Controller
                 ]);
             }
 
-            // Get incoming PalmPay webhooks for this company
-            $logs = DB::table('palmpay_webhooks')
+            // Build UNION query for company user
+            $incomingQuery = DB::table('palmpay_webhooks')
                 ->leftJoin('transactions', 'palmpay_webhooks.transaction_id', '=', 'transactions.id')
                 ->where('transactions.company_id', $companyId)
                 ->select(
-                    'palmpay_webhooks.*',
+                    'palmpay_webhooks.id',
+                    DB::raw("'incoming' as direction"),
+                    'palmpay_webhooks.event_type',
+                    'palmpay_webhooks.status',
+                    'palmpay_webhooks.created_at',
+                    DB::raw("'N/A' as webhook_url"),
+                    DB::raw("'N/A' as http_status"),
+                    DB::raw("1 as attempt_number"),
                     'transactions.reference as transaction_ref',
-                    'transactions.amount as transaction_amount',
-                    'palmpay_webhooks.created_at as sent_at'
-                )
-                ->orderBy('palmpay_webhooks.created_at', 'desc')
+                    'transactions.amount as transaction_amount'
+                );
+
+            $outgoingQuery = DB::table('webhook_logs')
+                ->where('webhook_logs.company_id', $companyId)
+                ->select(
+                    'webhook_logs.id',
+                    DB::raw("'outgoing' as direction"),
+                    'webhook_logs.event_type',
+                    'webhook_logs.status',
+                    'webhook_logs.created_at',
+                    'webhook_logs.webhook_url',
+                    DB::raw("CAST(webhook_logs.http_status AS CHAR) as http_status"),
+                    'webhook_logs.attempt_number',
+                    DB::raw("'N/A' as transaction_ref"),
+                    DB::raw("'N/A' as transaction_amount")
+                );
+
+            // Combine queries with UNION
+            $combinedQuery = $incomingQuery->unionAll($outgoingQuery);
+            
+            // Wrap in subquery for ordering and pagination
+            $logs = DB::table(DB::raw("({$combinedQuery->toSql()}) as combined_webhooks"))
+                ->mergeBindings($combinedQuery)
+                ->orderBy('created_at', 'desc')
                 ->paginate($request->limit ?? 50);
 
             return response()->json([
