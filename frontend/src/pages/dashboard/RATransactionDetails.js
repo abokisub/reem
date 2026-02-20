@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { sentenceCase } from 'change-case';
 
@@ -96,6 +96,49 @@ export default function RATransactionDetails() {
     const [notificationLoading, setNotificationLoading] = useState(false);
 
     const AccessToken = window.localStorage.getItem('accessToken');
+
+    // Add print styles
+    React.useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @media print {
+                /* Hide everything except the receipt */
+                body * {
+                    visibility: hidden;
+                }
+                
+                /* Show only the receipt paper */
+                .receipt-paper, .receipt-paper * {
+                    visibility: visible;
+                }
+                
+                .receipt-paper {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    box-shadow: none !important;
+                    border: none !important;
+                }
+                
+                /* Hide action buttons when printing */
+                .no-print {
+                    display: none !important;
+                }
+                
+                /* Optimize for PDF */
+                @page {
+                    size: A4;
+                    margin: 1cm;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+        
+        return () => {
+            document.head.removeChild(style);
+        };
+    }, []);
 
     useEffect(() => {
         fetchTransactionDetails();
@@ -261,7 +304,7 @@ export default function RATransactionDetails() {
                     <Typography variant="h4" sx={{ fontWeight: 800 }}>Transaction Receipt</Typography>
                 </Box>
 
-                <ReceiptPaper>
+                <ReceiptPaper className="receipt-paper">
                     <ReceiptHeader>
                         <Image src="/upload/welcome.png" sx={{ maxWidth: 120, mx: 'auto', mb: 2 }} />
                         <Typography variant="h5" sx={{ fontWeight: 900, mb: 0.5 }}>Transaction Receipt</Typography>
@@ -374,8 +417,11 @@ export default function RATransactionDetails() {
                                 fullWidth
                                 variant="contained"
                                 color="primary"
-                                startIcon={<Iconify icon="eva:share-fill" />}
-                                onClick={() => window.print()}
+                                startIcon={<Iconify icon="eva:download-fill" />}
+                                onClick={() => {
+                                    // Trigger browser's print dialog which allows saving as PDF
+                                    window.print();
+                                }}
                                 sx={{ borderRadius: 1.5, py: 1.5, fontWeight: 700 }}
                             >
                                 Download Receipt
@@ -385,7 +431,7 @@ export default function RATransactionDetails() {
                 </ReceiptPaper>
 
                 {/* Admin/Special Actions */}
-                <Box sx={{ mt: 5, maxWidth: 600, mx: 'auto' }}>
+                <Box sx={{ mt: 5, maxWidth: 600, mx: 'auto' }} className="no-print">
                     <Grid container spacing={2}>
                         <Grid item xs={6}>
                             <Button

@@ -492,4 +492,135 @@ class MerchantApiController extends Controller
             return $this->respond(false, 'Transfer failed: ' . $e->getMessage(), [], 500);
         }
     }
+
+    /**
+     * DELETE /api/v1/customers/{customerId}
+     * Delete a customer
+     */
+    public function deleteCustomer(Request $request, $customerId)
+    {
+        $company = $request->attributes->get('company');
+
+        $customer = CompanyUser::where('uuid', $customerId)
+            ->where('company_id', $company->id)
+            ->first();
+
+        if (!$customer) {
+            return $this->respond(false, 'Customer not found', [], 404);
+        }
+
+        // Check if customer has active virtual accounts
+        $activeVAs = VirtualAccount::where('company_user_id', $customer->id)
+            ->where('status', 'active')
+            ->count();
+
+        if ($activeVAs > 0) {
+            return $this->respond(false, 'Cannot delete customer with active virtual accounts. Please deactivate all virtual accounts first.', [], 400);
+        }
+
+        // Soft delete customer
+        $customer->delete();
+
+        return $this->respond(true, 'Customer deleted successfully', [
+            'customer_id' => $customerId,
+            'deleted_at' => now()->toIso8601String()
+        ]);
+    }
+
+    /**
+     * GET /api/v1/virtual-accounts
+     * List all virtual accounts for the company
+     */
+    public function listVirtualAccounts(Request $request)
+    {
+        $company = $request->attributes->get('company');
+
+        $query = VirtualAccount::where('company_id', $company->id)
+            ->with('companyUser');
+
+        // Filter by status
+        if ($request->has('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // Filter by customer
+        if ($request->has('customer_id')) {
+            $customer = CompanyUser::where('uuid', $request->customer_id)
+                ->where('company_id', $company->id)
+                ->first();
+            
+            if ($customer) {
+                $query->where('company_user_id', $customer->id);
+            }
+        }
+
+        // Pagination
+        $perPage = min($request->get('per_page', 20), 100);
+        $virtualAccounts = $query->orderBy('created_at', 'desc')->paginate($perPage);
+
+        return $this->respond(true, 'Virtual accounts retrieved successfully', [
+            'current_page' => $virtualAccounts->currentPage(),
+            'data' => $virtualAccounts->items()->map(function ($va) {
+                return $this->formatVa($va);
+            }),
+            'total' => $virtualAccounts->total(),
+            'per_page' => $virtualAccounts->perPage(),
+            'last_page' => $virtualAccounts->lastPage()
+        ]);
+    }
+
+    /**
+     * GET /api/v1/virtual-accounts/{vaId}
+     * Get a single virtual account
+     */
+    public function getVirtualAccount(Request $request, $vaId)
+    {
+        $company = $request->attributes->get('company');
+
+        $virtualAccount = VirtualAccount::where('uuid', $vaId)
+            ->where('company_id', $company->id)
+            ->with('companyUser')
+            ->first();
+
+        if (!$virtualAccount) {
+            return $this->respond(false, 'Virtual account not found', [], 404);
+        }
+
+        return $this->respond(true, 'Virtual account retrieved successfully', $this->formatVa($virtualAccount));
+    }
+
+    /**
+     * DELETE /api/v1/virtual-accounts/{vaId}
+     * Delete (deactivate) a virtual account
+     */
+    public function deleteVirtualAccount(Request $request, $vaId)
+    {
+        $company = $request->attributes->get('company');
+
+        $virtualAccount = VirtualAccount::where('uuid', $vaId)
+            ->where('company_id', $company->id)
+            ->first();
+
+        if (!$virtualAccount) {
+            return $this->respond(false, 'Virtual account not found', [], 404);
+        }
+
+        // Only static accounts can be deactivated
+        if ($virtualAccount->account_type === 'dynamic') {
+            return $this->respond(false, 'Dynamic virtual accounts cannot be deleted', [], 400);
+        }
+
+        // Update status to deactivated
+        $virtualAccount->update([
+            'status' => 'deactivated',
+            'deactivated_at' => now()
+        ]);
+
+        return $this->respond(true, 'Virtual account deleted successfully', [
+            'virtual_account_id' => $vaId,
+            'account_number' => $virtualAccount->account_number,
+            'status' => 'deactivated',
+            'deleted_at' => now()->toIso8601String()
+        ]);
+    }
 }

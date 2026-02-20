@@ -86,6 +86,40 @@ Content-Type: application/json
 
 ---
 
+### 2️⃣ Delete Customer
+
+**Endpoint:** `DELETE /api/v1/customers/{customer_id}`
+
+**Request:**
+```bash
+curl -X DELETE "https://app.pointwave.ng/api/v1/customers/cust_abc123xyz456" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "x-business-id: YOUR_BUSINESS_ID"
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Customer deleted successfully",
+  "data": {
+    "customer_id": "cust_abc123xyz456",
+    "deleted_at": "2026-02-21T00:30:00Z"
+  }
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "status": "error",
+  "message": "Cannot delete customer with active virtual accounts. Please deactivate all virtual accounts first."
+}
+```
+
+---
+
 ### 3️⃣ Get Customer Details
 
 **Endpoint:** `GET /api/v1/customers/{customer_id}`
@@ -203,7 +237,131 @@ curl -X GET "https://app.pointwave.ng/api/v1/customers/cust_abc123xyz456" \
 
 ---
 
-### 7️⃣ Bank Transfer
+### 7️⃣ List Virtual Accounts
+
+**Endpoint:** `GET /api/v1/virtual-accounts`
+
+**Query Parameters:**
+- `status` (optional): Filter by status (active, deactivated)
+- `customer_id` (optional): Filter by customer ID
+- `page` (optional): Page number (default: 1)
+- `per_page` (optional): Items per page (default: 20, max: 100)
+
+**Request:**
+```bash
+curl -X GET "https://app.pointwave.ng/api/v1/virtual-accounts?status=active&page=1&per_page=20" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "x-business-id: YOUR_BUSINESS_ID"
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Virtual accounts retrieved successfully",
+  "data": {
+    "current_page": 1,
+    "data": [
+      {
+        "virtual_account_id": "va_xyz789abc123",
+        "account_number": "9876543210",
+        "account_name": "John Doe",
+        "bank_name": "PalmPay",
+        "bank_code": "999991",
+        "customer_id": "cust_abc123xyz456",
+        "account_type": "static",
+        "status": "active",
+        "created_at": "2026-02-20T10:35:00Z"
+      }
+    ],
+    "total": 50,
+    "per_page": 20,
+    "last_page": 3
+  }
+}
+```
+
+---
+
+### 8️⃣ Get Virtual Account
+
+**Endpoint:** `GET /api/v1/virtual-accounts/{virtual_account_id}`
+
+**Request:**
+```bash
+curl -X GET "https://app.pointwave.ng/api/v1/virtual-accounts/va_xyz789abc123" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "x-business-id: YOUR_BUSINESS_ID"
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Virtual account retrieved successfully",
+  "data": {
+    "virtual_account_id": "va_xyz789abc123",
+    "account_number": "9876543210",
+    "account_name": "John Doe",
+    "bank_name": "PalmPay",
+    "bank_code": "999991",
+    "customer": {
+      "customer_id": "cust_abc123xyz456",
+      "email": "john@example.com",
+      "first_name": "John",
+      "last_name": "Doe",
+      "phone": "08012345678"
+    },
+    "account_type": "static",
+    "status": "active",
+    "created_at": "2026-02-20T10:35:00Z"
+  }
+}
+```
+
+---
+
+### 9️⃣ Delete Virtual Account
+
+**Endpoint:** `DELETE /api/v1/virtual-accounts/{virtual_account_id}`
+
+**Request:**
+```bash
+curl -X DELETE "https://app.pointwave.ng/api/v1/virtual-accounts/va_xyz789abc123" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "x-business-id: YOUR_BUSINESS_ID"
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Virtual account deleted successfully",
+  "data": {
+    "virtual_account_id": "va_xyz789abc123",
+    "account_number": "9876543210",
+    "status": "deactivated",
+    "deleted_at": "2026-02-21T00:35:00Z"
+  }
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "status": "error",
+  "message": "Dynamic virtual accounts cannot be deleted"
+}
+```
+
+**Note:** Only static virtual accounts can be deleted. Dynamic accounts cannot be deleted.
+
+---
+
+### 🔟 Bank Transfer
 
 **Endpoint:** `POST /api/v1/transfers`
 
@@ -243,7 +401,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/customers/cust_abc123xyz456" \
 
 ---
 
-### 8️⃣ Get Transactions
+### 1️⃣1️⃣ Get Transactions
 
 **Endpoint:** `GET /api/v1/transactions`
 
@@ -289,7 +447,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/transactions?page=1&per_page=20" \
 
 ## 🔐 KYC Endpoints
 
-### 9️⃣ Get KYC Status
+### 1️⃣2️⃣ Get KYC Status
 
 **Endpoint:** `GET /api/v1/kyc/status`
 
@@ -325,7 +483,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/kyc/status" \
 
 ---
 
-### 🔟 Submit KYC Section
+### 1️⃣3️⃣ Submit KYC Section
 
 **Endpoint:** `POST /api/v1/kyc/submit/{section}`
 
@@ -359,7 +517,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/kyc/status" \
 
 ---
 
-### 1️⃣1️⃣ Verify BVN
+### 1️⃣4️⃣ Verify BVN
 
 **Endpoint:** `POST /api/v1/kyc/verify-bvn`
 
@@ -389,7 +547,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/kyc/status" \
 
 ---
 
-### 1️⃣2️⃣ Verify NIN
+### 1️⃣5️⃣ Verify NIN
 
 **Endpoint:** `POST /api/v1/kyc/verify-nin`
 
@@ -419,7 +577,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/kyc/status" \
 
 ---
 
-### 1️⃣3️⃣ Verify Bank Account
+### 1️⃣6️⃣ Verify Bank Account
 
 **Endpoint:** `POST /api/v1/kyc/verify-bank-account`
 
@@ -1076,8 +1234,12 @@ http_response_code(200);
 - [ ] Test customer creation endpoint (POST /customers)
 - [ ] Test get customer endpoint (GET /customers/{id})
 - [ ] Test update customer endpoint (PUT /customers/{id})
+- [ ] Test delete customer endpoint (DELETE /customers/{id})
+- [ ] Test list virtual accounts endpoint (GET /virtual-accounts)
 - [ ] Test virtual account creation endpoint (POST /virtual-accounts)
+- [ ] Test get virtual account endpoint (GET /virtual-accounts/{id})
 - [ ] Test virtual account update endpoint (PUT /virtual-accounts/{id})
+- [ ] Test delete virtual account endpoint (DELETE /virtual-accounts/{id})
 - [ ] Test get transactions endpoint (GET /transactions)
 - [ ] Test bank transfer endpoint (POST /transfers)
 - [ ] Setup webhook URL in dashboard
@@ -1126,18 +1288,22 @@ Content-Type: application/json
 
 ### Endpoints
 ```
-POST /api/v1/customers              # Create customer
-GET  /api/v1/customers/{id}         # Get customer details
-PUT  /api/v1/customers/{id}         # Update customer
-POST /api/v1/virtual-accounts       # Create virtual account
-PUT  /api/v1/virtual-accounts/{id}  # Update virtual account status
-GET  /api/v1/transactions           # Get transaction history
-POST /api/v1/transfers              # Initiate bank transfer
-GET  /api/v1/kyc/status             # Get KYC status
-POST /api/v1/kyc/submit/{section}   # Submit KYC section
-POST /api/v1/kyc/verify-bvn         # Verify BVN
-POST /api/v1/kyc/verify-nin         # Verify NIN
-POST /api/v1/kyc/verify-bank-account # Verify bank account
+POST   /api/v1/customers              # Create customer
+DELETE /api/v1/customers/{id}         # Delete customer
+GET    /api/v1/customers/{id}         # Get customer details
+PUT    /api/v1/customers/{id}         # Update customer
+GET    /api/v1/virtual-accounts       # List virtual accounts
+POST   /api/v1/virtual-accounts       # Create virtual account
+GET    /api/v1/virtual-accounts/{id}  # Get virtual account
+PUT    /api/v1/virtual-accounts/{id}  # Update virtual account status
+DELETE /api/v1/virtual-accounts/{id}  # Delete virtual account
+GET    /api/v1/transactions           # Get transaction history
+POST   /api/v1/transfers              # Initiate bank transfer
+GET    /api/v1/kyc/status             # Get KYC status
+POST   /api/v1/kyc/submit/{section}   # Submit KYC section
+POST   /api/v1/kyc/verify-bvn         # Verify BVN
+POST   /api/v1/kyc/verify-nin         # Verify NIN
+POST   /api/v1/kyc/verify-bank-account # Verify bank account
 ```
 
 ---

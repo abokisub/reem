@@ -797,10 +797,14 @@ Route::prefix('v1')->group(function () {
         Route::post('/customers', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'createCustomer']);
         Route::get('/customers/{customerId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getCustomer']);
         Route::put('/customers/{customerId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'updateCustomer']);
+        Route::delete('/customers/{customerId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'deleteCustomer']);
 
         // Virtual Accounts
+        Route::get('/virtual-accounts', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'listVirtualAccounts']);
         Route::post('/virtual-accounts', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'createVirtualAccount']);
+        Route::get('/virtual-accounts/{vaId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getVirtualAccount']);
         Route::put('/virtual-accounts/{vaId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'updateVirtualAccount']);
+        Route::delete('/virtual-accounts/{vaId}', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'deleteVirtualAccount']);
 
         // Transactions (Ledger History)
         Route::get('/transactions', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getTransactions']);
