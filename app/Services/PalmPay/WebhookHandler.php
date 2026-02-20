@@ -211,6 +211,12 @@ class WebhookHandler
             $senderBank = $payload['payerBankName'] ?? $payload['senderBank'] ?? null;
             $narration = $payload['reference'] ?? $payload['narration'] ?? 'Virtual Account Credit';
             
+            // Determine if this is company self-funding or client payment
+            // company_user_id = NULL → Master account (company funding themselves) → instant settlement
+            // company_user_id = value → Client account (end user payment) → T+1 settlement
+            $isCompanySelfFunding = ($virtualAccount->company_user_id === null);
+            $initialSettlementStatus = $isCompanySelfFunding ? 'settled' : 'unsettled';
+            
             // Create transaction
             $transaction = Transaction::create([
                 'transaction_id' => Transaction::generateTransactionId(),
@@ -225,7 +231,7 @@ class WebhookHandler
                 'total_amount' => $amount,
                 'currency' => 'NGN',
                 'status' => 'success',
-                'settlement_status' => 'settled', // Deposits are immediately settled
+                'settlement_status' => $initialSettlementStatus, // 'settled' for company self-funding, 'unsettled' for client payments
                 'reference' => Transaction::generateReference(),
                 'palmpay_reference' => $palmpayReference,
                 'description' => $narration,
@@ -243,6 +249,7 @@ class WebhookHandler
                     'palmpay_order_no' => $palmpayReference,
                     'palmpay_session_id' => $payload['sessionId'] ?? null,
                     'virtual_account_name' => $payload['virtualAccountName'] ?? null,
+                    'is_company_self_funding' => $isCompanySelfFunding,
                 ],
                 'balance_before' => $balanceBefore,
                 'balance_after' => $balanceBefore + $netAmount,
@@ -253,20 +260,6 @@ class WebhookHandler
 
             // Update webhook with transaction
             $webhook->update(['transaction_id' => $transaction->id]);
-
-            // ===================================================================
-            // CRITICAL: Detect if this is COMPANY SELF-FUNDING or CLIENT PAYMENT
-            // ===================================================================
-            // company_user_id = NULL → Master account (company funding themselves)
-            // company_user_id = value → Client account (end user payment)
-            // 
-            // Company self-funding should:
-            // - Credit wallet INSTANTLY (no settlement delay)
-            // - NOT go to settlement queue
-            // - NOT count in "Total Transactions" or "Total Revenue" metrics
-            // ===================================================================
-            
-            $isCompanySelfFunding = ($virtualAccount->company_user_id === null);
             
             if ($isCompanySelfFunding) {
                 // INSTANT CREDIT for company self-funding
@@ -287,6 +280,7 @@ class WebhookHandler
 
                 // Update transaction balances
                 $transaction->update([
+                    'settlement_status' => 'settled',
                     'balance_before' => $balanceBefore,
                     'balance_after' => $wallet->balance,
                     'metadata' => array_merge($transaction->metadata ?? [], [
@@ -384,8 +378,9 @@ class WebhookHandler
                 $wallet->credit($netAmount);
                 $wallet->save();
 
-                // Update transaction balances
+                // Update transaction balances and settlement status
                 $transaction->update([
+                    'settlement_status' => 'settled',
                     'balance_before' => $balanceBefore,
                     'balance_after' => $wallet->balance,
                 ]);
