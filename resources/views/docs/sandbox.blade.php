@@ -127,21 +127,18 @@
             <p>In your dashboard, toggle "Test Mode" to ON. This will display your test credentials.</p>
 
             <h3>2. Get Test Credentials</h3>
-            <p>Your test credentials are separate from live credentials:</p>
-            <div class="code-block"><code>Business ID: test_business_id_here
-API Key: test_api_key_here
-Secret Key: test_secret_key_here</code></div>
+            <p>Your test credentials are separate from live credentials and can be found in your dashboard after enabling test mode.</p>
 
             <div class="alert warning">
-                <strong>⚠️ Important:</strong> Test credentials only work in test mode. Live credentials only work in live mode. They are not interchangeable.
+                <strong>⚠️ Important:</strong> Test credentials only work in test mode. Live credentials only work in live mode. They are not interchangeable. Never share your credentials publicly.
             </div>
 
             <h3>3. Make Your First Test Request</h3>
             <div class="code-block"><code>&lt;?php
-// Use test credentials
-$businessId = 'test_business_id_here';
-$apiKey = 'test_api_key_here';
-$secretKey = 'test_secret_key_here';
+// Use YOUR test credentials from dashboard
+$businessId = 'YOUR_BUSINESS_ID';
+$apiKey = 'YOUR_API_KEY';
+$secretKey = 'YOUR_SECRET_KEY';
 
 // Create a test customer
 $ch = curl_init('https://app.pointwave.ng/api/gateway/customers');
