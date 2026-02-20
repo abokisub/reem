@@ -30,13 +30,13 @@ echo "   - All ledger entries\n";
 echo "   - Reset all company wallet balances to ₦199.00\n";
 echo "   - Reset all system wallet balances to ₦0.00\n\n";
 
-echo "Are you ABSOLUTELY SURE you want to continue? (type 'YES' to confirm): ";
+echo "Are you ABSOLUTELY SURE you want to continue? (type 'yes' to confirm): ";
 $handle = fopen("php://stdin", "r");
 $line = fgets($handle);
-$answer = trim($line);
+$answer = strtolower(trim($line));
 fclose($handle);
 
-if ($answer !== 'YES') {
+if ($answer !== 'yes') {
     echo "\n❌ Operation cancelled. No changes made.\n";
     exit(0);
 }
@@ -70,11 +70,10 @@ try {
         echo "✅ Deleted {$palmpayWebhookCount} PalmPay webhooks\n";
     }
     
-    // 5. Delete ledger entries
+    // 5. Skip ledger entries (ledger is append-only, cannot delete)
     if (Schema::hasTable('ledger_entries')) {
         $ledgerCount = DB::table('ledger_entries')->count();
-        DB::table('ledger_entries')->delete();
-        echo "✅ Deleted {$ledgerCount} ledger entries\n";
+        echo "⏭️  Skipped {$ledgerCount} ledger entries (ledger is append-only)\n";
     }
     
     // 6. Delete transaction status logs
