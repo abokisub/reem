@@ -52,16 +52,17 @@ class CompanyLogsController extends Controller
             if ($isAdmin) {
                 // Admin can see all incoming PalmPay webhooks with company information
                 $logs = DB::table('palmpay_webhooks')
-                    ->leftJoin('companies', 'palmpay_webhooks.company_id', '=', 'companies.id')
+                    ->leftJoin('transactions', 'palmpay_webhooks.transaction_id', '=', 'transactions.id')
+                    ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
                     ->leftJoin('users', 'companies.user_id', '=', 'users.id')
                     ->select(
-                        'palmpay_webhooks.*',
-                        'users.name as company_name',
-                        'palmpay_webhooks.webhook_url',
-                        'palmpay_webhooks.http_status',
-                        'palmpay_webhooks.status',
+                        'palmpay_webhooks.id',
                         'palmpay_webhooks.event_type',
-                        'palmpay_webhooks.created_at as sent_at'
+                        'palmpay_webhooks.status',
+                        'palmpay_webhooks.created_at as sent_at',
+                        'users.name as company_name',
+                        DB::raw("'N/A' as webhook_url"),
+                        DB::raw("'N/A' as http_status")
                     )
                     ->orderBy('palmpay_webhooks.created_at', 'desc')
                     ->paginate($request->limit ?? 50);

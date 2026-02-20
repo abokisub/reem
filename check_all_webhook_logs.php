@@ -14,8 +14,9 @@ echo "Total webhook logs in database: $total\n\n";
 if ($total > 0) {
     echo "=== RECENT WEBHOOK LOGS ===\n";
     $logs = DB::table('palmpay_webhooks')
-        ->join('companies', 'palmpay_webhooks.company_id', '=', 'companies.id')
-        ->join('users', 'companies.user_id', '=', 'users.id')
+        ->leftJoin('transactions', 'palmpay_webhooks.transaction_id', '=', 'transactions.id')
+        ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
+        ->leftJoin('users', 'companies.user_id', '=', 'users.id')
         ->select(
             'palmpay_webhooks.*',
             'users.name as company_name'
@@ -26,11 +27,11 @@ if ($total > 0) {
     
     foreach ($logs as $log) {
         echo "ID: {$log->id}\n";
-        echo "Company: {$log->company_name} (ID: {$log->company_id})\n";
+        echo "Company: " . ($log->company_name ?? 'N/A') . "\n";
         echo "Event: {$log->event_type}\n";
         echo "Status: {$log->status}\n";
-        echo "HTTP Status: {$log->http_status}\n";
-        echo "Sent At: {$log->sent_at}\n";
+        echo "Transaction ID: {$log->transaction_id}\n";
+        echo "Created At: {$log->created_at}\n";
         echo "---\n";
     }
 } else {
