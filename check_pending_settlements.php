@@ -18,7 +18,9 @@ $pendingSettlements = DB::table('settlement_queue')
     ->select(
         'settlement_queue.*',
         'companies.name as company_name',
-        'settings.settlement_delay'
+        'companies.custom_settlement_enabled',
+        'companies.custom_settlement_delay_hours',
+        'settings.settlement_delay_hours'
     )
     ->orderBy('settlement_queue.created_at', 'asc')
     ->get();
@@ -33,7 +35,13 @@ echo "Found " . $pendingSettlements->count() . " pending settlement(s):\n\n";
 foreach ($pendingSettlements as $settlement) {
     $createdAt = Carbon::parse($settlement->created_at);
     $now = Carbon::now();
-    $delayMinutes = floatval($settlement->settlement_delay);
+    
+    // Use custom delay if enabled, otherwise use global setting
+    $delayHours = $settlement->custom_settlement_enabled && $settlement->custom_settlement_delay_hours !== null
+        ? floatval($settlement->custom_settlement_delay_hours)
+        : floatval($settlement->settlement_delay_hours);
+    
+    $delayMinutes = $delayHours * 60;
     $eligibleAt = $createdAt->copy()->addMinutes($delayMinutes);
     
     $minutesWaited = $now->diffInMinutes($createdAt, false);
@@ -50,7 +58,7 @@ foreach ($pendingSettlements as $settlement) {
     echo "\n";
     echo "⏰ TIMING:\n";
     echo "  Created: {$createdAt->format('Y-m-d H:i:s')} ({$createdAt->diffForHumans()})\n";
-    echo "  Delay Setting: {$delayMinutes} minutes\n";
+    echo "  Delay Setting: {$delayHours} hours ({$delayMinutes} minutes)\n";
     echo "  Eligible At: {$eligibleAt->format('Y-m-d H:i:s')} ({$eligibleAt->diffForHumans()})\n";
     echo "  Current Time: {$now->format('Y-m-d H:i:s')}\n";
     echo "\n";
@@ -71,7 +79,10 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 // Summary
 $readyCount = $pendingSettlements->filter(function($s) {
     $createdAt = Carbon::parse($s->created_at);
-    $delayMinutes = floatval($s->settlement_delay);
+    $delayHours = $s->custom_settlement_enabled && $s->custom_settlement_delay_hours !== null
+        ? floatval($s->custom_settlement_delay_hours)
+        : floatval($s->settlement_delay_hours);
+    $delayMinutes = $delayHours * 60;
     $eligibleAt = $createdAt->copy()->addMinutes($delayMinutes);
     return Carbon::now()->gte($eligibleAt);
 })->count();
