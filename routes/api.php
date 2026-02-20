@@ -372,11 +372,15 @@ Route::get('system/all/cable/trans/habukhan/{id}/secure', [Trans::class, 'AllCab
 Route::get('system/all/bill/trans/habukhan/{id}/secure', [Trans::class, 'AllBillHistoryUser']);
 Route::get('system/all/result/trans/habukhan/{id}/secure', [Trans::class, 'AllResultHistoryUser']);
 
-// Transaction actions (refund, resend notification)
+// Transaction actions (refund, resend notification, receipt generation)
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('transactions/{id}/refund', [App\Http\Controllers\API\TransactionController::class, 'initiateRefund']);
     Route::post('transactions/{id}/resend-notification', [App\Http\Controllers\API\TransactionController::class, 'resendNotification']);
+    Route::post('transactions/{id}/receipt', [App\Http\Controllers\API\TransactionController::class, 'generateReceipt']);
 });
+
+// Admin receipt generation
+Route::post('admin/transactions/{id}/receipt', [AdminTrans::class, 'generateReceipt']);
 
 // Fix: Missing route for "Adex" history calls (maps to AllHistoryUser)
 Route::get('system/all/history/adex/{id}/secure', [Trans::class, 'AllHistoryUser']);

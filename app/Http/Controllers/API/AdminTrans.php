@@ -2110,3 +2110,24 @@ class AdminTrans extends Controller
         return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
     }
 }
+
+    /**
+     * Generate receipt for any transaction (admin only)
+     */
+    public function generateReceipt(Request $request, $id)
+    {
+        try {
+            $transaction = \App\Models\Transaction::with('company')->findOrFail($id);
+            
+            $receiptService = new \App\Services\ReceiptService();
+            return $receiptService->generateReceipt($transaction);
+            
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Admin receipt generation failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate receipt. Please try again.',
+                'error_code' => 'PDF_GENERATION_FAILED'
+            ], 500);
+        }
+    }

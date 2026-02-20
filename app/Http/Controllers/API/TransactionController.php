@@ -320,3 +320,34 @@ class TransactionController extends Controller
         }
     }
 }
+
+    /**
+     * Generate receipt for a transaction
+     */
+    public function generateReceipt(Request $request, $id)
+    {
+        try {
+            $transaction = Transaction::with('company')->findOrFail($id);
+            
+            // Verify transaction belongs to user's company
+            $user = $request->user();
+            if ($transaction->company_id !== $user->active_company_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized access',
+                    'error_code' => 'FORBIDDEN'
+                ], 403);
+            }
+            
+            $receiptService = new \App\Services\ReceiptService();
+            return $receiptService->generateReceipt($transaction);
+            
+        } catch (\Exception $e) {
+            Log::error('Receipt generation failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to generate receipt. Please try again.',
+                'error_code' => 'PDF_GENERATION_FAILED'
+            ], 500);
+        }
+    }
