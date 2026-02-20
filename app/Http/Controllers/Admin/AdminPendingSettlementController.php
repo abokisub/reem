@@ -34,12 +34,13 @@ class AdminPendingSettlementController extends Controller
                 $endDate = $now;
             }
             
-            // Get all transactions for the period (regardless of settlement status)
-            // This allows admin to see what will be settled and force early settlement
+            // Get all VA deposits for the period (regardless of settlement status)
+            // This page is ONLY for VA deposits - when customers deposit money into company virtual accounts
+            // Settlement withdrawals and transfers are handled separately
             $allTransactions = DB::table('transactions')
                 ->join('companies', 'transactions.company_id', '=', 'companies.id')
                 ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
-                ->whereIn('transactions.transaction_type', ['va_deposit', 'settlement_withdrawal', 'transfer'])
+                ->where('transactions.transaction_type', 'va_deposit')
                 ->where('transactions.status', 'successful')
                 ->whereBetween('transactions.created_at', [$startDate, $endDate])
                 ->select(
@@ -51,9 +52,6 @@ class AdminPendingSettlementController extends Controller
                     'transactions.created_at',
                     'transactions.company_id',
                     'transactions.settlement_status',
-                    'transactions.transaction_type',
-                    'transactions.recipient_account_name',
-                    'transactions.recipient_account_number',
                     'companies.name as company_name',
                     'companies.email as company_email',
                     'virtual_accounts.palmpay_account_number as va_account_number',
@@ -164,9 +162,11 @@ class AdminPendingSettlementController extends Controller
                 $endDate = $now;
             }
             
-            // Get pending settlements
+            // Get pending VA deposits only
+            // This page is ONLY for VA deposits - when customers deposit money into company virtual accounts
+            // Settlement withdrawals are automatically settled when processed
             $pendingTransactions = DB::table('transactions')
-                ->whereIn('transaction_type', ['va_deposit', 'settlement_withdrawal', 'transfer'])
+                ->where('transaction_type', 'va_deposit')
                 ->where('status', 'successful')
                 ->where('settlement_status', 'unsettled')
                 ->whereBetween('created_at', [$startDate, $endDate])
