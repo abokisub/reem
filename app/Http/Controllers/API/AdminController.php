@@ -3859,11 +3859,16 @@ class AdminController extends Controller
             if ($check_user->count() > 0) {
                 $updateData = [];
 
-                // Pay with Transfer (Funding with Bank Transfer)
+                // Pay with Transfer (Funding with Bank Transfer - VA Deposits)
                 if ($request->has('transfer_type')) {
                     $updateData['transfer_charge_type'] = $request->transfer_type;
                     $updateData['transfer_charge_value'] = $request->transfer_value ?? 0;
                     $updateData['transfer_charge_cap'] = $request->transfer_cap ?? 0;
+                    
+                    // Also update virtual_funding (used by FeeService for VA deposits)
+                    $updateData['virtual_funding_type'] = $request->transfer_type;
+                    $updateData['virtual_funding_value'] = $request->transfer_value ?? 0;
+                    $updateData['virtual_funding_cap'] = $request->transfer_cap ?? 0;
                 }
 
                 // Pay with Wallet (Internal Transfer)
