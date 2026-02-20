@@ -70,8 +70,18 @@ class Transaction extends Model
                 $transaction->transaction_ref = self::generateTransactionRef();
             }
             
-            // Calculate net_amount automatically
-            $transaction->net_amount = $transaction->amount - ($transaction->fee ?? 0);
+            // Calculate net_amount automatically based on transaction type
+            // For CREDIT (deposits): net_amount = amount - fee (what company receives after fee)
+            // For DEBIT (withdrawals/transfers): net_amount = amount (what recipient receives, fee is separate)
+            if (!isset($transaction->net_amount)) {
+                if ($transaction->type === 'credit') {
+                    // Deposit: Company receives amount minus fee
+                    $transaction->net_amount = $transaction->amount - ($transaction->fee ?? 0);
+                } else {
+                    // Withdrawal/Transfer: Recipient receives the full amount, fee is added to total
+                    $transaction->net_amount = $transaction->amount;
+                }
+            }
             
             // Set default settlement_status based on type and status
             if (!$transaction->settlement_status && $transaction->transaction_type && $transaction->status) {
