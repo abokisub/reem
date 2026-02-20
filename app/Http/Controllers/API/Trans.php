@@ -432,21 +432,34 @@ class Trans extends Controller
                 }
 
                 $search = strtolower($request->search);
-                $query = DB::table('transactions')
-                    ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
-                    ->leftJoin('settlement_queue', 'transactions.id', '=', 'settlement_queue.transaction_id')
-                    ->where('transactions.company_id', $user->active_company_id);
+                
+                // Use Eloquent with eager loading for relationships
+                $query = \App\Models\Transaction::query()
+                    ->with(['company', 'customer', 'virtualAccount'])
+                    ->where('company_id', $user->active_company_id);
 
+                // Filter to customer-facing transaction types only
+                if (!empty($request->transaction_type)) {
+                    $query->where('transaction_type', $request->transaction_type);
+                } else {
+                    // Default: show only customer-facing types
+                    $query->whereIn('transaction_type', ['va_deposit', 'api_transfer', 'company_withdrawal', 'refund']);
+                }
+
+                // Apply search filters
                 if (!empty($search)) {
                     $query->where(function ($q) use ($search) {
-                        $q->orWhere('transactions.amount', 'LIKE', "%$search%")
-                            ->orWhere('transactions.created_at', 'LIKE', "%$search%")
-                            ->orWhere('transactions.reference', 'LIKE', "%$search%")
-                            ->orWhere('transactions.description', 'LIKE', "%$search%")
-                            ->orWhere('transactions.status', 'LIKE', "%$search%");
+                        $q->where('amount', 'LIKE', "%$search%")
+                            ->orWhere('created_at', 'LIKE', "%$search%")
+                            ->orWhere('reference', 'LIKE', "%$search%")
+                            ->orWhere('transaction_ref', 'LIKE', "%$search%")
+                            ->orWhere('session_id', 'LIKE', "%$search%")
+                            ->orWhere('description', 'LIKE', "%$search%")
+                            ->orWhere('status', 'LIKE', "%$search%");
                     });
                 }
 
+                // Apply status filter
                 if ($request->status != 'ALL') {
                     $statusMap = [
                         'active' => 'success',
@@ -454,34 +467,58 @@ class Trans extends Controller
                         'pending' => 'pending'
                     ];
                     $dbStatus = $statusMap[strtolower($request->status)] ?? $request->status;
-                    $query->where('transactions.status', $dbStatus);
+                    $query->where('status', $dbStatus);
                 }
 
-                // Map new schema columns to legacy frontend expectations
-                $transactions = $query->select(
-                    'transactions.*',
-                    'transactions.reference as transid',
-                    'transactions.created_at as date',
-                    'transactions.description as details',
-                    'transactions.fee as charges',
-                    'transactions.balance_before as oldbal',
-                    'transactions.balance_after as newbal',
-                    'virtual_accounts.account_name as va_account_name',
-                    'virtual_accounts.account_number as va_account_number',
-                    'settlement_queue.status as settlement_status',
-                    DB::raw("CASE WHEN transactions.status = 'success' THEN 'successful' WHEN transactions.status = 'failed' THEN 'failed' ELSE 'processing' END as status")
-                )
+                // Apply additional filters from spec
+                if (!empty($request->session_id)) {
+                    $query->where('session_id', $request->session_id);
+                }
 
-                    ->orderBy('transactions.id', 'desc')
-                    ->paginate($request->limit);
+                if (!empty($request->transaction_ref)) {
+                    $query->where('transaction_ref', $request->transaction_ref);
+                }
 
-                // Extract customer info based on transaction type
-                foreach ($transactions as $transaction) {
-                    $metadata = json_decode($transaction->metadata, true);
+                if (!empty($request->customer_id)) {
+                    $query->where('company_user_id', $request->customer_id);
+                }
+
+                if (!empty($request->date_from)) {
+                    $query->where('created_at', '>=', $request->date_from);
+                }
+
+                if (!empty($request->date_to)) {
+                    $query->where('created_at', '<=', $request->date_to);
+                }
+
+                // Order by created_at DESC (as per spec)
+                $query->orderBy('created_at', 'desc');
+
+                // Paginate with default 50 per page
+                $perPage = $request->limit ?? 50;
+                $transactions = $query->paginate($perPage);
+
+                // Transform data for frontend compatibility
+                $transactions->getCollection()->transform(function ($transaction) {
+                    // Map new schema columns to legacy frontend expectations
+                    $transaction->transid = $transaction->reference;
+                    $transaction->date = $transaction->created_at;
+                    $transaction->details = $transaction->description ?? '';
+                    $transaction->charges = $transaction->fee ?? 0;
+                    $transaction->oldbal = $transaction->balance_before ?? 0;
+                    $transaction->newbal = $transaction->balance_after ?? 0;
+
+                    // Use transactions.settlement_status directly (not from settlement_queue)
+                    $transaction->settlement_status = $transaction->settlement_status ?? 'unsettled';
+
+                    // Extract customer info based on transaction type
+                    $metadata = is_array($transaction->metadata) ? $transaction->metadata : json_decode($transaction->metadata, true);
                     
                     // For credit transactions (deposits), show sender info
-                    if ($transaction->type === 'credit') {
-                        $transaction->customer_name = $metadata['sender_name'] ?? $transaction->va_account_name ?? 'Unknown';
+                    if ($transaction->type === 'credit' || $transaction->transaction_type === 'va_deposit') {
+                        $transaction->customer_name = $metadata['sender_name'] ?? 
+                            ($transaction->virtualAccount ? $transaction->virtualAccount->account_name : null) ?? 
+                            'Unknown';
                         $transaction->customer_account = $metadata['sender_account'] ?? '';
                         $transaction->customer_bank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
                     } 
@@ -492,9 +529,17 @@ class Trans extends Controller
                         $transaction->customer_bank = $transaction->recipient_bank_name ?? '';
                     }
                     
+                    // Ensure no N/A values - use empty string or 0 instead
+                    $transaction->customer_name = $transaction->customer_name ?: '';
+                    $transaction->customer_account = $transaction->customer_account ?: '';
+                    $transaction->customer_bank = $transaction->customer_bank ?: '';
+                    $transaction->details = $transaction->details ?: '';
+                    
                     // Keep metadata as object for frontend access
                     $transaction->metadata = $metadata;
-                }
+
+                    return $transaction;
+                });
 
                 return response()->json([
                     'ra_trans' => $transactions

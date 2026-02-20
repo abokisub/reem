@@ -209,7 +209,7 @@ This implementation plan transforms the transaction management system from an in
     - Paginate results (50 per page default)
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 4.7, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6.2, 6.3_
   
-  - [-] 8.2 Create RADashboardController for customer-facing transactions
+  - [x] 8.2 Create RADashboardController for customer-facing transactions
     - Implement transactions() method filtering to 4 customer-facing types only
     - Apply filters: session_id, transaction_ref, customer_id, date_from, date_to
     - Apply company_id filter from authenticated user
@@ -223,7 +223,7 @@ This implementation plan transforms the transaction management system from an in
     - Test that all returned transactions have customer-facing types only
     - Test that all returned transactions match authenticated company_id
   
-  - [ ] 8.4 Create AdminTransactionController for all transactions
+  - [x] 8.4 Create AdminTransactionController for all transactions
     - Implement index() method with filters: company_id, transaction_type, status, session_id, transaction_ref, provider_reference
     - Include all 7 transaction types without filtering
     - Eager load company and customer relationships

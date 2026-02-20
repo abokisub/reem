@@ -754,6 +754,11 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
     Route::apiResource('customers', App\Http\Controllers\Admin\CustomerController::class)->only(['index', 'show', 'destroy']);
     Route::get('customers/{id}/transactions', [App\Http\Controllers\Admin\CustomerController::class, 'transactions']);
 
+    // Transaction Management (All 7 transaction types)
+    Route::prefix('transactions')->group(function () {
+        Route::get('/', [App\Http\Controllers\Admin\AdminTransactionController::class, 'index']);
+        Route::get('/{identifier}', [App\Http\Controllers\Admin\AdminTransactionController::class, 'show']);
+    });
 
     // Admin Notifications
     Route::prefix('notifications')->group(function () {
