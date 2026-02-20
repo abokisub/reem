@@ -223,6 +223,26 @@ export default function RATransactionDetails() {
     const fee = transaction.charges || transaction.fee || 0;
     const netAmount = transaction.net_amount || (transaction.amount - fee);
     
+    // Format date to Nigerian time and format
+    const formatNigerianDate = (dateStr) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return '';
+        
+        // Convert to Nigerian time (WAT - UTC+1)
+        const options = {
+            timeZone: 'Africa/Lagos',
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        };
+        
+        return d.toLocaleString('en-NG', options) + ' WAT';
+    };
+    
     const isRefundable = statusText === 'SUCCESSFUL' && !transaction.is_refunded;
 
     return (
@@ -304,7 +324,7 @@ export default function RATransactionDetails() {
                         <SectionTitle>Transaction Info</SectionTitle>
                         <DetailRow>
                             <Typography variant="body2" color="text.secondary">Date</Typography>
-                            <ValueText variant="body2">{transaction.date || transaction.created_at}</ValueText>
+                            <ValueText variant="body2">{formatNigerianDate(transaction.date || transaction.created_at)}</ValueText>
                         </DetailRow>
                         <DetailRow>
                             <Typography variant="body2" color="text.secondary">Type</Typography>
