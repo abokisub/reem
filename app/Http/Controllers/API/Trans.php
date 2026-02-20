@@ -563,18 +563,24 @@ class Trans extends Controller
                         $transaction->customer_account = $transaction->recipient_account_number ?? '';
                         $transaction->customer_bank = $transaction->recipient_bank_name ?? '';
                         
-                        // Add company settlement account for sender details (CRITICAL FIX for settlement withdrawals)
+                        // PROFESSIONAL STANDARD FOR SETTLEMENT WITHDRAWALS:
+                        // SENDER = Company's Virtual Account (master wallet where money is held)
+                        // RECIPIENT = Settlement account OR external transfer account (where money goes)
                         if ($transaction->company) {
-                            $transaction->company_account_number = $transaction->company->settlement_account_number 
+                            // Sender: Company's Virtual Account (master wallet)
+                            $transaction->company_virtual_account_number = $transaction->company->palmpay_account_number 
                                 ?: $transaction->company->account_number 
                                 ?: '';
-                            $transaction->company_bank_name = $transaction->company->settlement_bank_name 
-                                ?: $transaction->company->bank_name 
+                            $transaction->company_virtual_account_name = $transaction->company->palmpay_account_name 
+                                ?: $transaction->company->name 
+                                ?: '';
+                            $transaction->company_virtual_bank_name = $transaction->company->palmpay_bank_name 
                                 ?: 'PalmPay';
                             $transaction->company_name = $transaction->company->name ?? '';
                         } else {
-                            $transaction->company_account_number = '';
-                            $transaction->company_bank_name = 'PalmPay';
+                            $transaction->company_virtual_account_number = '';
+                            $transaction->company_virtual_account_name = '';
+                            $transaction->company_virtual_bank_name = 'PalmPay';
                             $transaction->company_name = '';
                         }
                     }
