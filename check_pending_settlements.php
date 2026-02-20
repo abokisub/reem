@@ -17,7 +17,7 @@ $pendingSettlements = DB::table('settlement_queue')
     ->where('settlement_queue.status', 'pending')
     ->select(
         'settlement_queue.*',
-        'companies.business_name',
+        'companies.name as company_name',
         'settings.settlement_delay'
     )
     ->orderBy('settlement_queue.created_at', 'asc')
@@ -43,7 +43,7 @@ foreach ($pendingSettlements as $settlement) {
     
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n";
     echo "Settlement ID: {$settlement->id}\n";
-    echo "Company: {$settlement->business_name}\n";
+    echo "Company: {$settlement->company_name}\n";
     echo "Amount: ₦" . number_format($settlement->amount, 2) . "\n";
     echo "Transaction ID: {$settlement->transaction_id}\n";
     echo "Status: {$settlement->status}\n";
