@@ -26,17 +26,23 @@ class ReceiptService
         // Determine if this is a credit (deposit) or debit (transfer/withdrawal) transaction
         $isCredit = $transaction->type === 'credit' || $transaction->transaction_type === 'va_deposit';
         
-        // Get customer/sender/recipient details based on transaction type
+        // Get sender details (who sent the money)
+        $senderName = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? '';
+        $senderAccount = $metadata['sender_account'] ?? '';
+        $senderBank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+        
+        // Get recipient details based on transaction type
         if ($isCredit) {
-            // For deposits: show sender information
-            $customerName = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? '';
-            $customerAccount = $metadata['sender_account'] ?? '';
-            $customerBank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+            // For deposits: recipient is the virtual account that received the money
+            $virtualAccount = $transaction->company->virtualAccounts()->first();
+            $recipientName = $virtualAccount->account_name ?? '';
+            $recipientAccount = $virtualAccount->account_number ?? '';
+            $recipientBank = $virtualAccount->bank_name ?? 'PalmPay';
         } else {
-            // For transfers/withdrawals: show recipient information
-            $customerName = $transaction->recipient_account_name ?? '';
-            $customerAccount = $transaction->recipient_account_number ?? '';
-            $customerBank = $transaction->recipient_bank_name ?? '';
+            // For transfers/withdrawals: recipient is from transaction fields
+            $recipientName = $transaction->recipient_account_name ?? '';
+            $recipientAccount = $transaction->recipient_account_number ?? '';
+            $recipientBank = $transaction->recipient_bank_name ?? '';
         }
         
         // Get company information
@@ -54,10 +60,15 @@ class ReceiptService
             'date' => date('d/m/Y H:i:s', strtotime($transaction->created_at)) . ' WAT',
             'status' => ucfirst($transaction->status),
             'type' => $this->getTransactionTypeLabel($transaction),
-            'customer' => [
-                'name' => $customerName ?: '-',
-                'account' => $customerAccount ?: '-',
-                'bank' => $customerBank ?: '-',
+            'sender' => [
+                'name' => $senderName ?: '-',
+                'account' => $senderAccount ?: '-',
+                'bank' => $senderBank ?: '-',
+            ],
+            'recipient' => [
+                'name' => $recipientName ?: '-',
+                'account' => $recipientAccount ?: '-',
+                'bank' => $recipientBank ?: '-',
             ],
             'company' => [
                 'name' => $companyName ?: '-',

@@ -62,18 +62,34 @@
     </div>
 
     <div class="section">
-        <div class="section-title">{{ $is_credit ? 'SENDER DETAILS' : 'RECIPIENT DETAILS' }}</div>
+        <div class="section-title">SENDER DETAILS</div>
         <div class="row">
             <span class="label">Name:</span>
-            <span class="value">{{ $customer['name'] }}</span>
+            <span class="value">{{ $sender['name'] }}</span>
         </div>
         <div class="row">
             <span class="label">Account Number:</span>
-            <span class="value">{{ $customer['account'] }}</span>
+            <span class="value">{{ $sender['account'] }}</span>
         </div>
         <div class="row">
             <span class="label">Bank:</span>
-            <span class="value">{{ $customer['bank'] }}</span>
+            <span class="value">{{ $sender['bank'] }}</span>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">RECIPIENT DETAILS</div>
+        <div class="row">
+            <span class="label">Account Name:</span>
+            <span class="value">{{ $recipient['name'] }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Account Number:</span>
+            <span class="value">{{ $recipient['account'] }}</span>
+        </div>
+        <div class="row">
+            <span class="label">Bank:</span>
+            <span class="value">{{ $recipient['bank'] }}</span>
         </div>
     </div>
 
