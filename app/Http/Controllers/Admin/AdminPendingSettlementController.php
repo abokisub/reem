@@ -59,6 +59,14 @@ class AdminPendingSettlementController extends Controller
                 ->orderBy('transactions.created_at', 'desc')
                 ->get();
             
+            // Convert settlement_status NULL to 'unsettled' for consistency
+            $allTransactions = $allTransactions->map(function($tx) {
+                if (empty($tx->settlement_status)) {
+                    $tx->settlement_status = 'unsettled';
+                }
+                return $tx;
+            });
+            
             // Separate into settled and unsettled
             $pendingSettlements = $allTransactions->where('settlement_status', 'unsettled');
             $settledTransactions = $allTransactions->where('settlement_status', 'settled');
@@ -181,19 +189,23 @@ class AdminPendingSettlementController extends Controller
                     // Calculate total net amount for this company
                     $companyNetAmount = $transactions->sum('net_amount');
                     
-                    // Get company current balance
-                    $company = DB::table('companies')->where('id', $companyId)->first();
+                    // Get company wallet (not just company record)
+                    $wallet = DB::table('company_wallets')
+                        ->where('company_id', $companyId)
+                        ->where('currency', 'NGN')
+                        ->first();
                     
-                    if (!$company) {
-                        $errors[] = "Company ID {$companyId} not found";
+                    if (!$wallet) {
+                        $errors[] = "Wallet not found for company ID {$companyId}";
                         continue;
                     }
                     
-                    // Update company balance
-                    $newBalance = $company->balance + $companyNetAmount;
+                    // Update company wallet balance
+                    $newBalance = $wallet->balance + $companyNetAmount;
                     
-                    DB::table('companies')
-                        ->where('id', $companyId)
+                    DB::table('company_wallets')
+                        ->where('company_id', $companyId)
+                        ->where('currency', 'NGN')
                         ->update([
                             'balance' => $newBalance,
                             'updated_at' => now()
@@ -206,18 +218,25 @@ class AdminPendingSettlementController extends Controller
                         ->whereIn('id', $transactionIds)
                         ->update([
                             'settlement_status' => 'settled',
-                            'settled_at' => now(),
                             'updated_at' => now()
                         ]);
+                    
+                    // Remove from settlement queue
+                    DB::table('settlement_queue')
+                        ->whereIn('transaction_id', $transactionIds)
+                        ->delete();
                     
                     $processedCount += count($transactionIds);
                     $totalAmount += $companyNetAmount;
                     
+                    // Get company name for logging
+                    $company = DB::table('companies')->where('id', $companyId)->first();
+                    
                     Log::info("Manual settlement processed for company {$companyId}", [
-                        'company_name' => $company->company_name,
+                        'company_name' => $company->name ?? 'Unknown',
                         'transaction_count' => count($transactionIds),
                         'net_amount' => $companyNetAmount,
-                        'old_balance' => $company->balance,
+                        'old_balance' => $wallet->balance,
                         'new_balance' => $newBalance,
                         'admin_user' => auth()->user()->email ?? 'unknown'
                     ]);
