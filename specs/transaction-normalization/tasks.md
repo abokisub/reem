@@ -69,7 +69,7 @@ This implementation plan transforms the transaction management system from an in
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 3. Validation layer implementation
-  - [ ] 3.1 Create TransactionValidator class
+  - [x] 3.1 Create TransactionValidator class
     - Implement validate() method checking required fields, enum values, amount constraints, foreign keys
     - Implement generateDefaults() method for session_id, transaction_ref, fee, net_amount, settlement_status
     - Implement generateTransactionRef() private method
@@ -108,27 +108,27 @@ This implementation plan transforms the transaction management system from an in
     - _Requirements: 1.6, 1.7, 7.3, 7.5_
 
 - [ ] 4. Transaction model updates
-  - [ ] 4.1 Update Transaction model with new fillable fields
+  - [x] 4.1 Update Transaction model with new fillable fields
     - Add all new fields to $fillable array
     - Update $casts for decimal and datetime fields
     - Add metadata JSON casting
     - _Requirements: 1.1, 1.2, 13.3, 13.4_
   
-  - [ ] 4.2 Implement Transaction model boot method
+  - [x] 4.2 Implement Transaction model boot method
     - Auto-generate session_id if not provided (sess_ + UUID)
     - Auto-generate transaction_ref if not provided
     - Calculate net_amount automatically
     - Set default settlement_status based on type and status
     - _Requirements: 1.3, 1.4, 1.6, 1.7, 7.3, 7.5_
   
-  - [ ] 4.3 Add Transaction model scopes
+  - [x] 4.3 Add Transaction model scopes
     - customerFacing() scope: filter to 4 customer-facing types
     - internal() scope: filter to 3 internal types
     - settled() scope: filter to settlement_status = 'settled'
     - unsettled() scope: filter to settlement_status = 'unsettled'
     - _Requirements: 4.1, 4.3, 7.1, 7.2_
   
-  - [ ] 4.4 Add Transaction model relationships
+  - [x] 4.4 Add Transaction model relationships
     - company() belongsTo relationship
     - customer() belongsTo relationship
     - virtualAccount() belongsTo relationship
@@ -142,7 +142,7 @@ This implementation plan transforms the transaction management system from an in
     - _Requirements: 1.3, 1.4, 1.6, 1.7, 4.1, 7.3_
 
 - [ ] 5. Create TransactionStatusLog model
-  - [ ] 5.1 Create TransactionStatusLog model class
+  - [x] 5.1 Create TransactionStatusLog model class
     - Define fillable fields: transaction_id, old_status, new_status, source, metadata, changed_at
     - Add metadata JSON casting
     - Add changed_at datetime casting
@@ -162,7 +162,7 @@ This implementation plan transforms the transaction management system from an in
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 7. Status reconciliation service implementation
-  - [ ] 7.1 Create TransactionReconciliationService class
+  - [x] 7.1 Create TransactionReconciliationService class
     - Implement reconcileFromWebhook() method to process provider webhooks
     - Implement mapProviderStatus() method to convert provider status to system status
     - Implement updateTransactionStatus() method with atomic DB transaction
@@ -194,7 +194,7 @@ This implementation plan transforms the transaction management system from an in
     - Test retry logic for provider API failures
     - _Requirements: 3.5, 3.8, 10.1, 10.2, 10.3, 10.4, 15.1, 15.2_
   
-  - [ ] 7.6 Create scheduled reconciliation command
+  - [x] 7.6 Create scheduled reconciliation command
     - Create Artisan command ProcessTransactionReconciliation
     - Schedule to run every 5 minutes via cron
     - Add logging for reconciliation results
@@ -209,7 +209,7 @@ This implementation plan transforms the transaction management system from an in
     - Paginate results (50 per page default)
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 4.7, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6.2, 6.3_
   
-  - [ ] 8.2 Create RADashboardController for customer-facing transactions
+  - [-] 8.2 Create RADashboardController for customer-facing transactions
     - Implement transactions() method filtering to 4 customer-facing types only
     - Apply filters: session_id, transaction_ref, customer_id, date_from, date_to
     - Apply company_id filter from authenticated user
