@@ -18,9 +18,9 @@ class TransferController extends Controller
 {
     private TransferService $transferService;
 
-    public function __construct()
+    public function __construct(TransferService $transferService)
     {
-        $this->transferService = new TransferService();
+        $this->transferService = $transferService;
     }
 
     /**
