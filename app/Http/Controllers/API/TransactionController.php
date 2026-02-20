@@ -319,7 +319,6 @@ class TransactionController extends Controller
             ], 500);
         }
     }
-}
 
     /**
      * Generate receipt for a transaction
