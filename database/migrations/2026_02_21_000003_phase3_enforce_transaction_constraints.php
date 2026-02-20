@@ -31,74 +31,74 @@ return new class extends Migration
         // Pre-flight check: Verify all transactions have required fields populated
         $this->verifyDataIntegrity();
         
-        DB::transaction(function () {
-            Log::info('Phase 3 Migration: Enforcing transaction constraints');
-            
-            // Step 1: Make session_id NOT NULL
-            Log::info('Phase 3: Making session_id NOT NULL');
+        // Note: ALTER TABLE statements in MySQL are implicitly committed
+        // So we don't wrap them in a transaction
+        Log::info('Phase 3 Migration: Enforcing transaction constraints');
+        
+        // Step 1: Make session_id NOT NULL
+        Log::info('Phase 3: Making session_id NOT NULL');
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN session_id VARCHAR(255) NOT NULL
+        ");
+        
+        // Step 2: Make transaction_ref NOT NULL and add UNIQUE constraint
+        Log::info('Phase 3: Making transaction_ref NOT NULL and UNIQUE');
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN transaction_ref VARCHAR(255) NOT NULL
+        ");
+        
+        // Add unique constraint on transaction_ref if it doesn't exist
+        if (!$this->constraintExists('transactions', 'transactions_transaction_ref_unique')) {
+            Schema::table('transactions', function (Blueprint $table) {
+                $table->unique('transaction_ref', 'transactions_transaction_ref_unique');
+            });
+        }
+        
+        // Step 3: Make transaction_type NOT NULL
+        Log::info('Phase 3: Making transaction_type NOT NULL');
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN transaction_type ENUM(
+                'va_deposit',
+                'company_withdrawal',
+                'api_transfer',
+                'kyc_charge',
+                'refund',
+                'fee_charge',
+                'manual_adjustment'
+            ) NOT NULL
+        ");
+        
+        // Step 4: Make settlement_status NOT NULL with default
+        Log::info('Phase 3: Making settlement_status NOT NULL');
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN settlement_status ENUM(
+                'settled',
+                'unsettled',
+                'not_applicable'
+            ) NOT NULL DEFAULT 'unsettled'
+        ");
+        
+        // Step 5: Make net_amount NOT NULL
+        Log::info('Phase 3: Making net_amount NOT NULL');
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN net_amount DECIMAL(15, 2) NOT NULL
+        ");
+        
+        // Step 6: Add CHECK constraint for amount > 0
+        Log::info('Phase 3: Adding CHECK constraint for amount > 0');
+        if (!$this->constraintExists('transactions', 'chk_amount_positive')) {
             DB::statement("
                 ALTER TABLE transactions 
-                MODIFY COLUMN session_id VARCHAR(255) NOT NULL
+                ADD CONSTRAINT chk_amount_positive CHECK (amount > 0)
             ");
-            
-            // Step 2: Make transaction_ref NOT NULL and add UNIQUE constraint
-            Log::info('Phase 3: Making transaction_ref NOT NULL and UNIQUE');
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN transaction_ref VARCHAR(255) NOT NULL
-            ");
-            
-            // Add unique constraint on transaction_ref if it doesn't exist
-            if (!$this->constraintExists('transactions', 'transactions_transaction_ref_unique')) {
-                Schema::table('transactions', function (Blueprint $table) {
-                    $table->unique('transaction_ref', 'transactions_transaction_ref_unique');
-                });
-            }
-            
-            // Step 3: Make transaction_type NOT NULL
-            Log::info('Phase 3: Making transaction_type NOT NULL');
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN transaction_type ENUM(
-                    'va_deposit',
-                    'company_withdrawal',
-                    'api_transfer',
-                    'kyc_charge',
-                    'refund',
-                    'fee_charge',
-                    'manual_adjustment'
-                ) NOT NULL
-            ");
-            
-            // Step 4: Make settlement_status NOT NULL with default
-            Log::info('Phase 3: Making settlement_status NOT NULL');
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN settlement_status ENUM(
-                    'settled',
-                    'unsettled',
-                    'not_applicable'
-                ) NOT NULL DEFAULT 'unsettled'
-            ");
-            
-            // Step 5: Make net_amount NOT NULL
-            Log::info('Phase 3: Making net_amount NOT NULL');
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN net_amount DECIMAL(15, 2) NOT NULL
-            ");
-            
-            // Step 6: Add CHECK constraint for amount > 0
-            Log::info('Phase 3: Adding CHECK constraint for amount > 0');
-            if (!$this->constraintExists('transactions', 'chk_amount_positive')) {
-                DB::statement("
-                    ALTER TABLE transactions 
-                    ADD CONSTRAINT chk_amount_positive CHECK (amount > 0)
-                ");
-            }
-            
-            Log::info('Phase 3 Migration: Constraints enforced successfully');
-        });
+        }
+        
+        Log::info('Phase 3 Migration: Constraints enforced successfully');
     }
 
     /**
@@ -108,64 +108,62 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::transaction(function () {
-            Log::info('Phase 3 Migration: Rolling back transaction constraints');
-            
-            // Remove CHECK constraint
-            if ($this->constraintExists('transactions', 'chk_amount_positive')) {
-                DB::statement("
-                    ALTER TABLE transactions 
-                    DROP CONSTRAINT chk_amount_positive
-                ");
-            }
-            
-            // Remove UNIQUE constraint on transaction_ref
+        Log::info('Phase 3 Migration: Rolling back transaction constraints');
+        
+        // Remove CHECK constraint
+        if ($this->constraintExists('transactions', 'chk_amount_positive')) {
+            DB::statement("
+                ALTER TABLE transactions 
+                DROP CONSTRAINT chk_amount_positive
+            ");
+        }
+        
+        // Remove UNIQUE constraint on transaction_ref
+        if ($this->constraintExists('transactions', 'transactions_transaction_ref_unique')) {
             Schema::table('transactions', function (Blueprint $table) {
-                if ($this->constraintExists('transactions', 'transactions_transaction_ref_unique')) {
-                    $table->dropUnique('transactions_transaction_ref_unique');
-                }
+                $table->dropUnique('transactions_transaction_ref_unique');
             });
-            
-            // Make columns nullable again
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN session_id VARCHAR(255) NULL
-            ");
-            
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN transaction_ref VARCHAR(255) NULL
-            ");
-            
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN transaction_type ENUM(
-                    'va_deposit',
-                    'company_withdrawal',
-                    'api_transfer',
-                    'kyc_charge',
-                    'refund',
-                    'fee_charge',
-                    'manual_adjustment'
-                ) NULL
-            ");
-            
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN settlement_status ENUM(
-                    'settled',
-                    'unsettled',
-                    'not_applicable'
-                ) NULL
-            ");
-            
-            DB::statement("
-                ALTER TABLE transactions 
-                MODIFY COLUMN net_amount DECIMAL(15, 2) NULL
-            ");
-            
-            Log::info('Phase 3 Migration: Rollback completed');
-        });
+        }
+        
+        // Make columns nullable again
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN session_id VARCHAR(255) NULL
+        ");
+        
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN transaction_ref VARCHAR(255) NULL
+        ");
+        
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN transaction_type ENUM(
+                'va_deposit',
+                'company_withdrawal',
+                'api_transfer',
+                'kyc_charge',
+                'refund',
+                'fee_charge',
+                'manual_adjustment'
+            ) NULL
+        ");
+        
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN settlement_status ENUM(
+                'settled',
+                'unsettled',
+                'not_applicable'
+            ) NULL
+        ");
+        
+        DB::statement("
+            ALTER TABLE transactions 
+            MODIFY COLUMN net_amount DECIMAL(15, 2) NULL
+        ");
+        
+        Log::info('Phase 3 Migration: Rollback completed');
     }
     
     /**
