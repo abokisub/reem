@@ -869,6 +869,11 @@ Route::middleware(['auth.token'])->prefix('admin')->group(function () {
     Route::get('/webhooks', [App\Http\Controllers\Admin\AdminWebhookController::class, 'index']);
     Route::get('/webhooks/{webhook}', [App\Http\Controllers\Admin\AdminWebhookController::class, 'show']);
     Route::post('/webhooks/{webhook}/retry', [App\Http\Controllers\Admin\AdminWebhookController::class, 'retry']);
+    
+    // PalmPay incoming webhook logs
+    Route::get('/palmpay-webhooks', [App\Http\Controllers\Admin\AdminPalmPayWebhookController::class, 'index']);
+    Route::get('/palmpay-webhooks/stats', [App\Http\Controllers\Admin\AdminPalmPayWebhookController::class, 'stats']);
+    Route::get('/palmpay-webhooks/{id}', [App\Http\Controllers\Admin\AdminPalmPayWebhookController::class, 'show']);
 });
 
 // Company webhook routes (sanitized view)
