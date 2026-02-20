@@ -35,9 +35,23 @@ class ReceiptService
         if ($isCredit) {
             // For deposits: recipient is the virtual account that received the money
             $virtualAccount = $transaction->company->virtualAccounts()->first();
-            $recipientName = $virtualAccount->account_name ?? '';
-            $recipientAccount = $virtualAccount->account_number ?? '';
-            $recipientBank = $virtualAccount->bank_name ?? 'PalmPay';
+            
+            if ($virtualAccount) {
+                // Handle both possible column name formats (palmpay_* or generic *)
+                $recipientName = $virtualAccount->palmpay_account_name 
+                    ?? $virtualAccount->account_name 
+                    ?? '';
+                $recipientAccount = $virtualAccount->palmpay_account_number 
+                    ?? $virtualAccount->account_number 
+                    ?? '';
+                $recipientBank = $virtualAccount->palmpay_bank_name 
+                    ?? $virtualAccount->bank_name 
+                    ?? 'PalmPay';
+            } else {
+                $recipientName = '';
+                $recipientAccount = '';
+                $recipientBank = '';
+            }
         } else {
             // For transfers/withdrawals: recipient is from transaction fields
             $recipientName = $transaction->recipient_account_name ?? '';
