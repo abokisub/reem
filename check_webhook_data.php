@@ -73,11 +73,11 @@ $webhooks = DB::select("
     SELECT 
         'outgoing' as direction,
         id,
-        event,
-        reference,
+        event_type as event,
+        CAST(transaction_id AS CHAR) as reference,
         NULL as amount,
         created_at,
-        url,
+        webhook_url as url,
         status
     FROM webhook_logs
     
