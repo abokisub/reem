@@ -56,7 +56,7 @@ class CompanyLogsController extends Controller
 
                 return response()->json([
                     'status' => 'success',
-                    'webhook_logs' => $logs
+                    'data' => $logs
                 ]);
             }
 
