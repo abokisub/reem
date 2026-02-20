@@ -232,6 +232,7 @@ class TransferPurchase extends Controller
                     'recipient_account_name' => $request->account_name,
                     'description' => $request->narration,
                     'status' => 'pending',
+                    'settlement_status' => $isSettlementWithdrawal ? 'settled' : 'unsettled',
                     'balance_before' => $old_balance,
                     'balance_after' => $new_wallet,
                     'metadata' => [

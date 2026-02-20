@@ -26,18 +26,33 @@ class ReceiptService
         // Determine if this is a credit (deposit) or debit (transfer/withdrawal) transaction
         $isCredit = $transaction->type === 'credit' || $transaction->transaction_type === 'va_deposit';
         
-        // Get sender details (who sent the money)
-        $senderName = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? '';
-        $senderAccount = $metadata['sender_account'] ?? '';
-        $senderBank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+        // Get company information
+        $company = $transaction->company;
+        $companyName = $company->company_name ?? $company->name ?? '';
+        $companyEmail = $company->email ?? '';
+        $companyUsername = $company->username ?? '';
         
-        // Get recipient details based on transaction type
-        if ($isCredit) {
-            // For deposits: recipient is the virtual account that received the money
+        // Get sender and recipient details based on transaction type
+        if ($transaction->transaction_type === 'settlement_withdrawal' || $transaction->transaction_type === 'company_withdrawal') {
+            // For settlement/company withdrawals: sender is the company's settlement account
+            $senderName = $companyName;
+            $senderAccount = $company->settlement_account_number ?? $company->account_number ?? '';
+            $senderBank = $company->settlement_bank_name ?? $company->bank_name ?? 'PalmPay';
+            
+            // Recipient is the external bank account
+            $recipientName = $transaction->recipient_account_name ?? $metadata['recipient_name'] ?? '';
+            $recipientAccount = $transaction->recipient_account_number ?? $metadata['recipient_account'] ?? '';
+            $recipientBank = $transaction->recipient_bank_name ?? $metadata['recipient_bank'] ?? '';
+        } elseif ($isCredit) {
+            // For deposits: sender is from metadata, recipient is the virtual account
+            $senderName = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? '';
+            $senderAccount = $metadata['sender_account'] ?? '';
+            $senderBank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+            
+            // Recipient is the virtual account that received the money
             $virtualAccount = $transaction->company->virtualAccounts()->first();
             
             if ($virtualAccount) {
-                // Handle both possible column name formats (palmpay_* or generic *)
                 $recipientName = $virtualAccount->palmpay_account_name 
                     ?? $virtualAccount->account_name 
                     ?? '';
@@ -53,17 +68,15 @@ class ReceiptService
                 $recipientBank = '';
             }
         } else {
-            // For transfers/withdrawals: recipient is from transaction fields
+            // For other transfers: sender is from metadata or company, recipient is from transaction
+            $senderName = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? $companyName;
+            $senderAccount = $metadata['sender_account'] ?? '';
+            $senderBank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
+            
             $recipientName = $transaction->recipient_account_name ?? '';
             $recipientAccount = $transaction->recipient_account_number ?? '';
             $recipientBank = $transaction->recipient_bank_name ?? '';
         }
-        
-        // Get company information
-        $company = $transaction->company;
-        $companyName = $company->company_name ?? $company->name ?? '';
-        $companyEmail = $company->email ?? '';
-        $companyUsername = $company->username ?? '';
         
         return [
             'receipt_number' => $this->generateReceiptNumber($transaction),
@@ -103,6 +116,7 @@ class ReceiptService
             'va_deposit' => 'Virtual Account Deposit',
             'api_transfer' => 'API Transfer',
             'company_withdrawal' => 'Company Withdrawal',
+            'settlement_withdrawal' => 'Settlement Withdrawal',
             'refund' => 'Refund',
             'fee_charge' => 'Fee Charge',
             'kyc_charge' => 'KYC Charge',

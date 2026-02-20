@@ -1192,6 +1192,12 @@ class AppController extends Controller
 
             return response()->json([
                 'status' => 'success',
+                'system' => [
+                    'name' => $general->app_name ?? 'Kobopoint',
+                    'email' => $general->app_email,
+                    'phone' => $general->app_phone,
+                    'address' => $general->app_address,
+                ],
                 'contact' => [
                     'phone' => $general->app_phone,
                     'email' => $general->app_email,
