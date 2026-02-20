@@ -39,7 +39,7 @@
         <div class="container">
             <h1>PointPay API Documentation</h1>
             <p>Enterprise Payment Gateway API - Version 1.0</p>
-            <p style="margin-top: 10px; font-size: 1rem;">Base URL: <code style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 3px;">https://app.pointwave.ng/api/v1</code></p>
+            <p style="margin-top: 10px; font-size: 1rem;">Base URL: <code style="background: rgba(255,255,255,0.2); padding: 5px 10px; border-radius: 3px;">https://app.pointwave.ng/api/gateway</code></p>
         </div>
     </header>
 
@@ -97,12 +97,12 @@
                 <tbody>
                     <tr>
                         <td>Production</td>
-                        <td><code>https://app.pointwave.ng/api/v1</code></td>
+                        <td><code>https://app.pointwave.ng/api/gateway</code></td>
                         <td>Live transactions with real money</td>
                     </tr>
                     <tr>
                         <td>Sandbox</td>
-                        <td><code>https://app.pointwave.ng/api/v1</code></td>
+                        <td><code>https://app.pointwave.ng/api/gateway</code></td>
                         <td>Testing with test credentials (2M NGN balance)</td>
                     </tr>
                 </tbody>
@@ -124,7 +124,7 @@ Idempotency-Key: unique-request-id (for POST/PUT)</code>
 
             <h3>Example Request</h3>
             <div class="code-block">
-                <code>curl -X POST https://app.pointwave.ng/api/v1/virtual-accounts \<br>
+                <code>curl -X POST https://app.pointwave.ng/api/gateway/virtual-accounts \<br>
   -H "Authorization: Bearer d8a3151a8993c157c1a4ee5ecda8983107004b1f..." \<br>
   -H "x-api-key: 7db8dbb3991382487a1fc388a05d96a7139d92ba" \<br>
   -H "x-business-id: 3450968aa027e86e3ff5b0169dc17edd7694a846" \<br>

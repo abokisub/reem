@@ -281,7 +281,7 @@
 
         <section class="section">
             <h2>Example: cURL</h2>
-            <div class="code-block"><code>curl -X POST https://app.pointwave.ng/api/v1/virtual-accounts \
+            <div class="code-block"><code>curl -X POST https://app.pointwave.ng/api/gateway/virtual-accounts \
   -H "Authorization: Bearer d8a3151a8993c157c1a4ee5ecda8983107004b1f..." \
   -H "x-business-id: 3450968aa027e86e3ff5b0169dc17edd7694a846" \
   -H "x-api-key: 7db8dbb3991382487a1fc388a05d96a7139d92ba" \
@@ -304,7 +304,7 @@ $businessId = '3450968aa027e86e3ff5b0169dc17edd7694a846';
 $apiKey = '7db8dbb3991382487a1fc388a05d96a7139d92ba';
 $secretKey = 'd8a3151a8993c157c1a4ee5ecda8983107004b1f...';
 
-$ch = curl_init('https://app.pointwave.ng/api/v1/virtual-accounts');
+$ch = curl_init('https://app.pointwave.ng/api/gateway/virtual-accounts');
 
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
@@ -345,7 +345,7 @@ const secretKey = 'd8a3151a8993c157c1a4ee5ecda8983107004b1f...';
 async function createVirtualAccount() {
   try {
     const response = await axios.post(
-      'https://app.pointwave.ng/api/v1/virtual-accounts',
+      'https://app.pointwave.ng/api/gateway/virtual-accounts',
       {
         first_name: 'John',
         last_name: 'Doe',

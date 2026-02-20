@@ -292,7 +292,7 @@
 
             <div class="endpoint">
                 <span class="method get">GET</span>
-                <code>/api/v1/banks</code>
+                <code>/api/gateway/banks</code>
             </div>
 
             <h3>Request</h3>
@@ -305,7 +305,7 @@
                 </div>
 
                 <div id="curl-banks" class="code-content">
-                    <pre><code class="language-bash">curl -X GET "https://app.pointwave.ng/api/v1/banks" \
+                    <pre><code class="language-bash">curl -X GET "https://app.pointwave.ng/api/gateway/banks" \
   -H "Authorization: Bearer YOUR_SECRET_KEY" \
   -H "x-api-key: YOUR_API_KEY" \
   -H "x-business-id: YOUR_BUSINESS_ID"</code></pre>
@@ -316,7 +316,7 @@
 $curl = curl_init();
 
 curl_setopt_array($curl, [
-    CURLOPT_URL => "https://app.pointwave.ng/api/v1/banks",
+    CURLOPT_URL => "https://app.pointwave.ng/api/gateway/banks",
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_HTTPHEADER => [
         "Authorization: Bearer YOUR_SECRET_KEY",
@@ -341,7 +341,7 @@ foreach ($banks['data'] as $bank) {
 
 const getBanks = async () => {
     try {
-        const response = await axios.get('https://app.pointwave.ng/api/v1/banks', {
+        const response = await axios.get('https://app.pointwave.ng/api/gateway/banks', {
             headers: {
                 'Authorization': 'Bearer YOUR_SECRET_KEY',
                 'x-api-key': 'YOUR_API_KEY',
@@ -362,7 +362,7 @@ getBanks();</code></pre>
                 <div id="python-banks" class="code-content" style="display:none;">
                     <pre><code class="language-python">import requests
 
-url = "https://app.pointwave.ng/api/v1/banks"
+url = "https://app.pointwave.ng/api/gateway/banks"
 headers = {
     "Authorization": "Bearer YOUR_SECRET_KEY",
     "x-api-key": "YOUR_API_KEY",
@@ -593,7 +593,7 @@ for bank in banks['data']:
             <pre><code class="language-javascript">// Fetch and populate banks
 async function loadBanks() {
     try {
-        const response = await fetch('https://app.pointwave.ng/api/v1/banks', {
+        const response = await fetch('https://app.pointwave.ng/api/gateway/banks', {
             headers: {
                 'Authorization': 'Bearer YOUR_SECRET_KEY',
                 'x-api-key': 'YOUR_API_KEY',
@@ -646,7 +646,7 @@ async function getCachedBanks() {
     }
     
     // Fetch fresh data
-    const response = await fetch('https://app.pointwave.ng/api/v1/banks', {
+    const response = await fetch('https://app.pointwave.ng/api/gateway/banks', {
         headers: {
             'Authorization': 'Bearer YOUR_SECRET_KEY',
             'x-api-key': 'YOUR_API_KEY',

@@ -1,6 +1,6 @@
 # PointPay API - Complete Integration Guide
 
-**Base URL:** `https://app.pointwave.ng/api/v1`  
+**Base URL:** `https://app.pointwave.ng/api/gateway`  
 **Provider:** PalmPay (All services)  
 **Documentation:** https://app.pointwave.ng/docs
 
@@ -24,7 +24,7 @@ Idempotency-Key: unique-request-id (for POST/PUT)
 
 ### 1. CREATE VIRTUAL ACCOUNT (Most Important)
 
-**Endpoint:** `POST /v1/virtual-accounts`
+**Endpoint:** `POST /gateway/virtual-accounts`
 
 **Purpose:** Create a PalmPay virtual account for a customer to receive payments
 
@@ -84,7 +84,7 @@ Idempotency-Key: unique-request-id (for POST/PUT)
 
 ### 2. INITIATE BANK TRANSFER
 
-**Endpoint:** `POST /v1/transfers`
+**Endpoint:** `POST /gateway/transfers`
 
 **Purpose:** Send money to any Nigerian bank account via PalmPay
 
@@ -135,7 +135,7 @@ Idempotency-Key: unique-request-id (for POST/PUT)
 
 ### 3. GET TRANSACTIONS
 
-**Endpoint:** `GET /v1/transactions`
+**Endpoint:** `GET /gateway/transactions`
 
 **Purpose:** Get all transactions (deposits, transfers, etc.)
 
@@ -149,7 +149,7 @@ Idempotency-Key: unique-request-id (for POST/PUT)
 
 **Request:**
 ```
-GET /v1/transactions?page=1&limit=50&type=deposit&status=successful
+GET /gateway/transactions?page=1&limit=50&type=deposit&status=successful
 ```
 
 **Response (200 OK):**
@@ -193,13 +193,13 @@ GET /v1/transactions?page=1&limit=50&type=deposit&status=successful
 
 ### 4. GET SINGLE TRANSACTION
 
-**Endpoint:** `GET /v1/transactions/{transaction_id}`
+**Endpoint:** `GET /gateway/transactions/{transaction_id}`
 
 **Purpose:** Get details of a specific transaction
 
 **Request:**
 ```
-GET /v1/transactions/TXN_ABC123
+GET /gateway/transactions/TXN_ABC123
 ```
 
 **Response (200 OK):**
@@ -233,13 +233,13 @@ GET /v1/transactions/TXN_ABC123
 
 ### 5. GET CUSTOMER DETAILS
 
-**Endpoint:** `GET /v1/customers/{customer_id}`
+**Endpoint:** `GET /gateway/customers/{customer_id}`
 
 **Purpose:** Get customer information
 
 **Request:**
 ```
-GET /v1/customers/1efdfc4845a7327bc9271ff0daafdae551d07524
+GET /gateway/customers/1efdfc4845a7327bc9271ff0daafdae551d07524
 ```
 
 **Response (200 OK):**
@@ -271,7 +271,7 @@ GET /v1/customers/1efdfc4845a7327bc9271ff0daafdae551d07524
 
 ### 6. UPDATE CUSTOMER
 
-**Endpoint:** `POST /v1/customers/{customer_id}`
+**Endpoint:** `POST /gateway/customers/{customer_id}`
 
 **Purpose:** Update customer information
 
@@ -304,7 +304,7 @@ GET /v1/customers/1efdfc4845a7327bc9271ff0daafdae551d07524
 
 ### 7. VERIFY BANK ACCOUNT
 
-**Endpoint:** `POST /v1/verify-account`
+**Endpoint:** `POST /gateway/verify-account`
 
 **Purpose:** Verify bank account name before transfer
 
@@ -335,13 +335,13 @@ GET /v1/customers/1efdfc4845a7327bc9271ff0daafdae551d07524
 
 ### 8. GET SUPPORTED BANKS
 
-**Endpoint:** `GET /v1/banks`
+**Endpoint:** `GET /gateway/banks`
 
 **Purpose:** Get list of all supported Nigerian banks
 
 **Request:**
 ```
-GET /v1/banks
+GET /gateway/banks
 ```
 
 **Response (200 OK):**
@@ -372,13 +372,13 @@ GET /v1/banks
 
 ### 9. GET WALLET BALANCE
 
-**Endpoint:** `GET /v1/wallet/balance`
+**Endpoint:** `GET /gateway/wallet/balance`
 
 **Purpose:** Get your current wallet balance
 
 **Request:**
 ```
-GET /v1/wallet/balance
+GET /gateway/wallet/balance
 ```
 
 **Response (200 OK):**
