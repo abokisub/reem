@@ -1,0 +1,21 @@
+#!/bin/bash
+
+echo "=== FIXING PUBLIC DOCS ACCESS ==="
+echo ""
+echo "The docs routes are already public in routes/web.php"
+echo "The issue is likely cached routes on the server"
+echo ""
+
+echo "On the server, run these commands:"
+echo ""
+echo "cd app.pointwave.ng"
+echo "php artisan route:clear"
+echo "php artisan cache:clear"
+echo "php artisan config:clear"
+echo "php artisan view:clear"
+echo ""
+echo "Then test accessing:"
+echo "  https://app.pointwave.ng/docs"
+echo ""
+echo "If still not working, check .htaccess or nginx config"
+echo ""
