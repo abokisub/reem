@@ -39,7 +39,7 @@
             <h1>Virtual Accounts</h1>
             <p>Create and manage PalmPay virtual accounts for your customers</p>
             <p style="margin-top: 10px; font-size: 0.95rem; opacity: 0.9;">
-                <strong>🏦 Provider:</strong> PalmPay | <strong>⏰ Settlement:</strong> T+1 (Next business day at 2:00 AM)
+                <strong>🏦 Provider:</strong> PalmPay | <strong>⏰ Settlement:</strong> T+1 (Next business day at 3:00 AM)
             </p>
         </div>
     </header>
