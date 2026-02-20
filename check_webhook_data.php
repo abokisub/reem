@@ -44,8 +44,8 @@ if ($outgoing->isEmpty()) {
     foreach ($outgoing as $webhook) {
         echo "ID: {$webhook->id}\n";
         echo "Company ID: {$webhook->company_id}\n";
-        echo "Event: {$webhook->event}\n";
-        echo "URL: {$webhook->url}\n";
+        echo "Event: {$webhook->event_type}\n";
+        echo "URL: {$webhook->webhook_url}\n";
         echo "Status: {$webhook->status}\n";
         echo "Created: {$webhook->created_at}\n";
         echo str_repeat("-", 80) . "\n";
