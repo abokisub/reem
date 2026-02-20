@@ -57,14 +57,17 @@ const MetricCard = styled(Card)(({ theme }) => ({
 }));
 
 const TABLE_HEAD = [
+    { id: 'transaction_ref', label: 'Transaction Ref', alignRight: false },
     { id: 'session_id', label: 'Session ID', alignRight: false },
+    { id: 'transaction_type', label: 'Transaction Type', alignRight: false },
     { id: 'company', label: 'Company', alignRight: false },
     { id: 'customer', label: 'Customer', alignRight: false },
     { id: 'amount', label: 'Amount (₦)', alignRight: false },
-    { id: 'date', label: 'Date', alignRight: false },
-    { id: 'type', label: 'Type', alignRight: false },
-    { id: 'charges', label: 'Charges', alignRight: false },
+    { id: 'fee', label: 'Fee (₦)', alignRight: false },
+    { id: 'net_amount', label: 'Net Amount (₦)', alignRight: false },
     { id: 'status', label: 'Status', alignRight: false },
+    { id: 'settlement', label: 'Settlement', alignRight: false },
+    { id: 'date', label: 'Date', alignRight: false },
     { id: 'actions', label: 'Actions', alignRight: true },
 ];
 
@@ -255,8 +258,14 @@ export default function AdminStatement() {
                                 <TableBody>
                                     {!load ? (
                                         transactions.map((row, index) => {
+                                            // Use new fields with fallback to legacy
+                                            const displayTransactionRef = row.transaction_ref || row.reference || '';
+                                            const displaySessionId = row.session_id || '';
+                                            const displayFee = row.fee !== undefined ? row.fee : (row.charges || 0);
+                                            const displayNetAmount = row.net_amount !== undefined ? row.net_amount : (row.amount - displayFee);
+                                            
                                             const formatDate = (dateStr) => {
-                                                if (!dateStr) return 'N/A';
+                                                if (!dateStr) return '';
                                                 const d = new Date(dateStr);
                                                 const day = String(d.getDate()).padStart(2, '0');
                                                 const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -267,8 +276,55 @@ export default function AdminStatement() {
                                                 return `${day}/${month}/${year} ${hours}:${minutes}:${seconds} WAT`;
                                             };
 
+                                            // Transaction type labels - ALL 7 types for admin
+                                            const typeLabels = {
+                                                'va_deposit': 'VA Deposit',
+                                                'api_transfer': 'Transfer',
+                                                'company_withdrawal': 'Withdrawal',
+                                                'refund': 'Refund',
+                                                'fee_charge': 'Fee Charge',
+                                                'kyc_charge': 'KYC Charge',
+                                                'manual_adjustment': 'Manual Adjustment'
+                                            };
+                                            const displayType = typeLabels[row.transaction_type] || (row.type || 'Transaction');
+
+                                            // Transaction type colors
+                                            const typeColors = {
+                                                'va_deposit': 'success',
+                                                'api_transfer': 'info',
+                                                'company_withdrawal': 'warning',
+                                                'refund': 'error',
+                                                'fee_charge': 'default',
+                                                'kyc_charge': 'secondary',
+                                                'manual_adjustment': 'primary'
+                                            };
+                                            const typeColor = typeColors[row.transaction_type] || (row.type === 'credit' ? 'success' : 'warning');
+
+                                            // Settlement status
+                                            let settlementText = 'Unsettled';
+                                            let settlementColor = 'warning';
+                                            
+                                            if (row.settlement_status === 'settled') {
+                                                settlementText = 'Settled';
+                                                settlementColor = 'success';
+                                            } else if (row.settlement_status === 'unsettled') {
+                                                settlementText = 'Unsettled';
+                                                settlementColor = 'warning';
+                                            } else if (row.settlement_status === 'not_applicable') {
+                                                settlementText = 'Not Applicable';
+                                                settlementColor = 'default';
+                                            } else if (row.settlement_status === 'failed') {
+                                                settlementText = 'Failed';
+                                                settlementColor = 'error';
+                                            }
+
+                                            const handleCopyTransactionRef = () => {
+                                                navigator.clipboard.writeText(displayTransactionRef);
+                                                enqueueSnackbar('Transaction reference copied', { variant: 'success' });
+                                            };
+
                                             const handleCopySessionId = () => {
-                                                navigator.clipboard.writeText(row.reference);
+                                                navigator.clipboard.writeText(displaySessionId);
                                                 enqueueSnackbar('Session ID copied', { variant: 'success' });
                                             };
 
@@ -285,7 +341,7 @@ export default function AdminStatement() {
                                                     const url = window.URL.createObjectURL(new Blob([response.data]));
                                                     const link = document.createElement('a');
                                                     link.href = url;
-                                                    link.setAttribute('download', `receipt-${row.reference}-${new Date().toISOString().split('T')[0]}.pdf`);
+                                                    link.setAttribute('download', `receipt-${displayTransactionRef}-${new Date().toISOString().split('T')[0]}.pdf`);
                                                     document.body.appendChild(link);
                                                     link.click();
                                                     link.remove();
@@ -298,24 +354,43 @@ export default function AdminStatement() {
                                             return (
                                                 <TableRow hover key={row.id || index}>
                                                     <TableCell>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                            <Typography variant="subtitle2" sx={{ fontWeight: 600, fontFamily: 'monospace' }}>
-                                                                {row.reference}
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="subtitle2" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                                                                {displayTransactionRef || '—'}
                                                             </Typography>
-                                                            <IconButton size="small" onClick={handleCopySessionId}>
-                                                                <Iconify icon="eva:copy-outline" width={16} />
-                                                            </IconButton>
+                                                            {displayTransactionRef && (
+                                                                <IconButton size="small" onClick={handleCopyTransactionRef}>
+                                                                    <Iconify icon="eva:copy-outline" width={14} />
+                                                                </IconButton>
+                                                            )}
                                                         </Box>
                                                     </TableCell>
                                                     <TableCell>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                                                                {displaySessionId || '—'}
+                                                            </Typography>
+                                                            {displaySessionId && (
+                                                                <IconButton size="small" onClick={handleCopySessionId}>
+                                                                    <Iconify icon="eva:copy-outline" width={14} />
+                                                                </IconButton>
+                                                            )}
+                                                        </Box>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Label color={typeColor} variant="soft" sx={{ fontSize: '0.7rem', fontWeight: 700 }}>
+                                                            {displayType}
+                                                        </Label>
+                                                    </TableCell>
+                                                    <TableCell>
                                                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                                            {row.company_name || 'N/A'}
+                                                            {row.company_name || '—'}
                                                         </Typography>
                                                     </TableCell>
                                                     <TableCell>
                                                         <Box>
                                                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                                                {row.customer_name || 'N/A'}
+                                                                {row.customer_name || '—'}
                                                             </Typography>
                                                             <Typography variant="caption" color="text.secondary">
                                                                 {row.customer_account_number || ''}
@@ -327,22 +402,40 @@ export default function AdminStatement() {
                                                             ₦{fCurrency(row.amount)}
                                                         </Typography>
                                                     </TableCell>
-                                                    <TableCell sx={{ whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                                                        {formatDate(row.created_at)}
+                                                    <TableCell>
+                                                        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                                                            ₦{fCurrency(displayFee)}
+                                                        </Typography>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Label color={row.type === 'credit' ? 'success' : 'warning'} variant="soft">
-                                                            {row.type}
-                                                        </Label>
+                                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main' }}>
+                                                            ₦{fCurrency(displayNetAmount)}
+                                                        </Typography>
                                                     </TableCell>
-                                                    <TableCell>₦{fCurrency(row.charges || 0)}</TableCell>
                                                     <TableCell>
                                                         <Label
                                                             variant="ghost"
-                                                            color={row.status === 'success' ? 'success' : row.status === 'failed' ? 'error' : 'warning'}
+                                                            color={row.status === 'success' || row.status === 'successful' ? 'success' : row.status === 'failed' ? 'error' : 'warning'}
+                                                            sx={{ fontSize: '0.7rem', fontWeight: 800 }}
                                                         >
                                                             {row.status}
                                                         </Label>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Box sx={{
+                                                                width: 8,
+                                                                height: 8,
+                                                                borderRadius: '50%',
+                                                                bgcolor: `${settlementColor}.main`
+                                                            }} />
+                                                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
+                                                                {settlementText}
+                                                            </Typography>
+                                                        </Box>
+                                                    </TableCell>
+                                                    <TableCell sx={{ whiteSpace: 'nowrap', fontSize: '0.8rem' }}>
+                                                        {formatDate(row.created_at) || '—'}
                                                     </TableCell>
                                                     <TableCell align="right">
                                                         <IconButton
@@ -358,14 +451,14 @@ export default function AdminStatement() {
                                         })
                                     ) : (
                                         <TableRow>
-                                            <TableCell colSpan={9} align="center" sx={{ py: 10 }}>
+                                            <TableCell colSpan={12} align="center" sx={{ py: 10 }}>
                                                 <CircularProgress />
                                             </TableCell>
                                         </TableRow>
                                     )}
                                     {!load && transactions.length === 0 && (
                                         <TableRow>
-                                            <TableCell colSpan={9} align="center" sx={{ py: 10 }}>
+                                            <TableCell colSpan={12} align="center" sx={{ py: 10 }}>
                                                 <SearchNotFound searchQuery={filterName} />
                                             </TableCell>
                                         </TableRow>

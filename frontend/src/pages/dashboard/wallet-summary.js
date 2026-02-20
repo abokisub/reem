@@ -46,13 +46,15 @@ import axios from '../../utils/axios';
 // ----------------------------------------------------------------------
 
 const TABLE_HEAD = [
+    { id: 'transaction_ref', label: 'Transaction Ref', alignRight: false },
     { id: 'session_id', label: 'Session ID', alignRight: false },
+    { id: 'transaction_type', label: 'Transaction Type', alignRight: false },
     { id: 'amount', label: 'Amount (₦)', alignRight: false },
-    { id: 'date', label: 'Date', alignRight: false },
-    { id: 'type', label: 'Type', alignRight: false },
+    { id: 'fee', label: 'Fee (₦)', alignRight: false },
+    { id: 'net_amount', label: 'Net Amount (₦)', alignRight: false },
     { id: 'status', label: 'Status', alignRight: false },
-    { id: 'oldbal', label: 'Old Balance', alignRight: false },
-    { id: 'newbal', label: 'New Balance', alignRight: false },
+    { id: 'settlement', label: 'Settlement', alignRight: false },
+    { id: 'date', label: 'Date', alignRight: false },
     { id: 'action', label: 'Actions', alignRight: true },
 ];
 
@@ -361,21 +363,36 @@ export default function WalletSummary() {
                                         {transactions.map((row, index) => {
                                             const {
                                                 id,
+                                                transaction_ref,
+                                                session_id,
+                                                transaction_type,
                                                 transid,
                                                 reference,
                                                 type,
                                                 amount,
+                                                fee,
+                                                charges,
+                                                net_amount,
                                                 oldbal,
                                                 newbal,
                                                 plan_date,
                                                 date,
+                                                created_at,
                                                 plan_status,
                                                 status,
+                                                settlement_status,
                                                 transType
                                             } = row;
 
+                                            // Use new fields with fallback to legacy
+                                            const displayTransactionRef = transaction_ref || transid || reference || '';
+                                            const displaySessionId = session_id || transid || reference || '';
+                                            const displayFee = fee !== undefined ? fee : (charges || 0);
+                                            const displayNetAmount = net_amount !== undefined ? net_amount : (amount - displayFee);
+                                            const displayDate = created_at || date || plan_date || '';
+
                                             const formatDate = (dateStr) => {
-                                                if (!dateStr) return 'N/A';
+                                                if (!dateStr) return '';
                                                 const d = new Date(dateStr);
                                                 const day = String(d.getDate()).padStart(2, '0');
                                                 const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -386,15 +403,31 @@ export default function WalletSummary() {
                                                 return `${day}/${month}/${year} ${hours}:${minutes}:${seconds} WAT`;
                                             };
 
+                                            // Transaction type labels
+                                            const typeLabels = {
+                                                'va_deposit': 'VA Deposit',
+                                                'api_transfer': 'Transfer',
+                                                'company_withdrawal': 'Withdrawal',
+                                                'refund': 'Refund'
+                                            };
+                                            const displayType = typeLabels[transaction_type] || (type || 'Transaction');
+
+                                            // Transaction type colors
+                                            const typeColors = {
+                                                'va_deposit': 'success',
+                                                'api_transfer': 'info',
+                                                'company_withdrawal': 'warning',
+                                                'refund': 'error'
+                                            };
+                                            const typeColor = typeColors[transaction_type] || (transType === 'deposit' ? 'success' : 'info');
+
                                             // Standardize status and color
                                             let statusText = 'pending';
                                             let statusColor = 'warning';
 
-                                            const displayStatus = transType === 'deposit' ? (plan_status || status) : status;
-                                            const displayDate = transType === 'deposit' ? (plan_date || date) : date;
-                                            const sessionId = transid || reference || 'N/A';
-
+                                            const displayStatus = status || plan_status;
                                             const currentStatus = displayStatus?.toString().toLowerCase();
+                                            
                                             if (['1', 'success', 'successful', 'completed'].includes(currentStatus)) {
                                                 statusText = 'successful';
                                                 statusColor = 'success';
@@ -404,10 +437,36 @@ export default function WalletSummary() {
                                             } else if (['0', 'processing'].includes(currentStatus)) {
                                                 statusText = 'processing';
                                                 statusColor = 'info';
+                                            } else if (['pending'].includes(currentStatus)) {
+                                                statusText = 'pending';
+                                                statusColor = 'warning';
                                             }
 
+                                            // Settlement status
+                                            let settlementText = 'Unsettled';
+                                            let settlementColor = 'warning';
+                                            
+                                            if (settlement_status === 'settled') {
+                                                settlementText = 'Settled';
+                                                settlementColor = 'success';
+                                            } else if (settlement_status === 'unsettled') {
+                                                settlementText = 'Unsettled';
+                                                settlementColor = 'warning';
+                                            } else if (settlement_status === 'not_applicable') {
+                                                settlementText = 'Not Applicable';
+                                                settlementColor = 'default';
+                                            } else if (settlement_status === 'failed') {
+                                                settlementText = 'Failed';
+                                                settlementColor = 'error';
+                                            }
+
+                                            const handleCopyTransactionRef = () => {
+                                                navigator.clipboard.writeText(displayTransactionRef);
+                                                enqueueSnackbar('Transaction reference copied', { variant: 'success' });
+                                            };
+
                                             const handleCopySessionId = () => {
-                                                navigator.clipboard.writeText(sessionId);
+                                                navigator.clipboard.writeText(displaySessionId);
                                                 enqueueSnackbar('Session ID copied', { variant: 'success' });
                                             };
 
@@ -424,7 +483,7 @@ export default function WalletSummary() {
                                                     const url = window.URL.createObjectURL(new Blob([response.data]));
                                                     const link = document.createElement('a');
                                                     link.href = url;
-                                                    link.setAttribute('download', `receipt-${sessionId}-${new Date().toISOString().split('T')[0]}.pdf`);
+                                                    link.setAttribute('download', `receipt-${displayTransactionRef}-${new Date().toISOString().split('T')[0]}.pdf`);
                                                     document.body.appendChild(link);
                                                     link.click();
                                                     link.remove();
@@ -435,43 +494,60 @@ export default function WalletSummary() {
                                             };
 
                                             return (
-                                                <TableRow hover key={sessionId + index}>
+                                                <TableRow hover key={displayTransactionRef + index}>
                                                     <TableCell>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                            <Typography variant="subtitle2" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
-                                                                {sessionId}
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="subtitle2" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                                                                {displayTransactionRef || '—'}
                                                             </Typography>
-                                                            <IconButton size="small" onClick={handleCopySessionId}>
-                                                                <Iconify icon="eva:copy-outline" width={16} />
-                                                            </IconButton>
+                                                            {displayTransactionRef && (
+                                                                <IconButton size="small" onClick={handleCopyTransactionRef}>
+                                                                    <Iconify icon="eva:copy-outline" width={14} />
+                                                                </IconButton>
+                                                            )}
                                                         </Box>
                                                     </TableCell>
-                                                    <TableCell align="left">
-                                                        <Typography
-                                                            variant="subtitle2"
-                                                            sx={{ fontWeight: 800 }}
-                                                            color={transType === 'deposit' ? 'success.main' : 'error.main'}
-                                                        >
-                                                            {transType === 'deposit' ? '+' : '-'}₦{fCurrency(amount)}
-                                                        </Typography>
-                                                    </TableCell>
-                                                    <TableCell align="left" sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.875rem' }}>
-                                                        {formatDate(displayDate)}
+                                                    <TableCell>
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                                                                {displaySessionId || '—'}
+                                                            </Typography>
+                                                            {displaySessionId && (
+                                                                <IconButton size="small" onClick={handleCopySessionId}>
+                                                                    <Iconify icon="eva:copy-outline" width={14} />
+                                                                </IconButton>
+                                                            )}
+                                                        </Box>
                                                     </TableCell>
                                                     <TableCell align="left">
                                                         <Label
                                                             variant="soft"
-                                                            color={transType === 'deposit' ? 'success' : 'info'}
+                                                            color={typeColor}
                                                             sx={{
-                                                                textTransform: 'uppercase',
-                                                                fontWeight: 800,
-                                                                px: 1.2,
-                                                                fontSize: '0.75rem',
+                                                                textTransform: 'capitalize',
+                                                                fontWeight: 700,
+                                                                px: 1,
+                                                                fontSize: '0.7rem',
                                                                 borderRadius: 0.75
                                                             }}
                                                         >
-                                                            {type}
+                                                            {displayType}
                                                         </Label>
+                                                    </TableCell>
+                                                    <TableCell align="left">
+                                                        <Typography
+                                                            variant="subtitle2"
+                                                            sx={{ fontWeight: 800, fontSize: '0.9rem' }}
+                                                            color={transType === 'deposit' || transaction_type === 'va_deposit' ? 'success.main' : 'error.main'}
+                                                        >
+                                                            {transType === 'deposit' || transaction_type === 'va_deposit' ? '+' : '-'}₦{fCurrency(amount)}
+                                                        </Typography>
+                                                    </TableCell>
+                                                    <TableCell align="left" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.85rem' }}>
+                                                        ₦{fCurrency(displayFee)}
+                                                    </TableCell>
+                                                    <TableCell align="left" sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.9rem' }}>
+                                                        ₦{fCurrency(displayNetAmount)}
                                                     </TableCell>
                                                     <TableCell align="left">
                                                         <Label
@@ -481,18 +557,28 @@ export default function WalletSummary() {
                                                                 textTransform: 'uppercase',
                                                                 fontWeight: 800,
                                                                 px: 1.2,
-                                                                fontSize: '0.75rem',
+                                                                fontSize: '0.7rem',
                                                                 borderRadius: 0.75
                                                             }}
                                                         >
                                                             {statusText}
                                                         </Label>
                                                     </TableCell>
-                                                    <TableCell align="left" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                                                        {oldbal && oldbal !== '0.00' ? `₦${fCurrency(oldbal)}` : '-'}
+                                                    <TableCell align="left">
+                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                                            <Box sx={{
+                                                                width: 8,
+                                                                height: 8,
+                                                                borderRadius: '50%',
+                                                                bgcolor: `${settlementColor}.main`
+                                                            }} />
+                                                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
+                                                                {settlementText}
+                                                            </Typography>
+                                                        </Box>
                                                     </TableCell>
-                                                    <TableCell align="left" sx={{ color: 'text.primary', fontWeight: 700 }}>
-                                                        {newbal && newbal !== '0.00' ? `₦${fCurrency(newbal)}` : '-'}
+                                                    <TableCell align="left" sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.8rem' }}>
+                                                        {formatDate(displayDate) || '—'}
                                                     </TableCell>
                                                     <TableCell align="right">
                                                         <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
@@ -500,8 +586,8 @@ export default function WalletSummary() {
                                                                 color="primary"
                                                                 onClick={() => {
                                                                     // Navigate to transaction details based on type
-                                                                    if (transType === 'deposit') {
-                                                                        window.location.href = `/dashboard/invoice/${transid}/deposit`;
+                                                                    if (transType === 'deposit' || transaction_type === 'va_deposit') {
+                                                                        window.location.href = `/dashboard/invoice/${displayTransactionRef}/deposit`;
                                                                     } else {
                                                                         enqueueSnackbar('Transaction details view coming soon', { variant: 'info' });
                                                                     }
@@ -534,7 +620,7 @@ export default function WalletSummary() {
                                 ) : (
                                     <TableBody>
                                         <TableRow>
-                                            <TableCell align="center" colSpan={8} sx={{ py: 8 }}>
+                                            <TableCell align="center" colSpan={10} sx={{ py: 8 }}>
                                                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>Loading transactions...</Typography>
                                             </TableCell>
                                         </TableRow>
@@ -544,7 +630,7 @@ export default function WalletSummary() {
                                 {isNotFound && (
                                     <TableBody>
                                         <TableRow>
-                                            <TableCell align="center" colSpan={8} sx={{ py: 8 }}>
+                                            <TableCell align="center" colSpan={10} sx={{ py: 8 }}>
                                                 <SearchNotFound searchQuery={filterName} />
                                             </TableCell>
                                         </TableRow>
