@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\API\AdminController;
+use App\Http\Controllers\Admin\AdminPendingSettlementController;
 use App\Http\Controllers\API\AdminTrans;
 use App\Http\Controllers\API\AppController;
 use Illuminate\Support\Facades\Route;
@@ -89,6 +90,10 @@ Route::get('secure/info', [AppController::class, 'getAppInfo']);
 Route::get('admin/support/open-tickets/{id}/secure', [SupportController::class, 'adminGetOpenTickets']);
 Route::post('admin/support/chat/{ticketId}/reply', [SupportController::class, 'adminReply'])->middleware('auth.token');
 Route::post('admin/support/ticket/{ticketId}/close', [SupportController::class, 'adminCloseTicket'])->middleware('auth.token');
+
+// Admin Pending Settlements Routes
+Route::get('admin/pending-settlements', [AdminPendingSettlementController::class, 'getPendingSettlements']);
+Route::post('admin/pending-settlements/process', [AdminPendingSettlementController::class, 'processSettlements']);
 
 // KYC Verification (Phase 2)
 Route::post('user/kyc/verify', [AuthController::class, 'verifyKyc'])->middleware(['auth.token', 'system.lock:kyc']);
