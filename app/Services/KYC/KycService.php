@@ -624,8 +624,10 @@ class KycService
 
                 // Create transaction record
                 $reference = 'KYC_' . strtoupper($serviceName) . '_' . time() . '_' . rand(1000, 9999);
+                $transactionId = 'txn_kyc_' . time() . '_' . rand(100000, 999999);
                 
-                $transactionId = DB::table('transactions')->insertGetId([
+                $id = DB::table('transactions')->insertGetId([
+                    'transaction_id' => $transactionId,
                     'company_id' => $companyId,
                     'reference' => $reference,
                     'type' => 'debit',
@@ -651,6 +653,7 @@ class KycService
                     'service_name' => $serviceName,
                     'amount' => $chargeAmount,
                     'transaction_id' => $transactionId,
+                    'id' => $id,
                     'reference' => $reference,
                 ]);
 
@@ -658,7 +661,7 @@ class KycService
                     'success' => true,
                     'message' => 'KYC charge deducted successfully',
                     'charge_amount' => $chargeAmount,
-                    'transaction_id' => $transactionId,
+                    'transaction_id' => $id,
                     'transaction_reference' => $reference,
                     'free_onboarding' => false,
                 ];
