@@ -28,53 +28,53 @@ class SetupKycCharges extends Command
         $kycCharges = [
             [
                 'service_name' => 'enhanced_bvn',
+                'display_name' => 'Enhanced BVN Verification',
                 'charge_value' => 100.00,
-                'description' => 'Enhanced BVN Verification (Full Details)'
             ],
             [
                 'service_name' => 'enhanced_nin',
+                'display_name' => 'Enhanced NIN Verification',
                 'charge_value' => 100.00,
-                'description' => 'Enhanced NIN Verification (Full Details)'
             ],
             [
                 'service_name' => 'basic_bvn',
+                'display_name' => 'Basic BVN Verification',
                 'charge_value' => 50.00,
-                'description' => 'Basic BVN Verification (Name Match Only)'
             ],
             [
                 'service_name' => 'basic_nin',
+                'display_name' => 'Basic NIN Verification',
                 'charge_value' => 50.00,
-                'description' => 'Basic NIN Verification (Name Match Only)'
             ],
             [
                 'service_name' => 'bank_account_verification',
+                'display_name' => 'Bank Account Verification',
                 'charge_value' => 50.00,
-                'description' => 'Bank Account Verification'
             ],
             [
                 'service_name' => 'face_recognition',
+                'display_name' => 'Face Recognition',
                 'charge_value' => 50.00,
-                'description' => 'Face Recognition (Compare Two Faces)'
             ],
             [
                 'service_name' => 'liveness_detection',
+                'display_name' => 'Liveness Detection',
                 'charge_value' => 100.00,
-                'description' => 'Liveness Detection (Anti-Spoofing)'
             ],
             [
                 'service_name' => 'blacklist_check',
+                'display_name' => 'Blacklist Check',
                 'charge_value' => 50.00,
-                'description' => 'Credit Blacklist Check'
             ],
             [
                 'service_name' => 'credit_score',
+                'display_name' => 'Credit Score Query',
                 'charge_value' => 100.00,
-                'description' => 'Credit Score Query'
             ],
             [
                 'service_name' => 'loan_features',
+                'display_name' => 'Loan Features Query',
                 'charge_value' => 50.00,
-                'description' => 'Loan Features Query'
             ],
         ];
 
@@ -111,9 +111,11 @@ class SetupKycCharges extends Command
                     'company_id' => 1, // Global default
                     'service_category' => 'kyc',
                     'service_name' => $charge['service_name'],
-                    'charge_type' => 'flat',
+                    'display_name' => $charge['display_name'],
+                    'charge_type' => 'FLAT',
                     'charge_value' => $charge['charge_value'],
                     'is_active' => true,
+                    'sort_order' => 0,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
