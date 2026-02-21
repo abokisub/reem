@@ -811,6 +811,10 @@ Route::prefix('v1')->group(function () {
 
         // Transfers (Payouts)
         Route::post('/transfers', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'initiateTransfer']);
+
+        // Banks & Balance
+        Route::get('/banks', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getBanks']);
+        Route::get('/balance', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getBalance']);
     });
 
     // Public Webhooks (Provider -> Pointwave)

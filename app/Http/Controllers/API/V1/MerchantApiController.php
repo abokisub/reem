@@ -368,6 +368,51 @@ class MerchantApiController extends Controller
         return $this->respond(true, 'Transactions retrieved', $transactions);
     }
 
+    /**
+     * GET /api/v1/banks
+     * Get list of all supported banks
+     */
+    public function getBanks(Request $request)
+    {
+        try {
+            $banks = DB::table('banks')
+                ->where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'slug', 'active']);
+
+            return $this->respond(true, 'Banks retrieved successfully', [
+                'banks' => $banks,
+                'total' => $banks->count()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Get Banks Error', ['error' => $e->getMessage()]);
+            return $this->respond(false, 'Failed to retrieve banks', [], 500);
+        }
+    }
+
+    /**
+     * GET /api/v1/balance
+     * Get company wallet balance
+     */
+    public function getBalance(Request $request, LedgerService $ledger)
+    {
+        try {
+            $company = $request->attributes->get('company');
+            
+            // Get wallet account
+            $wallet = $ledger->getOrCreateAccount($company->name . ' Wallet', 'company_wallet', $company->id);
+
+            return $this->respond(true, 'Balance retrieved successfully', [
+                'balance' => $wallet->balance,
+                'currency' => 'NGN',
+                'formatted_balance' => '₦' . number_format($wallet->balance, 2)
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Get Balance Error', ['error' => $e->getMessage()]);
+            return $this->respond(false, 'Failed to retrieve balance', [], 500);
+        }
+    }
+
     public function initiateTransfer(Request $request, LedgerService $ledger)
     {
         $company = $request->attributes->get('company');
@@ -558,11 +603,15 @@ class MerchantApiController extends Controller
         $perPage = min($request->get('per_page', 20), 100);
         $virtualAccounts = $query->orderBy('created_at', 'desc')->paginate($perPage);
 
+        // Format the virtual accounts - FIX: Use collection properly
+        $formattedVAs = [];
+        foreach ($virtualAccounts as $va) {
+            $formattedVAs[] = $this->formatVa($va);
+        }
+
         return $this->respond(true, 'Virtual accounts retrieved successfully', [
             'current_page' => $virtualAccounts->currentPage(),
-            'data' => $virtualAccounts->items()->map(function ($va) {
-                return $this->formatVa($va);
-            })->toArray(),
+            'data' => $formattedVAs,
             'total' => $virtualAccounts->total(),
             'per_page' => $virtualAccounts->perPage(),
             'last_page' => $virtualAccounts->lastPage()
@@ -599,36 +648,44 @@ class MerchantApiController extends Controller
      */
     public function deleteVirtualAccount(Request $request, $vaId)
     {
-        $company = $request->attributes->get('company');
+        try {
+            $company = $request->attributes->get('company');
 
-        // Try to find by UUID first, then by account_number
-        $virtualAccount = VirtualAccount::where('company_id', $company->id)
-            ->where(function($query) use ($vaId) {
-                $query->where('uuid', $vaId)
-                      ->orWhere('account_number', $vaId);
-            })
-            ->first();
+            // Try to find by UUID first, then by account_number
+            $virtualAccount = VirtualAccount::where('company_id', $company->id)
+                ->where(function($query) use ($vaId) {
+                    $query->where('uuid', $vaId)
+                          ->orWhere('account_number', $vaId);
+                })
+                ->first();
 
-        if (!$virtualAccount) {
-            return $this->respond(false, 'Virtual account not found', [], 404);
+            if (!$virtualAccount) {
+                return $this->respond(false, 'Virtual account not found', [], 404);
+            }
+
+            // Only static accounts can be deactivated
+            if ($virtualAccount->account_type === 'dynamic') {
+                return $this->respond(false, 'Dynamic virtual accounts cannot be deleted', [], 400);
+            }
+
+            // Update status to deactivated
+            $virtualAccount->update([
+                'status' => 'deactivated',
+                'deactivated_at' => now()
+            ]);
+
+            return $this->respond(true, 'Virtual account deleted successfully', [
+                'virtual_account_id' => $virtualAccount->uuid,
+                'account_number' => $virtualAccount->account_number,
+                'status' => 'deactivated',
+                'deleted_at' => now()->toIso8601String()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Delete Virtual Account Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->respond(false, 'Failed to delete virtual account: ' . $e->getMessage(), [], 500);
         }
-
-        // Only static accounts can be deactivated
-        if ($virtualAccount->account_type === 'dynamic') {
-            return $this->respond(false, 'Dynamic virtual accounts cannot be deleted', [], 400);
-        }
-
-        // Update status to deactivated
-        $virtualAccount->update([
-            'status' => 'deactivated',
-            'deactivated_at' => now()
-        ]);
-
-        return $this->respond(true, 'Virtual account deleted successfully', [
-            'virtual_account_id' => $virtualAccount->uuid,
-            'account_number' => $virtualAccount->account_number,
-            'status' => 'deactivated',
-            'deleted_at' => now()->toIso8601String()
-        ]);
     }
 }

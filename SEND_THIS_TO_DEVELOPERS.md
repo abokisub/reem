@@ -361,7 +361,79 @@ curl -X DELETE "https://app.pointwave.ng/api/v1/virtual-accounts/va_xyz789abc123
 
 ---
 
-### 🔟 Bank Transfer
+### 🔟 Get Banks List
+
+**Endpoint:** `GET /api/v1/banks`
+
+**Request:**
+```bash
+curl "https://app.pointwave.ng/api/v1/banks" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "x-business-id: YOUR_BUSINESS_ID"
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Banks retrieved successfully",
+  "data": {
+    "banks": [
+      {
+        "id": 1,
+        "name": "Access Bank",
+        "code": "044",
+        "slug": "access-bank",
+        "active": true
+      },
+      {
+        "id": 2,
+        "name": "GTBank",
+        "code": "058",
+        "slug": "gtbank",
+        "active": true
+      }
+    ],
+    "total": 24
+  }
+}
+```
+
+**Note:** Cache this list in your application to reduce API calls. The bank list rarely changes.
+
+---
+
+### 1️⃣1️⃣ Get Wallet Balance
+
+**Endpoint:** `GET /api/v1/balance`
+
+**Request:**
+```bash
+curl "https://app.pointwave.ng/api/v1/balance" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "x-business-id: YOUR_BUSINESS_ID"
+```
+
+**Success Response (200):**
+```json
+{
+  "status": "success",
+  "message": "Balance retrieved successfully",
+  "data": {
+    "balance": 50000.00,
+    "currency": "NGN",
+    "formatted_balance": "₦50,000.00"
+  }
+}
+```
+
+**Use Case:** Check wallet balance before initiating transfers to ensure sufficient funds.
+
+---
+
+### 1️⃣2️⃣ Bank Transfer
 
 **Endpoint:** `POST /api/v1/transfers`
 
@@ -401,7 +473,7 @@ curl -X DELETE "https://app.pointwave.ng/api/v1/virtual-accounts/va_xyz789abc123
 
 ---
 
-### 1️⃣1️⃣ Get Transactions
+### 1️⃣3️⃣ Get Transactions
 
 **Endpoint:** `GET /api/v1/transactions`
 
@@ -447,7 +519,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/transactions?page=1&per_page=20" \
 
 ## 🔐 KYC Endpoints
 
-### 1️⃣2️⃣ Get KYC Status
+### 1️⃣4️⃣ Get KYC Status
 
 **Endpoint:** `GET /api/v1/kyc/status`
 
@@ -483,7 +555,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/kyc/status" \
 
 ---
 
-### 1️⃣3️⃣ Submit KYC Section
+### 1️⃣5️⃣ Submit KYC Section
 
 **Endpoint:** `POST /api/v1/kyc/submit/{section}`
 
@@ -517,7 +589,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/kyc/status" \
 
 ---
 
-### 1️⃣4️⃣ Verify BVN
+### 1️⃣6️⃣ Verify BVN
 
 **Endpoint:** `POST /api/v1/kyc/verify-bvn`
 
@@ -547,7 +619,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/kyc/status" \
 
 ---
 
-### 1️⃣5️⃣ Verify NIN
+### 1️⃣7️⃣ Verify NIN
 
 **Endpoint:** `POST /api/v1/kyc/verify-nin`
 
@@ -577,7 +649,7 @@ curl -X GET "https://app.pointwave.ng/api/v1/kyc/status" \
 
 ---
 
-### 1️⃣6️⃣ Verify Bank Account
+### 1️⃣8️⃣ Verify Bank Account
 
 **Endpoint:** `POST /api/v1/kyc/verify-bank-account`
 

@@ -1,0 +1,56 @@
+========================================
+DEPLOY BUG FIXES - SIMPLE STEPS
+========================================
+
+✅ BUGS FIXED:
+--------------
+1. LIST Virtual Accounts - 500 error (map() issue) ✅
+2. GET Virtual Account - 404 error (now accepts UUID or account_number) ✅
+3. DELETE Virtual Account - ID format (now accepts UUID or account_number) ✅
+
+
+✅ STEP 1: PULL ON SERVER
+--------------------------
+cd /home/aboksdfs/app.pointwave.ng
+git pull origin main
+php artisan route:clear
+php artisan config:clear
+php artisan cache:clear
+
+
+✅ STEP 2: SEND TO KOBOPOINT
+-----------------------------
+Send this file: RESPONSE_TO_KOBOPOINT_BUGS.md
+
+Tell them:
+- All 3 bugs are fixed
+- GET and DELETE now accept both UUID and account_number
+- They can test again
+
+
+✅ WHAT WAS FIXED:
+------------------
+1. LIST endpoint: Added .toArray() to fix map() error
+2. GET endpoint: Now searches by UUID OR account_number
+3. DELETE endpoint: Now searches by UUID OR account_number
+
+
+✅ TESTING:
+-----------
+After deployment, Kobopoint can test:
+
+# LIST (should work now)
+GET /api/v1/virtual-accounts
+
+# GET with account number (should work now)
+GET /api/v1/virtual-accounts/9876543210
+
+# DELETE with account number (should work now)
+DELETE /api/v1/virtual-accounts/9876543210
+
+
+========================================
+DONE!
+========================================
+
+Pull on server → Send response to Kobopoint → They test again!
