@@ -26,7 +26,7 @@ PointWave provides comprehensive KYC (Know Your Customer) verification services 
 
 ### Key Features
 
-✅ **10 KYC Verification Services** - BVN, NIN, Bank Account, Face Recognition, Liveness Detection, Blacklist Check, Credit Score, and more  
+✅ **11 KYC Verification Services** - BVN, NIN, Bank Account, Face Recognition, Liveness Detection, Blacklist Check, Credit Score, Loan Features, and EaseID Balance  
 ✅ **Pay-As-You-Go Pricing** - Only pay for successful verifications  
 ✅ **Real-Time Verification** - Instant results from government databases  
 ✅ **Secure & Compliant** - Bank-grade security and NDPR compliant  
@@ -78,6 +78,7 @@ Content-Type: application/json
 | **Blacklist Check** | Credit blacklist status | Risk assessment |
 | **Credit Score** | Customer creditworthiness | Loan decisions |
 | **Loan Features** | Loan history and behavior | Lending decisions |
+| **EaseID Balance** | Check EaseID account balance | Monitoring |
 
 ---
 
@@ -98,6 +99,7 @@ All prices are in Nigerian Naira (₦) and charged per successful verification:
 | Blacklist Check | ₦50 | 2-4 seconds |
 | Credit Score Query | ₦100 | 3-5 seconds |
 | Loan Features Query | ₦50 | 2-4 seconds |
+| EaseID Balance Check | Free | 1-2 seconds |
 
 ### Billing
 
@@ -216,7 +218,7 @@ Verify NIN and get full customer details including photo.
 
 Verify bank account ownership and get account name.
 
-**Endpoint:** `POST /api/v1/banks/verify`
+**Endpoint:** `POST /api/v1/kyc/verify-bank-account`
 
 **Request:**
 ```json
@@ -441,7 +443,31 @@ Get customer loan history and behavior.
 
 ---
 
-### 9. Get Banks List
+### 10. Check EaseID Balance
+
+Check your EaseID account balance (for monitoring purposes).
+
+**Endpoint:** `GET /api/v1/kyc/easeid-balance`
+
+**Response:**
+```json
+{
+  "status": true,
+  "message": "EaseID balance retrieved successfully",
+  "data": {
+    "balance": 50000.00,
+    "currency": "NGN",
+    "formatted_balance": "₦50,000.00",
+    "last_updated": "2026-02-21T10:30:00Z"
+  }
+}
+```
+
+**Note:** This shows your EaseID provider balance, not your PointWave wallet balance.
+
+---
+
+### 11. Get Banks List
 
 Get list of all supported banks for account verification.
 
@@ -476,7 +502,7 @@ Get list of all supported banks for account verification.
 
 ---
 
-### 10. Get Wallet Balance
+### 12. Get Wallet Balance
 
 Check your PointWave wallet balance.
 
@@ -895,11 +921,13 @@ Sunday: Closed
 
 ### Version 1.0 (February 21, 2026)
 - ✅ Initial release
-- ✅ 10 KYC verification services
+- ✅ 11 KYC verification services
 - ✅ Enhanced BVN and NIN verification
 - ✅ Bank account verification
 - ✅ Face recognition and liveness detection
 - ✅ Credit score and blacklist check
+- ✅ Loan features query
+- ✅ EaseID balance monitoring
 - ✅ Sandbox mode for testing
 - ✅ Webhook support
 - ✅ Comprehensive error handling
