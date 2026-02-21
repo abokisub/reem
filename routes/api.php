@@ -815,6 +815,7 @@ Route::prefix('v1')->group(function () {
         // Banks & Balance
         Route::get('/banks', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getBanks']);
         Route::post('/banks/verify', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyBankAccountForTransfer']);
+        Route::post('/banks/transfer', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'initiateTransfer']);
         Route::get('/balance', [\App\Http\Controllers\API\V1\MerchantApiController::class, 'getBalance']);
     });
 
