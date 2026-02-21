@@ -375,18 +375,33 @@ class MerchantApiController extends Controller
     public function getBanks(Request $request)
     {
         try {
+            // Check if banks table exists and get banks
             $banks = DB::table('banks')
-                ->where('active', true)
+                ->where('active', 1)
                 ->orderBy('name')
-                ->get(['id', 'name', 'code', 'slug', 'active']);
+                ->get(['id', 'name', 'code', 'slug']);
+
+            // Format response
+            $formattedBanks = $banks->map(function($bank) {
+                return [
+                    'id' => $bank->id,
+                    'name' => $bank->name,
+                    'code' => $bank->code,
+                    'slug' => $bank->slug,
+                    'active' => true
+                ];
+            })->toArray();
 
             return $this->respond(true, 'Banks retrieved successfully', [
-                'banks' => $banks,
-                'total' => $banks->count()
+                'banks' => $formattedBanks,
+                'total' => count($formattedBanks)
             ]);
         } catch (\Exception $e) {
-            Log::error('Get Banks Error', ['error' => $e->getMessage()]);
-            return $this->respond(false, 'Failed to retrieve banks', [], 500);
+            Log::error('Get Banks Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->respond(false, 'Failed to retrieve banks: ' . $e->getMessage(), [], 500);
         }
     }
 
@@ -668,22 +683,21 @@ class MerchantApiController extends Controller
                 return $this->respond(false, 'Dynamic virtual accounts cannot be deleted', [], 400);
             }
 
-            // Update status to deactivated
-            $virtualAccount->update([
-                'status' => 'deactivated',
-                'deactivated_at' => now()
-            ]);
+            // Update status to inactive (common enum value)
+            $virtualAccount->status = 'inactive';
+            $virtualAccount->save();
 
             return $this->respond(true, 'Virtual account deleted successfully', [
                 'virtual_account_id' => $virtualAccount->uuid,
                 'account_number' => $virtualAccount->account_number,
-                'status' => 'deactivated',
+                'status' => 'inactive',
                 'deleted_at' => now()->toIso8601String()
             ]);
         } catch (\Exception $e) {
             Log::error('Delete Virtual Account Error', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
+                'va_id' => $vaId
             ]);
             return $this->respond(false, 'Failed to delete virtual account: ' . $e->getMessage(), [], 500);
         }
