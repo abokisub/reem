@@ -177,22 +177,26 @@ class EaseIdClient
 
             $responseData = $response->json();
 
+            // EaseID uses respCode and respMsg instead of success/message
+            $isSuccess = isset($responseData['respCode']) && $responseData['respCode'] === '00000000';
+            $message = $responseData['respMsg'] ?? $responseData['message'] ?? '';
+
             Log::info('EaseID API Response', [
                 'endpoint' => $endpoint,
                 'status' => $response->status(),
-                'success' => $responseData['success'] ?? false,
-                'message' => $responseData['message'] ?? '',
-                'code' => $responseData['code'] ?? null,
-                'full_response' => $responseData,
+                'respCode' => $responseData['respCode'] ?? null,
+                'respMsg' => $message,
+                'success' => $isSuccess,
+                'has_data' => isset($responseData['data']),
             ]);
 
             if (!$response->successful()) {
-                throw new Exception('EaseID API request failed: ' . ($responseData['message'] ?? 'Unknown error'));
+                throw new Exception('EaseID API request failed: ' . $message);
             }
 
             return [
-                'success' => $responseData['success'] ?? false,
-                'message' => $responseData['message'] ?? '',
+                'success' => $isSuccess,
+                'message' => $message,
                 'data' => $responseData['data'] ?? null,
                 'raw' => $responseData,
             ];
