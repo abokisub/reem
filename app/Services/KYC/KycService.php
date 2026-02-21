@@ -625,9 +625,11 @@ class KycService
                 // Create transaction record
                 $reference = 'KYC_' . strtoupper($serviceName) . '_' . time() . '_' . rand(1000, 9999);
                 $transactionId = 'txn_kyc_' . time() . '_' . rand(100000, 999999);
+                $sessionId = 'sess_kyc_' . time() . '_' . rand(100000, 999999);
                 
                 $id = DB::table('transactions')->insertGetId([
                     'transaction_id' => $transactionId,
+                    'session_id' => $sessionId,
                     'company_id' => $companyId,
                     'reference' => $reference,
                     'type' => 'debit',
@@ -635,6 +637,7 @@ class KycService
                     'amount' => $chargeAmount,
                     'fee' => 0,
                     'net_amount' => $chargeAmount,
+                    'total_amount' => $chargeAmount,
                     'balance_before' => $wallet->balance,
                     'balance_after' => $wallet->balance - $chargeAmount,
                     'status' => 'success',
@@ -653,6 +656,7 @@ class KycService
                     'service_name' => $serviceName,
                     'amount' => $chargeAmount,
                     'transaction_id' => $transactionId,
+                    'session_id' => $sessionId,
                     'id' => $id,
                     'reference' => $reference,
                 ]);
