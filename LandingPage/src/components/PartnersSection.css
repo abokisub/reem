@@ -47,9 +47,24 @@
 }
 
 .partner-logo {
-  font-size: 4rem;
+  height: 80px;
   margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   animation: float 3s ease-in-out infinite;
+}
+
+.partner-logo img {
+  max-height: 100%;
+  max-width: 180px;
+  object-fit: contain;
+  filter: grayscale(100%);
+  transition: filter 0.3s ease;
+}
+
+.partner-card:hover .partner-logo img {
+  filter: grayscale(0%);
 }
 
 .partner-name {
@@ -100,6 +115,6 @@
   }
 
   .partner-logo {
-    font-size: 3rem;
+    height: 60px;
   }
 }

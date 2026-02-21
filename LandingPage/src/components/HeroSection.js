@@ -25,24 +25,6 @@ const HeroSection = () => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.8 }}
           >
-            {/* Customer Badge */}
-            <div className="customer-badge">
-              <div className="customer-avatars">
-                {customerAvatars.map((avatar, index) => (
-                  <img 
-                    key={index} 
-                    src={avatar} 
-                    alt={`Customer ${index + 1}`}
-                    style={{ zIndex: customerAvatars.length - index }}
-                  />
-                ))}
-              </div>
-              <div className="customer-text">
-                <span>Join 5k+ Customers</span>
-                <button className="join-btn">Join today</button>
-              </div>
-            </div>
-
             <h1 className="hero-title">
               Effortless Payments and Secure Transactions— Built on{' '}
               <span className="gradient-text">trust</span>
@@ -84,19 +66,39 @@ const HeroSection = () => {
                 {/* Dashboard Content */}
                 <div className="mockup-content">
                   <div className="balance-card">
-                    <div className="balance-label"></div>
-                    <div className="balance-amount"></div>
+                    <div className="balance-label">Total Balance</div>
+                    <div className="balance-amount">₦2,450,000.00</div>
                     <div className="balance-actions">
-                      <div className="action-btn primary"></div>
-                      <div className="action-btn secondary"></div>
+                      <div className="action-btn primary">Send Money</div>
+                      <div className="action-btn secondary">Add Funds</div>
                     </div>
                   </div>
 
                   <div className="stats-grid">
-                    <div className="stat-card blue"></div>
-                    <div className="stat-card green"></div>
-                    <div className="stat-card teal"></div>
-                    <div className="stat-card orange"></div>
+                    <div className="stat-card blue">
+                      <div className="stat-content">
+                        <div className="stat-label">Transactions</div>
+                        <div className="stat-value">1,234</div>
+                      </div>
+                    </div>
+                    <div className="stat-card green">
+                      <div className="stat-content">
+                        <div className="stat-label">Revenue</div>
+                        <div className="stat-value">₦850K</div>
+                      </div>
+                    </div>
+                    <div className="stat-card teal">
+                      <div className="stat-content">
+                        <div className="stat-label">Customers</div>
+                        <div className="stat-value">5,678</div>
+                      </div>
+                    </div>
+                    <div className="stat-card orange">
+                      <div className="stat-content">
+                        <div className="stat-label">Growth</div>
+                        <div className="stat-value">+24%</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -107,10 +109,10 @@ const HeroSection = () => {
                 animate={{ y: [0, -20, 0] }}
                 transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
               >
-                <div className="card-icon green"></div>
+                <div className="card-icon green">💰</div>
                 <div className="card-text">
-                  <div className="card-title"></div>
-                  <div className="card-value"></div>
+                  <div className="card-title">Payment Received</div>
+                  <div className="card-value">+₦125,000</div>
                 </div>
               </motion.div>
 
@@ -119,10 +121,10 @@ const HeroSection = () => {
                 animate={{ y: [0, -15, 0] }}
                 transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
               >
-                <div className="card-icon blue"></div>
+                <div className="card-icon blue">📊</div>
                 <div className="card-text">
-                  <div className="card-title"></div>
-                  <div className="card-value"></div>
+                  <div className="card-title">New Customer</div>
+                  <div className="card-value">John Doe</div>
                 </div>
               </motion.div>
             </div>

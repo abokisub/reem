@@ -461,30 +461,39 @@ class MerchantApiController extends Controller
         if ($validator->fails())
             return $this->respond(false, $validator->errors()->first(), [], 422);
 
-        // Get payout charges from settings
+        // Get External Transfer (Other Banks) charges - same as dashboard
+        // This uses payout_bank_* settings (configured in /secure/discount/banks)
         $settings = DB::table('settings')->first();
-        $chargeType = $settings->payout_palmpay_charge_type ?? 'FLAT';
-        $chargeValue = $settings->payout_palmpay_charge_value ?? 15;
-        $chargeCap = $settings->payout_palmpay_charge_cap ?? null;
+        $chargeType = $settings->payout_bank_charge_type ?? 'FLAT';
+        $chargeValue = $settings->payout_bank_charge_value ?? 30;
+        $chargeCap = $settings->payout_bank_charge_cap ?? null;
         
-        // Calculate payout fee
-        $payoutFee = 0;
-        if ($chargeType === 'PERCENT') {
-            $payoutFee = ($request->amount * $chargeValue) / 100;
-            if ($chargeCap && $payoutFee > $chargeCap) {
-                $payoutFee = $chargeCap;
+        // Calculate transfer fee
+        $transferFee = 0;
+        if ($chargeType === 'PERCENT' || $chargeType === 'PERCENTAGE') {
+            $transferFee = ($request->amount * $chargeValue) / 100;
+            if ($chargeCap && $transferFee > $chargeCap) {
+                $transferFee = $chargeCap;
             }
         } else {
-            $payoutFee = $chargeValue;
+            $transferFee = $chargeValue;
         }
         
-        $totalDeduction = $request->amount + $payoutFee;
+        Log::info('Transfer Charge Calculation', [
+            'category' => 'External Transfer (Other Banks)',
+            'type' => $chargeType,
+            'flat_fee' => $chargeValue,
+            'amount' => $request->amount,
+            'final_charge' => $transferFee
+        ]);
+        
+        $totalDeduction = $request->amount + $transferFee;
 
         // Check balance
         $wallet = $ledger->getOrCreateAccount($company->name . ' Wallet', 'company_wallet', $company->id);
 
         if ($wallet->balance < $totalDeduction && !$isTest)
-            return $this->respond(false, 'Insufficient balance. Required: ' . $totalDeduction . ' (Amount: ' . $request->amount . ' + Fee: ' . $payoutFee . ')', [], 400);
+            return $this->respond(false, 'Insufficient balance. Required: ' . $totalDeduction . ' (Amount: ' . $request->amount . ' + Fee: ' . $transferFee . ')', [], 400);
 
         $internalRef = ($isTest ? 'TS_' : 'PWV_OUT_') . strtoupper(Str::random(10));
 
@@ -492,12 +501,12 @@ class MerchantApiController extends Controller
             if (!$isTest) {
                 // Deduct total amount (amount + fee) from wallet
                 $settlementClearing = $ledger->getOrCreateAccount('Settlement Clearing', 'settlement');
-                $ledger->recordEntry($internalRef, $wallet->id, $settlementClearing->id, $totalDeduction, "Payout Initialized (Amount: {$request->amount} + Fee: {$payoutFee})");
+                $ledger->recordEntry($internalRef, $wallet->id, $settlementClearing->id, $totalDeduction, "Payout Initialized (Amount: {$request->amount} + Fee: {$transferFee})");
 
                 // Record fee as revenue
-                if ($payoutFee > 0) {
+                if ($transferFee > 0) {
                     $revenueAccount = $ledger->getOrCreateAccount('Revenue', 'revenue');
-                    $ledger->recordEntry($internalRef . '-FEE', $wallet->id, $revenueAccount->id, $payoutFee, "Payout Fee");
+                    $ledger->recordEntry($internalRef . '-FEE', $wallet->id, $revenueAccount->id, $transferFee, "Transfer Fee");
                 }
 
                 $response = $this->palmPay->post('/transfer/v1/initiate', [
@@ -518,14 +527,14 @@ class MerchantApiController extends Controller
                 }
                 $totalProviderFee = $palmpayFee + $palmpayVat;
                 
-                Log::info('Company Payout - PalmPay Provider Fee', [
+                Log::info('Company Transfer - PalmPay Provider Fee', [
                     'company_id' => $company->id,
                     'reference' => $internalRef,
-                    'our_fee_charged' => $payoutFee,
+                    'our_fee_charged' => $transferFee,
                     'palmpay_fee' => $palmpayFee,
                     'palmpay_vat' => $palmpayVat,
                     'total_provider_fee' => $totalProviderFee,
-                    'net_profit' => $payoutFee - $totalProviderFee
+                    'net_profit' => $transferFee - $totalProviderFee
                 ]);
             } else {
                 // Mock Success for Sandbox
@@ -538,7 +547,7 @@ class MerchantApiController extends Controller
                 'company_id' => $company->id,
                 'reference' => $internalRef,
                 'amount' => $request->amount,
-                'fee' => $payoutFee,
+                'fee' => $transferFee,
                 'provider_fee' => $totalProviderFee ?? 0,
                 'total_amount' => $totalDeduction,
                 'type' => 'debit',
@@ -551,11 +560,11 @@ class MerchantApiController extends Controller
                 'recipient_bank_code' => $request->bank_code,
                 'is_test' => $isTest,
                 'metadata' => !$isTest ? [
-                    'payout_fee_charged' => $payoutFee,
+                    'transfer_fee_charged' => $transferFee,
                     'palmpay_provider_fee' => $palmpayFee ?? 0,
                     'palmpay_vat' => $palmpayVat ?? 0,
                     'total_provider_fee' => $totalProviderFee ?? 0,
-                    'net_profit' => $payoutFee - ($totalProviderFee ?? 0)
+                    'net_profit' => $transferFee - ($totalProviderFee ?? 0)
                 ] : null,
             ]);
 
@@ -563,7 +572,7 @@ class MerchantApiController extends Controller
                 'reference' => $internalRef,
                 'status' => 'successful',
                 'amount' => $request->amount,
-                'fee' => $payoutFee,
+                'fee' => $transferFee,
                 'total_deducted' => $totalDeduction
             ]);
         } catch (\Exception $e) {

@@ -109,6 +109,12 @@
   margin-bottom: 1rem;
 }
 
+.footer-logo .logo-image {
+  height: 50px;
+  width: auto;
+  object-fit: contain;
+}
+
 .footer-logo span {
   background: var(--gradient-primary);
   -webkit-background-clip: text;

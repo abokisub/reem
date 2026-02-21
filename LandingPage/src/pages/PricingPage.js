@@ -58,7 +58,7 @@ const PricingPage = () => {
   const fees = [
     {
       service: 'Virtual Account Creation',
-      fee: '0.5% (capped at ₦500)',
+      fee: '0.7% (capped at ₦700)',
       description: 'Per transaction received'
     },
     {

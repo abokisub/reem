@@ -46,6 +46,12 @@
   justify-content: center;
 }
 
+.logo-image {
+  height: 60px;
+  width: auto;
+  object-fit: contain;
+}
+
 .logo-text {
   background: var(--gradient-primary);
   -webkit-background-clip: text;
@@ -191,6 +197,10 @@
 }
 
 @media (max-width: 768px) {
+  .logo-image {
+    height: 35px;
+  }
+  
   .navbar-links,
   .navbar-cta {
     display: none;

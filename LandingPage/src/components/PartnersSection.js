@@ -1,22 +1,25 @@
 import React from 'react';
 import './PartnersSection.css';
+import palmpayLogo from '../assets/palmpay.png';
+import kobopointLogo from '../assets/kobopoint.png';
+import biaLogo from '../assets/bia.png';
 
 const PartnersSection = () => {
   const partners = [
     {
       name: 'PalmPay',
       description: 'Leading mobile payment platform',
-      logo: '🏦'
+      logo: palmpayLogo
     },
     {
-      name: '9PSB',
+      name: 'Kobopoint',
       description: 'Licensed Payment Service Bank',
-      logo: '🏛️'
+      logo: kobopointLogo
     },
     {
-      name: 'ADE',
-      description: 'Advanced Digital Exchange',
-      logo: '💳'
+      name: 'BIA',
+      description: 'Digital Transport Services',
+      logo: biaLogo
     }
   ];
 
@@ -37,7 +40,9 @@ const PartnersSection = () => {
               className="partner-card"
               style={{ animationDelay: `${index * 0.1}s` }}
             >
-              <div className="partner-logo">{partner.logo}</div>
+              <div className="partner-logo">
+                <img src={partner.logo} alt={partner.name} />
+              </div>
               <h3 className="partner-name">{partner.name}</h3>
               <p className="partner-description">{partner.description}</p>
             </div>

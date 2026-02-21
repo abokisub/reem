@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FaFacebook, FaTwitter, FaLinkedin, FaInstagram, FaWhatsapp } from 'react-icons/fa';
+import logo from '../assets/logo.png';
 import './Footer.css';
 
 const Footer = () => {
@@ -50,20 +51,7 @@ const Footer = () => {
             {/* Company Info */}
             <div className="footer-column">
               <div className="footer-logo">
-                <div className="logo-icon">
-                  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-                    <circle cx="16" cy="16" r="16" fill="url(#gradient)" />
-                    <path d="M16 8L20 12L16 16L12 12L16 8Z" fill="white" />
-                    <path d="M16 16L20 20L16 24L12 20L16 16Z" fill="white" opacity="0.7" />
-                    <defs>
-                      <linearGradient id="gradient" x1="0" y1="0" x2="32" y2="32">
-                        <stop offset="0%" stopColor="#10b981" />
-                        <stop offset="100%" stopColor="#3b82f6" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-                <span>PointWave</span>
+                <img src={logo} alt="PointWave Logo" className="logo-image" />
               </div>
               <p className="footer-description">
                 PointWave Digital Innovations - Effortless Payments and Secure Transactions Built on Trust.
