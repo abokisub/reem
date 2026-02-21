@@ -192,7 +192,7 @@ class TransferService
 
             Log::info('Processing PalmPay Transfer', ['transaction_id' => $transaction->transaction_id]);
 
-            $response = $this->client->post('/api/v2/payment/merchant/payout/transfer', $requestData);
+            $response = $this->client->post('/api/v2/merchant/payment/payout', $requestData);
 
             $palmpayReference = $response['data']['orderNo'] ?? null;
             $providerStatus = strtoupper($response['data']['orderStatus'] ?? 'UNKNOWN');
