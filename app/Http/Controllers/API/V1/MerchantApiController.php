@@ -804,7 +804,54 @@ class MerchantApiController extends Controller
     }
 
     /**
-     * Verify Bank Account
+     * Verify Bank Account (Name Inquiry for Transfers)
+     * POST /api/v1/banks/verify
+     * 
+     * This endpoint verifies bank account details before transfers.
+     * Returns account name for confirmation.
+     */
+    public function verifyBankAccountForTransfer(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'account_number' => 'required|string|size:10',
+            'bank_code' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            // Use PalmPay Account Verification Service
+            $verificationService = new \App\Services\PalmPay\AccountVerificationService();
+            $result = $verificationService->verifyAccount($request->account_number, $request->bank_code);
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'] ?? 'Account verification failed', [], 400);
+            }
+
+            // Get bank name
+            $bank = DB::table('banks')->where('code', $request->bank_code)->first();
+            $bankName = $bank ? $bank->name : 'Unknown Bank';
+
+            return $this->respond(true, 'Account verified successfully', [
+                'account_name' => $result['account_name'],
+                'account_number' => $result['account_number'],
+                'bank_code' => $result['bank_code'],
+                'bank_name' => $bankName
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Bank Account Verification Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->respond(false, 'Account verification failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Verify Bank Account (KYC Verification)
      * POST /api/v1/kyc/verify-bank-account
      */
     public function verifyBankAccount(Request $request)

@@ -404,7 +404,55 @@ curl "https://app.pointwave.ng/api/v1/banks" \
 
 ---
 
-### 1️⃣1️⃣ Get Wallet Balance
+### 1️⃣1️⃣ Verify Bank Account (Name Inquiry)
+
+**Endpoint:** `POST /api/v1/banks/verify`
+
+**Purpose:** Verify account details before making transfers. Returns account name for user confirmation.
+
+**Request:**
+```json
+{
+  "account_number": "7040540018",
+  "bank_code": "100004"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "status": true,
+  "message": "Account verified successfully",
+  "data": {
+    "account_name": "ABUBAKAR JAMAILU BASHIR",
+    "account_number": "7040540018",
+    "bank_code": "100004",
+    "bank_name": "OPay"
+  }
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "status": false,
+  "message": "Invalid account number or bank code"
+}
+```
+
+**Best Practice:**
+```javascript
+// Always verify account before transfer
+const verification = await verifyAccount(accountNumber, bankCode);
+if (verification.status) {
+  // Show user: "Transfer to {account_name}?"
+  // Then proceed with transfer
+}
+```
+
+---
+
+### 1️⃣2️⃣ Get Wallet Balance
 
 **Endpoint:** `GET /api/v1/balance`
 
@@ -433,7 +481,7 @@ curl "https://app.pointwave.ng/api/v1/balance" \
 
 ---
 
-### 1️⃣2️⃣ Bank Transfer
+### 1️⃣3️⃣ Bank Transfer
 
 **Endpoint:** `POST /api/v1/transfers`
 
@@ -1296,6 +1344,175 @@ if (!hash_equals($expectedSignature, $signature)) {
 $data = json_decode($payload, true);
 // Process webhook...
 http_response_code(200);
+```
+
+---
+
+## 🔍 KYC Verification Endpoints
+
+### 1️⃣4️⃣ Verify BVN (Enhanced)
+
+**Endpoint:** `POST /api/v1/kyc/verify-bvn`
+
+**Purpose:** Verify Bank Verification Number and retrieve detailed customer information.
+
+**Charging:**
+- **During Onboarding (Company KYC):** FREE
+- **After Activation (Customer Verification via API):** ₦100 per verification
+- **Cached Results:** FREE (no duplicate charges)
+
+**Request:**
+```json
+{
+  "bvn": "22222222222"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "BVN verified successfully",
+  "data": {
+    "bvn": "22222222222",
+    "first_name": "ABUBAKAR",
+    "last_name": "BASHIR",
+    "middle_name": "JAMAILU",
+    "date_of_birth": "1990-01-15",
+    "phone_number": "08012345678",
+    "gender": "Male",
+    "nationality": "Nigerian",
+    "state_of_origin": "Kano",
+    "lga_of_origin": "Nassarawa",
+    "residential_address": "123 Main Street, Lagos"
+  },
+  "charged": true,
+  "charge_amount": 100,
+  "transaction_reference": "KYC_ENHANCED_BVN_1708531200_1234"
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "success": false,
+  "message": "Insufficient balance. Required: ₦100.00, Available: ₦50.00"
+}
+```
+
+---
+
+### 1️⃣5️⃣ Verify NIN (Enhanced)
+
+**Endpoint:** `POST /api/v1/kyc/verify-nin`
+
+**Purpose:** Verify National Identification Number and retrieve detailed customer information.
+
+**Charging:**
+- **During Onboarding (Company KYC):** FREE
+- **After Activation (Customer Verification via API):** ₦100 per verification
+- **Cached Results:** FREE (no duplicate charges)
+
+**Request:**
+```json
+{
+  "nin": "12345678901"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "NIN verified successfully",
+  "data": {
+    "nin": "12345678901",
+    "first_name": "ABUBAKAR",
+    "last_name": "BASHIR",
+    "middle_name": "JAMAILU",
+    "date_of_birth": "1990-01-15",
+    "phone_number": "08012345678",
+    "gender": "Male",
+    "nationality": "Nigerian",
+    "state_of_origin": "Kano",
+    "lga_of_origin": "Nassarawa"
+  },
+  "charged": true,
+  "charge_amount": 100,
+  "transaction_reference": "KYC_ENHANCED_NIN_1708531200_5678"
+}
+```
+
+---
+
+### 1️⃣6️⃣ Verify Bank Account (KYC)
+
+**Endpoint:** `POST /api/v1/kyc/verify-bank-account`
+
+**Purpose:** Verify bank account ownership and retrieve account holder information.
+
+**Charging:**
+- **During Onboarding (Company KYC):** FREE
+- **After Activation (Customer Verification via API):** ₦50 per verification
+
+**Request:**
+```json
+{
+  "account_number": "0123456789",
+  "bank_code": "058"
+}
+```
+
+**Success Response (200):**
+```json
+{
+  "success": true,
+  "message": "Bank account verified successfully",
+  "data": {
+    "account_number": "0123456789",
+    "account_name": "ABUBAKAR JAMAILU BASHIR",
+    "bank_code": "058",
+    "bank_name": "GTBank"
+  },
+  "charged": true,
+  "charge_amount": 50,
+  "transaction_reference": "KYC_BANK_ACCOUNT_VERIFICATION_1708531200_9012"
+}
+```
+
+---
+
+### KYC Verification Best Practices
+
+1. **Cache Results:** Store verification results in your database to avoid duplicate charges
+2. **Check Balance:** Ensure sufficient wallet balance before verification
+3. **Handle Errors:** Show user-friendly messages for insufficient balance
+4. **Onboarding vs API:** Understand when charges apply (onboarding = free, API usage = charged)
+5. **Transaction Records:** All charged verifications create transaction records for audit
+
+**Example Implementation:**
+```javascript
+// Check if BVN already verified (cached)
+const existingVerification = await db.query(
+  'SELECT * FROM kyc_verifications WHERE bvn = ? AND company_id = ?',
+  [bvn, companyId]
+);
+
+if (existingVerification) {
+  // Use cached result - NO CHARGE
+  return existingVerification.data;
+}
+
+// Not cached - call API (will be charged if company is verified)
+const result = await pointwave.verifyBVN(bvn);
+
+// Cache the result
+await db.query(
+  'INSERT INTO kyc_verifications (bvn, company_id, data) VALUES (?, ?, ?)',
+  [bvn, companyId, JSON.stringify(result.data)]
+);
+
+return result.data;
 ```
 
 ---
