@@ -736,7 +736,7 @@ class MerchantApiController extends Controller
         }
 
         try {
-            $companyId = $request->attributes->get('company_id');
+            $companyId = $request->input('company_id'); // Get from request merge
             $kycService = app(\App\Services\KYC\KycService::class);
             
             $result = $kycService->verifyBVN($request->bvn, $companyId);
@@ -777,7 +777,7 @@ class MerchantApiController extends Controller
         }
 
         try {
-            $companyId = $request->attributes->get('company_id');
+            $companyId = $request->input('company_id'); // Get from request merge
             $kycService = app(\App\Services\KYC\KycService::class);
             
             $result = $kycService->verifyNIN($request->nin, $companyId);
