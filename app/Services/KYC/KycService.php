@@ -635,8 +635,8 @@ class KycService
                     'company_id' => $companyId,
                     'reference' => $reference,
                     'type' => 'debit',
-                    'category' => 'kyc_charge',
-                    'transaction_type' => 'kyc_charge',
+                    'category' => 'other',  // Old category enum doesn't have kyc_charge
+                    'transaction_type' => 'kyc_charge',  // New normalized type
                     'amount' => $chargeAmount,
                     'fee' => 0,
                     'net_amount' => $chargeAmount,
