@@ -263,6 +263,7 @@ export default function RATransactions() {
                                                 'va_deposit': 'VA Deposit',
                                                 'api_transfer': 'Transfer',
                                                 'company_withdrawal': 'Withdrawal',
+                                                'kyc_charge': 'KYC Verification',
                                                 'refund': 'Refund'
                                             };
                                             const displayType = typeLabels[transaction_type] || sentenceCase(transaction_type || 'transaction');

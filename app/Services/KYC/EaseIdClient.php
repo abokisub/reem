@@ -181,6 +181,9 @@ class EaseIdClient
                 'endpoint' => $endpoint,
                 'status' => $response->status(),
                 'success' => $responseData['success'] ?? false,
+                'message' => $responseData['message'] ?? '',
+                'code' => $responseData['code'] ?? null,
+                'full_response' => $responseData,
             ]);
 
             if (!$response->successful()) {

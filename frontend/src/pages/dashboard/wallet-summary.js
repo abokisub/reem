@@ -166,6 +166,7 @@ export default function WalletSummary() {
                             'withdrawal': 'Withdrawal',
                             'settlement_withdrawal': 'Settlement Withdrawal',
                             'payment': 'Payment',
+                            'kyc_charge': 'KYC Verification',
                             'refund': 'Refund'
                         };
                         displayType = typeMap[item.transaction_type] || item.transaction_type.charAt(0).toUpperCase() + item.transaction_type.slice(1);
@@ -419,6 +420,7 @@ export default function WalletSummary() {
                                                 'va_deposit': 'VA Deposit',
                                                 'api_transfer': 'Transfer',
                                                 'company_withdrawal': 'Withdrawal',
+                                                'kyc_charge': 'KYC Verification',
                                                 'refund': 'Refund'
                                             };
                                             const displayType = typeLabels[transaction_type] || (type || 'Transaction');
@@ -428,6 +430,7 @@ export default function WalletSummary() {
                                                 'va_deposit': 'success',
                                                 'api_transfer': 'info',
                                                 'company_withdrawal': 'warning',
+                                                'kyc_charge': 'primary',
                                                 'refund': 'error'
                                             };
                                             const typeColor = typeColors[transaction_type] || (transType === 'deposit' ? 'success' : 'info');
