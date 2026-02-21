@@ -111,6 +111,7 @@ class AdminTransactionController extends Controller
                     'bank_code' => $transaction->recipient_bank_code ?? '',
                     'bank_name' => $transaction->recipient_bank_name ?? '',
                 ] : null,
+                'beneficiary' => $this->formatBeneficiary($transaction),
                 'created_at' => $transaction->created_at?->toIso8601String(),
                 'updated_at' => $transaction->updated_at?->toIso8601String(),
                 'processed_at' => $transaction->processed_at?->toIso8601String(),
@@ -196,5 +197,32 @@ class AdminTransactionController extends Controller
             'success' => true,
             'data' => $formattedTransaction,
         ]);
+    }
+
+    /**
+     * Format beneficiary display based on transaction type
+     */
+    protected function formatBeneficiary($transaction): ?string
+    {
+        // For transfers, show recipient account name
+        if ($transaction->recipient_account_name) {
+            return $transaction->recipient_account_name;
+        }
+
+        // For KYC transactions, show identifier from metadata
+        if ($transaction->transaction_type === 'kyc_charge' && $transaction->metadata) {
+            $metadata = is_string($transaction->metadata) ? json_decode($transaction->metadata, true) : $transaction->metadata;
+            
+            if (isset($metadata['identifier']) && isset($metadata['identifier_type'])) {
+                return $metadata['identifier_type'] . ': ' . $metadata['identifier'];
+            }
+        }
+
+        // For virtual account deposits, show customer name
+        if ($transaction->transaction_type === 'va_deposit' && $transaction->customer) {
+            return $transaction->customer->first_name . ' ' . $transaction->customer->last_name;
+        }
+
+        return null;
     }
 }

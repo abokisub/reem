@@ -313,7 +313,7 @@ class KycService
         // 2. Deduct KYC Charge ONLY if requested (API usage, not onboarding)
         $chargeResult = null;
         if ($companyId && $chargeForVerification) {
-            $chargeResult = $this->deductKycCharge($companyId, 'enhanced_bvn');
+            $chargeResult = $this->deductKycCharge($companyId, 'enhanced_bvn', $bvn);
             if (!$chargeResult['success']) {
                 return [
                     'success' => false,
@@ -408,7 +408,7 @@ class KycService
         // 2. Deduct KYC Charge ONLY if requested (API usage, not onboarding)
         $chargeResult = null;
         if ($companyId && $chargeForVerification) {
-            $chargeResult = $this->deductKycCharge($companyId, 'enhanced_nin');
+            $chargeResult = $this->deductKycCharge($companyId, 'enhanced_nin', $nin);
             if (!$chargeResult['success']) {
                 return [
                     'success' => false,
@@ -487,7 +487,7 @@ class KycService
         // 1. Deduct KYC Charge ONLY if requested (API usage, not onboarding)
         $chargeResult = null;
         if ($companyId && $chargeForVerification) {
-            $chargeResult = $this->deductKycCharge($companyId, 'bank_account_verification');
+            $chargeResult = $this->deductKycCharge($companyId, 'bank_account_verification', $accountNumber);
             if (!$chargeResult['success']) {
                 return [
                     'success' => false,
@@ -538,8 +538,12 @@ class KycService
      * 
      * IMPORTANT: Only charges VERIFIED companies (after onboarding is complete).
      * New companies during onboarding (kyc_status = 'pending', 'under_review', 'partial') are NOT charged.
+     * 
+     * @param int $companyId
+     * @param string $serviceName
+     * @param string|null $identifier - The NIN/BVN/Account number being verified (for display)
      */
-    protected function deductKycCharge(int $companyId, string $serviceName): array
+    protected function deductKycCharge(int $companyId, string $serviceName, ?string $identifier = null): array
     {
         try {
             // 0. Check if company is still onboarding (FREE KYC during onboarding)
@@ -628,6 +632,19 @@ class KycService
                 $sessionId = 'sess_kyc_' . time() . '_' . rand(100000, 999999);
                 $transactionRef = 'ref_kyc_' . time() . '_' . rand(100000, 999999);
                 
+                // Store verification details in metadata for display
+                $metadata = [
+                    'service_name' => $serviceName,
+                    'service_category' => 'kyc',
+                    'charge_type' => 'flat',
+                ];
+                
+                // Add identifier for display (NIN, BVN, Account Number, etc.)
+                if ($identifier) {
+                    $metadata['identifier'] = $identifier;
+                    $metadata['identifier_type'] = $this->getIdentifierType($serviceName);
+                }
+                
                 $id = DB::table('transactions')->insertGetId([
                     'transaction_id' => $transactionId,
                     'session_id' => $sessionId,
@@ -646,11 +663,7 @@ class KycService
                     'status' => 'success',
                     'settlement_status' => 'not_applicable',
                     'description' => 'KYC Verification Charge - ' . ucwords(str_replace('_', ' ', $serviceName)),
-                    'metadata' => json_encode([
-                        'service_name' => $serviceName,
-                        'service_category' => 'kyc',
-                        'charge_type' => 'flat',
-                    ]),
+                    'metadata' => json_encode($metadata),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);
@@ -893,5 +906,26 @@ class KycService
                 'charged' => $chargeResult ? true : false,
             ];
         }
+    }
+
+    /**
+     * Get identifier type label for display
+     */
+    protected function getIdentifierType(string $serviceName): string
+    {
+        $typeMap = [
+            'enhanced_nin' => 'NIN',
+            'basic_nin' => 'NIN',
+            'enhanced_bvn' => 'BVN',
+            'basic_bvn' => 'BVN',
+            'bank_account_verification' => 'Account',
+            'face_recognition' => 'Face Match',
+            'liveness_detection' => 'Liveness',
+            'blacklist_check' => 'Blacklist',
+            'credit_score' => 'Credit Score',
+            'loan_features' => 'Loan Features',
+        ];
+        
+        return $typeMap[$serviceName] ?? 'KYC';
     }
 }
