@@ -820,6 +820,25 @@ class AuthController extends Controller
                             $token = $this->generatetoken($user->id);
                             \Log::info('Login Step 5 (Token Gen): ' . (microtime(true) - $t6) . 's');
 
+                            // Send login security alert email
+                            try {
+                                $general = $this->general();
+                                $email_data = [
+                                    'username' => $user->username,
+                                    'name' => $user->name,
+                                    'email' => $user->email,
+                                    'title' => 'New Login Detected',
+                                    'message_body' => 'A new login to your account was detected.',
+                                    'ip_address' => $request->ip(),
+                                    'device' => $request->header('User-Agent') ?? 'Unknown Device',
+                                    'sender_mail' => $general->app_email,
+                                    'app_name' => config('app.name'),
+                                ];
+                                MailController::send_mail($email_data, 'email.security_alert');
+                            } catch (\Throwable $e) {
+                                \Log::error('Login Alert Email Error: ' . $e->getMessage());
+                            }
+
                             return response()->json([
                                 'status' => 'success',
                                 'message' => 'Login successfully',

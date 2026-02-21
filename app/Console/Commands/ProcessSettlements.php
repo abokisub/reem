@@ -101,6 +101,28 @@ class ProcessSettlements extends Command
                             'settlement_note' => "Settled successfully. Amount: {$netAmount} NGN",
                         ]);
 
+                    // Send success email
+                    try {
+                        $company = Company::find($settlement->company_id);
+                        if ($company && $company->email) {
+                            $email_data = [
+                                'company_name' => $company->name,
+                                'email' => $company->email,
+                                'amount' => $netAmount,
+                                'balance_before' => $balanceBefore,
+                                'balance_after' => $wallet->balance,
+                                'reference' => $transaction->transaction_id ?? $transaction->reference,
+                                'settlement_date' => $now->format('d M Y, h:i A'),
+                                'title' => 'Settlement Successful',
+                                'sender_mail' => config('mail.from.address'),
+                                'app_name' => config('app.name'),
+                            ];
+                            \App\Http\Controllers\MailController::send_mail($email_data, 'email.settlement_success');
+                        }
+                    } catch (\Throwable $e) {
+                        \Log::error('Settlement Success Email Error: ' . $e->getMessage());
+                    }
+
                     DB::commit();
 
                     $this->info("✓ Settled: {$netAmount} NGN for company {$settlement->company_id}");
@@ -116,6 +138,28 @@ class ProcessSettlements extends Command
                             'status' => 'failed',
                             'settlement_note' => $e->getMessage(),
                         ]);
+
+                    // Send failure email
+                    try {
+                        $company = Company::find($settlement->company_id);
+                        if ($company && $company->email) {
+                            $transaction = Transaction::find($settlement->transaction_id);
+                            $email_data = [
+                                'company_name' => $company->name,
+                                'email' => $company->email,
+                                'amount' => $settlement->amount,
+                                'reference' => $transaction->transaction_id ?? $transaction->reference ?? 'N/A',
+                                'attempted_date' => $now->format('d M Y, h:i A'),
+                                'error_message' => $e->getMessage(),
+                                'title' => 'Settlement Failed',
+                                'sender_mail' => config('mail.from.address'),
+                                'app_name' => config('app.name'),
+                            ];
+                            \App\Http\Controllers\MailController::send_mail($email_data, 'email.settlement_failed');
+                        }
+                    } catch (\Throwable $mailError) {
+                        \Log::error('Settlement Failed Email Error: ' . $mailError->getMessage());
+                    }
 
                     $this->error("✗ Failed: {$e->getMessage()}");
                     Log::error('Settlement Processing Failed', [
