@@ -507,6 +507,7 @@ class AdminTrans extends Controller
                             'transactions.fee',
                             'transactions.type',
                             'transactions.category',
+                            'transactions.transaction_type',
                             'transactions.status',
                             'transactions.description as message',
                             'transactions.metadata',
@@ -548,9 +549,17 @@ class AdminTrans extends Controller
                         // Decode metadata
                         $metadata = is_string($item->metadata) ? json_decode($item->metadata, true) : $item->metadata;
                         
+                        // For KYC transactions, show identifier from metadata
+                        if ($item->transaction_type === 'kyc_charge') {
+                            if (is_array($metadata) && isset($metadata['identifier']) && isset($metadata['identifier_type'])) {
+                                $item->phone = $metadata['identifier'];
+                                $item->phone_account = $metadata['identifier_type'] . ': ' . $metadata['identifier'];
+                                $item->customer_name = $metadata['identifier_type'] . ': ' . $metadata['identifier'];
+                            }
+                        }
                         // For debit transactions (transfers/withdrawals), use recipient info from transaction columns
                         // For credit transactions (deposits), use sender info from metadata
-                        if ($item->type === 'debit') {
+                        elseif ($item->type === 'debit') {
                             $item->phone = $item->recipient_account_number ?? null;
                             $item->phone_account = $item->recipient_account_name ?? null;
                         } else {
