@@ -64,7 +64,7 @@ Route::get('/api/health', function () {
 // Catch-all route for React SPA
 // This MUST be the last route to avoid conflicts
 // It serves the React app for all routes that don't match above
-// Explicitly exclude /docs routes
+// Explicitly exclude /docs and /api routes
 Route::get('/{any}', function () {
     return file_get_contents(public_path('index.html'));
-})->where('any', '^(?!docs).*');
+})->where('any', '^(?!docs|api).*');
