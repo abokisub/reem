@@ -13,9 +13,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Add slug column
+        // Add slug column (NOT NULL with default empty string to avoid Doctrine DBAL)
         Schema::table('banks', function (Blueprint $table) {
-            $table->string('slug')->nullable()->after('name');
+            $table->string('slug')->default('')->after('name');
             $table->index('slug');
         });
 
@@ -27,11 +27,6 @@ return new class extends Migration
                 ->where('id', $bank->id)
                 ->update(['slug' => $slug]);
         }
-
-        // Make slug non-nullable after populating
-        Schema::table('banks', function (Blueprint $table) {
-            $table->string('slug')->nullable(false)->change();
-        });
     }
 
     /**
