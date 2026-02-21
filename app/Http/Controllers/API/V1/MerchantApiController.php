@@ -389,13 +389,12 @@ class MerchantApiController extends Controller
                 ->orderBy('name')
                 ->get($columns);
 
-            // Format response
+            // Format response - return banks array directly in data
             $formattedBanks = $banks->map(function($bank) use ($hasSlug) {
                 $data = [
-                    'id' => $bank->id,
                     'name' => $bank->name,
                     'code' => $bank->code,
-                    'active' => true
+                    'bank_code' => $bank->code, // Alias for compatibility
                 ];
                 
                 // Add slug if available
@@ -404,18 +403,23 @@ class MerchantApiController extends Controller
                 }
                 
                 return $data;
-            })->toArray();
+            })->values()->toArray();
 
-            return $this->respond(true, 'Banks retrieved successfully', [
-                'banks' => $formattedBanks,
-                'total' => count($formattedBanks)
-            ]);
+            // Return banks array directly in data field (not nested)
+            return response()->json([
+                'success' => true,
+                'data' => $formattedBanks
+            ], 200);
         } catch (\Exception $e) {
             Log::error('Get Banks Error', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            return $this->respond(false, 'Failed to retrieve banks: ' . $e->getMessage(), [], 500);
+            return response()->json([
+                'success' => false,
+                'error' => 'Failed to retrieve banks',
+                'message' => $e->getMessage()
+            ], 500);
         }
     }
 
@@ -818,35 +822,84 @@ class MerchantApiController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+            return response()->json([
+                'success' => false,
+                'error' => 'Validation failed',
+                'error_code' => 'VALIDATION_ERROR',
+                'errors' => $validator->errors(),
+                'status' => 422
+            ], 422);
         }
 
         try {
+            // Verify bank code exists
+            $bank = DB::table('banks')->where('code', $request->bank_code)->first();
+            if (!$bank) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Invalid bank code',
+                    'error_code' => 'INVALID_BANK_CODE',
+                    'status' => 400
+                ], 400);
+            }
+
             // Use PalmPay Account Verification Service
             $verificationService = new \App\Services\PalmPay\AccountVerificationService();
             $result = $verificationService->verifyAccount($request->account_number, $request->bank_code);
 
             if (!$result['success']) {
-                return $this->respond(false, $result['message'] ?? 'Account verification failed', [], 400);
+                // Parse error message to provide proper error codes
+                $errorMessage = $result['message'] ?? 'Account verification failed';
+                $errorCode = 'VERIFICATION_FAILED';
+                
+                // Detect specific error types
+                if (stripos($errorMessage, 'not found') !== false || stripos($errorMessage, 'invalid account') !== false) {
+                    $errorCode = 'ACCOUNT_NOT_FOUND';
+                    $errorMessage = 'Account not found';
+                } elseif (stripos($errorMessage, 'invalid bank') !== false) {
+                    $errorCode = 'INVALID_BANK_CODE';
+                    $errorMessage = 'Invalid bank code';
+                } elseif (stripos($errorMessage, 'unauthorized') !== false || stripos($errorMessage, 'credentials') !== false) {
+                    $errorCode = 'INVALID_CREDENTIALS';
+                    $errorMessage = 'Invalid API credentials';
+                } elseif (stripos($errorMessage, 'timeout') !== false || stripos($errorMessage, 'unavailable') !== false) {
+                    $errorCode = 'SERVICE_UNAVAILABLE';
+                    $errorMessage = 'Service temporarily unavailable';
+                }
+
+                return response()->json([
+                    'success' => false,
+                    'error' => $errorMessage,
+                    'error_code' => $errorCode,
+                    'status' => 400
+                ], 400);
             }
 
-            // Get bank name
-            $bank = DB::table('banks')->where('code', $request->bank_code)->first();
-            $bankName = $bank ? $bank->name : 'Unknown Bank';
-
-            return $this->respond(true, 'Account verified successfully', [
-                'account_name' => $result['account_name'],
-                'account_number' => $result['account_number'],
-                'bank_code' => $result['bank_code'],
-                'bank_name' => $bankName
-            ]);
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'account_name' => $result['account_name'],
+                    'account_number' => $result['account_number'],
+                    'bank_code' => $result['bank_code'],
+                    'bank_name' => $bank->name
+                ]
+            ], 200);
 
         } catch (\Exception $e) {
             Log::error('Bank Account Verification Error', [
+                'account_number' => $request->account_number,
+                'bank_code' => $request->bank_code,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            return $this->respond(false, 'Account verification failed: ' . $e->getMessage(), [], 500);
+            
+            return response()->json([
+                'success' => false,
+                'error' => 'Account verification failed',
+                'error_code' => 'INTERNAL_ERROR',
+                'message' => $e->getMessage(),
+                'status' => 500
+            ], 500);
         }
     }
 
