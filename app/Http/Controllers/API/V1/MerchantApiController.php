@@ -495,17 +495,27 @@ class MerchantApiController extends Controller
         
         $totalDeduction = $request->amount + $transferFee;
 
-        // Check balance
-        $wallet = $ledger->getOrCreateAccount($company->name . ' Wallet', 'company_wallet', $company->id);
+        // Check balance from company_wallets table (source of truth)
+        $companyWallet = \App\Models\CompanyWallet::where('company_id', $company->id)
+            ->where('currency', 'NGN')
+            ->first();
+        
+        if (!$companyWallet) {
+            return $this->respond(false, 'Wallet not found', [], 404);
+        }
 
-        if ($wallet->balance < $totalDeduction && !$isTest)
+        if ($companyWallet->balance < $totalDeduction && !$isTest)
             return $this->respond(false, 'Insufficient balance. Required: ' . $totalDeduction . ' (Amount: ' . $request->amount . ' + Fee: ' . $transferFee . ')', [], 400);
 
         $internalRef = ($isTest ? 'TS_' : 'PWV_OUT_') . strtoupper(Str::random(10));
 
         try {
             if (!$isTest) {
-                // Deduct total amount (amount + fee) from wallet
+                // Deduct from company wallet
+                $companyWallet->debit($totalDeduction);
+                
+                // Record in ledger for tracking
+                $wallet = $ledger->getOrCreateAccount($company->name . ' Wallet', 'company_wallet', $company->id);
                 $settlementClearing = $ledger->getOrCreateAccount('Settlement Clearing', 'settlement');
                 $ledger->recordEntry($internalRef, $wallet->id, $settlementClearing->id, $totalDeduction, "Payout Initialized (Amount: {$request->amount} + Fee: {$transferFee})");
 
