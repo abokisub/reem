@@ -572,6 +572,7 @@ class MerchantApiController extends Controller
                 'total_amount' => $totalDeduction,
                 'type' => 'debit',
                 'category' => 'transfer_out',
+                'transaction_type' => 'api_transfer',
                 'status' => 'success',
                 'palmpay_reference' => $providerRef,
                 'provider_reference' => $providerRef,
