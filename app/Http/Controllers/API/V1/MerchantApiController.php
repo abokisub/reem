@@ -432,11 +432,17 @@ class MerchantApiController extends Controller
         try {
             $company = $request->attributes->get('company');
             
-            // Get wallet account
-            $wallet = $ledger->getOrCreateAccount($company->name . ' Wallet', 'company_wallet', $company->id);
+            // Get balance from company_wallets table (source of truth)
+            $wallet = \App\Models\CompanyWallet::where('company_id', $company->id)
+                ->where('currency', 'NGN')
+                ->first();
+            
+            if (!$wallet) {
+                return $this->respond(false, 'Wallet not found', [], 404);
+            }
 
             return $this->respond(true, 'Balance retrieved successfully', [
-                'balance' => $wallet->balance,
+                'balance' => number_format($wallet->balance, 2, '.', ''),
                 'currency' => 'NGN',
                 'formatted_balance' => '₦' . number_format($wallet->balance, 2)
             ]);
