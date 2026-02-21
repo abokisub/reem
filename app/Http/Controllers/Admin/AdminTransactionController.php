@@ -210,10 +210,19 @@ class AdminTransactionController extends Controller
         }
 
         // For KYC transactions, show identifier from metadata
-        if ($transaction->transaction_type === 'kyc_charge' && $transaction->metadata) {
+        if ($transaction->transaction_type === 'kyc_charge') {
             $metadata = is_string($transaction->metadata) ? json_decode($transaction->metadata, true) : $transaction->metadata;
             
-            if (isset($metadata['identifier']) && isset($metadata['identifier_type'])) {
+            \Log::info('Admin KYC Beneficiary Debug', [
+                'transaction_id' => $transaction->id,
+                'transaction_type' => $transaction->transaction_type,
+                'metadata_raw' => $transaction->metadata,
+                'metadata_decoded' => $metadata,
+                'has_identifier' => isset($metadata['identifier']),
+                'has_identifier_type' => isset($metadata['identifier_type']),
+            ]);
+            
+            if (is_array($metadata) && isset($metadata['identifier']) && isset($metadata['identifier_type'])) {
                 return $metadata['identifier_type'] . ': ' . $metadata['identifier'];
             }
         }
