@@ -210,13 +210,14 @@ class EaseIdClient
 
     /**
      * Generate signature for EaseID API
-     * Algorithm: RSA-SHA256 signature of concatenated parameters
+     * Based on working EaseID implementation
      * 
      * Steps:
      * 1. Sort parameters by key (ASCII order)
      * 2. Concatenate as key=value&key=value format
-     * 3. Sign with RSA-SHA256
-     * 4. Base64 encode
+     * 3. Calculate MD5 hash (UPPERCASE)
+     * 4. Sign MD5 hash with RSA-SHA1 (not SHA256!)
+     * 5. Base64 encode
      */
     protected function generateSignature(array $params): string
     {
@@ -235,16 +236,22 @@ class EaseIdClient
         }
         $signString = implode('&', $pairs);
 
-        Log::info('EaseID Signature String', ['string' => $signString]);
+        // Calculate MD5 hash (UPPERCASE - this is critical!)
+        $md5Hash = strtoupper(md5($signString));
 
-        // RSA sign the string directly (not MD5 hash)
+        Log::info('EaseID Signature Generation', [
+            'sign_string' => $signString,
+            'md5_hash' => $md5Hash
+        ]);
+
+        // RSA sign the MD5 hash with SHA1 (not SHA256!)
         $privateKey = openssl_pkey_get_private($this->formatPrivateKey($this->privateKey));
 
         if (!$privateKey) {
             throw new Exception('Invalid RSA private key');
         }
 
-        openssl_sign($signString, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+        openssl_sign($md5Hash, $signature, $privateKey, OPENSSL_ALGO_SHA1);
 
         // Base64 encode the signature
         return base64_encode($signature);

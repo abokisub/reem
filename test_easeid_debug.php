@@ -84,14 +84,18 @@ function generateSignature(array $params, string $privateKey): string
 
     echo "Sign String: " . $signString . "\n";
 
-    // RSA sign the string directly (not MD5 hash)
+    // Calculate MD5 hash (UPPERCASE - critical!)
+    $md5Hash = strtoupper(md5($signString));
+    echo "MD5 Hash (UPPERCASE): " . $md5Hash . "\n";
+
+    // RSA sign the MD5 hash with SHA1 (not SHA256!)
     $privateKeyResource = openssl_pkey_get_private(formatPrivateKey($privateKey));
 
     if (!$privateKeyResource) {
         throw new Exception('Invalid RSA private key');
     }
 
-    openssl_sign($signString, $signature, $privateKeyResource, OPENSSL_ALGO_SHA256);
+    openssl_sign($md5Hash, $signature, $privateKeyResource, OPENSSL_ALGO_SHA1);
 
     // Base64 encode the signature
     $base64Signature = base64_encode($signature);
