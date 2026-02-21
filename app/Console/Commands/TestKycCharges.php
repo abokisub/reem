@@ -134,15 +134,23 @@ class TestKycCharges extends Command
         $this->line('-------------------------------------------');
 
         $easeIdConfigured = true;
-        $requiredVars = ['easeid.app_id', 'easeid.private_key', 'easeid.base_url'];
+        $requiredVars = [
+            'services.easeid.app_id' => 'EASEID_APP_ID',
+            'services.easeid.private_key' => 'EASEID_PRIVATE_KEY',
+            'services.easeid.base_url' => 'EASEID_BASE_URL'
+        ];
 
-        foreach ($requiredVars as $var) {
-            $value = config($var);
+        foreach ($requiredVars as $configKey => $envName) {
+            $value = config($configKey);
             if (empty($value)) {
-                $this->error("❌ $var not configured");
+                $this->error("❌ $envName not configured");
                 $easeIdConfigured = false;
             } else {
-                $this->info("✅ $var configured");
+                if ($configKey === 'services.easeid.private_key') {
+                    $this->info("✅ $envName configured (" . strlen($value) . " chars)");
+                } else {
+                    $this->info("✅ $envName configured: $value");
+                }
             }
         }
 
