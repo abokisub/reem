@@ -11,6 +11,7 @@ use App\Services\PalmPay\PalmPayClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 
@@ -375,20 +376,34 @@ class MerchantApiController extends Controller
     public function getBanks(Request $request)
     {
         try {
-            // Check if banks table exists and get banks
+            // Check if slug column exists (for backward compatibility)
+            $columns = ['id', 'name', 'code'];
+            $hasSlug = Schema::hasColumn('banks', 'slug');
+            if ($hasSlug) {
+                $columns[] = 'slug';
+            }
+
+            // Get banks
             $banks = DB::table('banks')
                 ->where('active', 1)
                 ->orderBy('name')
-                ->get(['id', 'name', 'code']);
+                ->get($columns);
 
             // Format response
-            $formattedBanks = $banks->map(function($bank) {
-                return [
+            $formattedBanks = $banks->map(function($bank) use ($hasSlug) {
+                $data = [
                     'id' => $bank->id,
                     'name' => $bank->name,
                     'code' => $bank->code,
                     'active' => true
                 ];
+                
+                // Add slug if available
+                if ($hasSlug && isset($bank->slug)) {
+                    $data['slug'] = $bank->slug;
+                }
+                
+                return $data;
             })->toArray();
 
             return $this->respond(true, 'Banks retrieved successfully', [
