@@ -720,6 +720,10 @@ class MerchantApiController extends Controller
     /**
      * Verify BVN
      * POST /api/v1/kyc/verify-bvn
+     * 
+     * CHARGING LOGIC:
+     * - Companies in onboarding (pending/under_review/partial/unverified) → FREE
+     * - Verified companies using API to verify customers → CHARGED
      */
     public function verifyBVN(Request $request)
     {

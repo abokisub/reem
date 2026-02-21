@@ -285,9 +285,13 @@ class KycService
     }
 
     /**
-     * Verify BVN via EaseID with charge deduction
+     * Verify BVN via EaseID with optional charge deduction
+     * 
+     * @param string $bvn
+     * @param int|null $companyId - If provided, charges will be deducted (API usage)
+     * @param bool $chargeForVerification - Set to false for internal/onboarding KYC (no charge)
      */
-    public function verifyBVN(string $bvn, ?int $companyId = null): array
+    public function verifyBVN(string $bvn, ?int $companyId = null, bool $chargeForVerification = true): array
     {
         // 1. Check Cache if companyId provided
         if ($companyId) {
@@ -306,9 +310,9 @@ class KycService
             }
         }
 
-        // 2. Deduct KYC Charge BEFORE verification
+        // 2. Deduct KYC Charge ONLY if requested (API usage, not onboarding)
         $chargeResult = null;
-        if ($companyId) {
+        if ($companyId && $chargeForVerification) {
             $chargeResult = $this->deductKycCharge($companyId, 'enhanced_bvn');
             if (!$chargeResult['success']) {
                 return [
@@ -376,9 +380,13 @@ class KycService
     }
 
     /**
-     * Verify NIN via EaseID with charge deduction
+     * Verify NIN via EaseID with optional charge deduction
+     * 
+     * @param string $nin
+     * @param int|null $companyId - If provided, charges will be deducted (API usage)
+     * @param bool $chargeForVerification - Set to false for internal/onboarding KYC (no charge)
      */
-    public function verifyNIN(string $nin, ?int $companyId = null): array
+    public function verifyNIN(string $nin, ?int $companyId = null, bool $chargeForVerification = true): array
     {
         // 1. Check Cache if companyId provided
         if ($companyId) {
@@ -397,9 +405,9 @@ class KycService
             }
         }
 
-        // 2. Deduct KYC Charge BEFORE verification
+        // 2. Deduct KYC Charge ONLY if requested (API usage, not onboarding)
         $chargeResult = null;
-        if ($companyId) {
+        if ($companyId && $chargeForVerification) {
             $chargeResult = $this->deductKycCharge($companyId, 'enhanced_nin');
             if (!$chargeResult['success']) {
                 return [
@@ -467,13 +475,18 @@ class KycService
     }
 
     /**
-     * Verify bank account via EaseID with charge deduction
+     * Verify bank account via EaseID with optional charge deduction
+     * 
+     * @param string $accountNumber
+     * @param string $bankCode
+     * @param int|null $companyId - If provided, charges will be deducted (API usage)
+     * @param bool $chargeForVerification - Set to false for internal/onboarding KYC (no charge)
      */
-    public function verifyBankAccount(string $accountNumber, string $bankCode, ?int $companyId = null): array
+    public function verifyBankAccount(string $accountNumber, string $bankCode, ?int $companyId = null, bool $chargeForVerification = true): array
     {
-        // 1. Deduct KYC Charge BEFORE verification
+        // 1. Deduct KYC Charge ONLY if requested (API usage, not onboarding)
         $chargeResult = null;
-        if ($companyId) {
+        if ($companyId && $chargeForVerification) {
             $chargeResult = $this->deductKycCharge($companyId, 'bank_account_verification');
             if (!$chargeResult['success']) {
                 return [
@@ -522,11 +535,44 @@ class KycService
 
     /**
      * Deduct KYC charge from company wallet
+     * 
+     * IMPORTANT: Only charges VERIFIED companies (after onboarding is complete).
+     * New companies during onboarding (kyc_status = 'pending', 'under_review', 'partial') are NOT charged.
      */
     protected function deductKycCharge(int $companyId, string $serviceName): array
     {
         try {
-            // 1. Get charge configuration
+            // 0. Check if company is still onboarding (FREE KYC during onboarding)
+            $company = Company::find($companyId);
+            if (!$company) {
+                return [
+                    'success' => false,
+                    'message' => 'Company not found',
+                ];
+            }
+
+            // FREE KYC for companies still in onboarding process
+            $onboardingStatuses = ['pending', 'under_review', 'partial', 'unverified'];
+            if (in_array($company->kyc_status, $onboardingStatuses)) {
+                Log::info('KYC Verification - FREE (Company Onboarding)', [
+                    'company_id' => $companyId,
+                    'company_name' => $company->name,
+                    'kyc_status' => $company->kyc_status,
+                    'service_name' => $serviceName,
+                    'reason' => 'Company is still in onboarding process'
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => 'KYC verification completed (Free during onboarding)',
+                    'charge_amount' => 0,
+                    'transaction_id' => null,
+                    'transaction_reference' => null,
+                    'free_onboarding' => true,
+                ];
+            }
+
+            // 1. Get charge configuration (only for VERIFIED companies)
             $charge = DB::table('service_charges')
                 ->where('company_id', $companyId)
                 ->where('service_category', 'kyc')
@@ -614,6 +660,7 @@ class KycService
                     'charge_amount' => $chargeAmount,
                     'transaction_id' => $transactionId,
                     'transaction_reference' => $reference,
+                    'free_onboarding' => false,
                 ];
             });
 
