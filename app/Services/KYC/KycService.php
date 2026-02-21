@@ -620,7 +620,7 @@ class KycService
             }
 
             // 3. Deduct from wallet and create transaction
-            return DB::transaction(function () use ($companyId, $serviceName, $chargeAmount, $wallet) {
+            return DB::transaction(function () use ($companyId, $serviceName, $chargeAmount, $wallet, $identifier) {
                 // Deduct from wallet
                 DB::table('company_wallets')
                     ->where('company_id', $companyId)
