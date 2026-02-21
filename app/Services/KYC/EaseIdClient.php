@@ -39,6 +39,7 @@ class EaseIdClient
         $endpoint = '/api/validator-service/open/bvn/inquire';
 
         $requestData = [
+            'appId' => $this->appId,
             'bvn' => $bvn,
             'requestTime' => $this->getRequestTime(),
             'version' => 'V1.1',
@@ -91,6 +92,7 @@ class EaseIdClient
         $endpoint = '/api/validator-service/open/nin/inquire';
 
         $requestData = [
+            'appId' => $this->appId,
             'nin' => $nin,
             'requestTime' => $this->getRequestTime(),
             'version' => 'V1.1',
@@ -208,13 +210,13 @@ class EaseIdClient
 
     /**
      * Generate signature for EaseID API
-     * Algorithm: RSA encryption of MD5 hash
+     * Algorithm: RSA-SHA256 signature of concatenated parameters
      * 
      * Steps:
      * 1. Sort parameters by key (ASCII order)
-     * 2. Concatenate as key=value pairs (no delimiters)
-     * 3. Calculate MD5 hash
-     * 4. Encrypt MD5 hash with RSA private key
+     * 2. Concatenate as key=value&key=value format
+     * 3. Sign with RSA-SHA256
+     * 4. Base64 encode
      */
     protected function generateSignature(array $params): string
     {
@@ -226,23 +228,23 @@ class EaseIdClient
         // Sort by key (ASCII dictionary order)
         ksort($params);
 
-        // Concatenate key=value pairs without delimiters
-        $signString = '';
+        // Concatenate key=value pairs with & delimiter
+        $pairs = [];
         foreach ($params as $key => $value) {
-            $signString .= $key . '=' . $value;
+            $pairs[] = $key . '=' . $value;
         }
+        $signString = implode('&', $pairs);
 
-        // Calculate MD5 hash
-        $md5Hash = md5($signString);
+        Log::info('EaseID Signature String', ['string' => $signString]);
 
-        // RSA encrypt the MD5 hash
+        // RSA sign the string directly (not MD5 hash)
         $privateKey = openssl_pkey_get_private($this->formatPrivateKey($this->privateKey));
 
         if (!$privateKey) {
             throw new Exception('Invalid RSA private key');
         }
 
-        openssl_sign($md5Hash, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+        openssl_sign($signString, $signature, $privateKey, OPENSSL_ALGO_SHA256);
 
         // Base64 encode the signature
         return base64_encode($signature);
