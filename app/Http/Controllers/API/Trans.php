@@ -461,7 +461,8 @@ class Trans extends Controller
                 } else {
                     // Default: show only customer-facing types
                     // Include 'transfer' and 'settlement_withdrawal' for company transfers
-                    $query->whereIn('transaction_type', ['va_deposit', 'api_transfer', 'company_withdrawal', 'refund', 'transfer', 'settlement_withdrawal']);
+                    // Include 'kyc_charge' for KYC verification charges
+                    $query->whereIn('transaction_type', ['va_deposit', 'api_transfer', 'company_withdrawal', 'kyc_charge', 'refund', 'transfer', 'settlement_withdrawal']);
                 }
 
                 // Apply search filters
@@ -559,9 +560,16 @@ class Trans extends Controller
                     } 
                     // For debit transactions (transfers/withdrawals), show recipient info
                     else {
-                        $transaction->customer_name = $transaction->recipient_account_name ?? 'Unknown Recipient';
-                        $transaction->customer_account = $transaction->recipient_account_number ?? '';
-                        $transaction->customer_bank = $transaction->recipient_bank_name ?? '';
+                        // For KYC charges, show identifier from metadata
+                        if ($transaction->transaction_type === 'kyc_charge' && isset($metadata['identifier'], $metadata['identifier_type'])) {
+                            $transaction->customer_name = $metadata['identifier_type'] . ': ' . $metadata['identifier'];
+                            $transaction->customer_account = '';
+                            $transaction->customer_bank = '';
+                        } else {
+                            $transaction->customer_name = $transaction->recipient_account_name ?? 'Unknown Recipient';
+                            $transaction->customer_account = $transaction->recipient_account_number ?? '';
+                            $transaction->customer_bank = $transaction->recipient_bank_name ?? '';
+                        }
                         
                         // PROFESSIONAL STANDARD FOR SETTLEMENT WITHDRAWALS:
                         // SENDER = Company's Virtual Account (master wallet where money is held)
