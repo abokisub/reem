@@ -626,14 +626,17 @@ class KycService
                 $reference = 'KYC_' . strtoupper($serviceName) . '_' . time() . '_' . rand(1000, 9999);
                 $transactionId = 'txn_kyc_' . time() . '_' . rand(100000, 999999);
                 $sessionId = 'sess_kyc_' . time() . '_' . rand(100000, 999999);
+                $transactionRef = 'ref_kyc_' . time() . '_' . rand(100000, 999999);
                 
                 $id = DB::table('transactions')->insertGetId([
                     'transaction_id' => $transactionId,
                     'session_id' => $sessionId,
+                    'transaction_ref' => $transactionRef,
                     'company_id' => $companyId,
                     'reference' => $reference,
                     'type' => 'debit',
                     'category' => 'kyc_charge',
+                    'transaction_type' => 'kyc_charge',
                     'amount' => $chargeAmount,
                     'fee' => 0,
                     'net_amount' => $chargeAmount,
@@ -641,6 +644,7 @@ class KycService
                     'balance_before' => $wallet->balance,
                     'balance_after' => $wallet->balance - $chargeAmount,
                     'status' => 'success',
+                    'settlement_status' => 'not_applicable',
                     'description' => 'KYC Verification Charge - ' . ucwords(str_replace('_', ' ', $serviceName)),
                     'metadata' => json_encode([
                         'service_name' => $serviceName,
@@ -657,6 +661,7 @@ class KycService
                     'amount' => $chargeAmount,
                     'transaction_id' => $transactionId,
                     'session_id' => $sessionId,
+                    'transaction_ref' => $transactionRef,
                     'id' => $id,
                     'reference' => $reference,
                 ]);
