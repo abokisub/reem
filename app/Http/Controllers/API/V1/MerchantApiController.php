@@ -716,4 +716,133 @@ class MerchantApiController extends Controller
             return $this->respond(false, 'Failed to delete virtual account: ' . $e->getMessage(), [], 500);
         }
     }
+
+    /**
+     * Verify BVN
+     * POST /api/v1/kyc/verify-bvn
+     */
+    public function verifyBVN(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'bvn' => 'required|string|size:11',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $companyId = $request->attributes->get('company_id');
+            $kycService = app(\App\Services\KYC\KycService::class);
+            
+            $result = $kycService->verifyBVN($request->bvn, $companyId);
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, $result['message'], [
+                'verified' => true,
+                'bvn' => $request->bvn,
+                'data' => $result['data'],
+                'charged' => $result['charged'] ?? false,
+                'charge_amount' => $result['charge_amount'] ?? 0,
+                'transaction_reference' => $result['transaction_reference'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('BVN Verification API Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->respond(false, 'BVN verification failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Verify NIN
+     * POST /api/v1/kyc/verify-nin
+     */
+    public function verifyNIN(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'nin' => 'required|string|size:11',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $companyId = $request->attributes->get('company_id');
+            $kycService = app(\App\Services\KYC\KycService::class);
+            
+            $result = $kycService->verifyNIN($request->nin, $companyId);
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, $result['message'], [
+                'verified' => true,
+                'nin' => $request->nin,
+                'data' => $result['data'],
+                'charged' => $result['charged'] ?? false,
+                'charge_amount' => $result['charge_amount'] ?? 0,
+                'transaction_reference' => $result['transaction_reference'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('NIN Verification API Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->respond(false, 'NIN verification failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Verify Bank Account
+     * POST /api/v1/kyc/verify-bank-account
+     */
+    public function verifyBankAccount(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'account_number' => 'required|string|size:10',
+            'bank_code' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $companyId = $request->attributes->get('company_id');
+            $kycService = app(\App\Services\KYC\KycService::class);
+            
+            $result = $kycService->verifyBankAccount(
+                $request->account_number,
+                $request->bank_code,
+                $companyId
+            );
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, $result['message'], [
+                'verified' => true,
+                'account_number' => $request->account_number,
+                'bank_code' => $request->bank_code,
+                'data' => $result['data'],
+                'charged' => $result['charged'] ?? false,
+                'charge_amount' => $result['charge_amount'] ?? 0,
+                'transaction_reference' => $result['transaction_reference'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Bank Account Verification API Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->respond(false, 'Bank account verification failed: ' . $e->getMessage(), [], 500);
+        }
+    }
 }

@@ -285,10 +285,7 @@ class KycService
     }
 
     /**
-     * Verify BVN via EaseID
-     */
-    /**
-     * Verify BVN via EaseID
+     * Verify BVN via EaseID with charge deduction
      */
     public function verifyBVN(string $bvn, ?int $companyId = null): array
     {
@@ -303,16 +300,28 @@ class KycService
                         'success' => true,
                         'message' => 'BVN verified successfully (Cached)',
                         'data' => $verificationData['bvn'],
+                        'charged' => false,
                     ];
                 }
             }
         }
 
-        try {
-            // 2. Call EaseID API
-            // Sandbox check logic is handled inside EaseIdClient or SandboxKycService depending on implementation
-            // But if we are using the main KycService, we should use the EaseIdClient
+        // 2. Deduct KYC Charge BEFORE verification
+        $chargeResult = null;
+        if ($companyId) {
+            $chargeResult = $this->deductKycCharge($companyId, 'enhanced_bvn');
+            if (!$chargeResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $chargeResult['message'],
+                    'data' => null,
+                    'charged' => false,
+                ];
+            }
+        }
 
+        try {
+            // 3. Call EaseID API
             if (SandboxKycService::isSandbox()) {
                 $sandboxService = new SandboxKycService();
                 $result = $sandboxService->mockBVNVerification($bvn);
@@ -325,10 +334,12 @@ class KycService
                     'success' => false,
                     'message' => $result['message'] ?? 'BVN verification failed',
                     'data' => null,
+                    'charged' => $chargeResult ? true : false,
+                    'charge_amount' => $chargeResult['charge_amount'] ?? 0,
                 ];
             }
 
-            // 3. Cache Result if companyId provided
+            // 4. Cache Result if companyId provided
             if ($companyId) {
                 $company = Company::find($companyId);
                 if ($company) {
@@ -336,7 +347,7 @@ class KycService
                     $verificationData['bvn'] = $result['data'];
 
                     $company->update([
-                        'bvn' => $bvn, // Associate BVN with company
+                        'bvn' => $bvn,
                         'verification_data' => $verificationData
                     ]);
                 }
@@ -346,6 +357,9 @@ class KycService
                 'success' => true,
                 'message' => 'BVN verified successfully',
                 'data' => $result['data'],
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+                'transaction_reference' => $chargeResult['transaction_reference'] ?? null,
             ];
 
         } catch (Exception $e) {
@@ -355,15 +369,14 @@ class KycService
                 'success' => false,
                 'message' => 'BVN verification failed: ' . $e->getMessage(),
                 'data' => null,
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
             ];
         }
     }
 
     /**
-     * Verify NIN via EaseID
-     */
-    /**
-     * Verify NIN via EaseID
+     * Verify NIN via EaseID with charge deduction
      */
     public function verifyNIN(string $nin, ?int $companyId = null): array
     {
@@ -378,13 +391,28 @@ class KycService
                         'success' => true,
                         'message' => 'NIN verified successfully (Cached)',
                         'data' => $verificationData['nin'],
+                        'charged' => false,
                     ];
                 }
             }
         }
 
+        // 2. Deduct KYC Charge BEFORE verification
+        $chargeResult = null;
+        if ($companyId) {
+            $chargeResult = $this->deductKycCharge($companyId, 'enhanced_nin');
+            if (!$chargeResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $chargeResult['message'],
+                    'data' => null,
+                    'charged' => false,
+                ];
+            }
+        }
+
         try {
-            // 2. Call EaseID API
+            // 3. Call EaseID API
             if (SandboxKycService::isSandbox()) {
                 $sandboxService = new SandboxKycService();
                 $result = $sandboxService->mockNINVerification($nin);
@@ -397,10 +425,12 @@ class KycService
                     'success' => false,
                     'message' => $result['message'] ?? 'NIN verification failed',
                     'data' => null,
+                    'charged' => $chargeResult ? true : false,
+                    'charge_amount' => $chargeResult['charge_amount'] ?? 0,
                 ];
             }
 
-            // 3. Cache Result if companyId provided
+            // 4. Cache Result if companyId provided
             if ($companyId) {
                 $company = Company::find($companyId);
                 if ($company) {
@@ -408,7 +438,7 @@ class KycService
                     $verificationData['nin'] = $result['data'];
 
                     $company->update([
-                        'nin' => $nin, // Associate NIN with company
+                        'nin' => $nin,
                         'verification_data' => $verificationData
                     ]);
                 }
@@ -418,6 +448,9 @@ class KycService
                 'success' => true,
                 'message' => 'NIN verified successfully',
                 'data' => $result['data'],
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+                'transaction_reference' => $chargeResult['transaction_reference'] ?? null,
             ];
 
         } catch (Exception $e) {
@@ -427,15 +460,31 @@ class KycService
                 'success' => false,
                 'message' => 'NIN verification failed: ' . $e->getMessage(),
                 'data' => null,
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
             ];
         }
     }
 
     /**
-     * Verify bank account via EaseID
+     * Verify bank account via EaseID with charge deduction
      */
-    public function verifyBankAccount(string $accountNumber, string $bankCode): array
+    public function verifyBankAccount(string $accountNumber, string $bankCode, ?int $companyId = null): array
     {
+        // 1. Deduct KYC Charge BEFORE verification
+        $chargeResult = null;
+        if ($companyId) {
+            $chargeResult = $this->deductKycCharge($companyId, 'bank_account_verification');
+            if (!$chargeResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $chargeResult['message'],
+                    'data' => null,
+                    'charged' => false,
+                ];
+            }
+        }
+
         try {
             $result = $this->easeIdClient->verifyBankAccount($accountNumber, $bankCode);
 
@@ -444,6 +493,8 @@ class KycService
                     'success' => false,
                     'message' => $result['message'] ?? 'Bank account verification failed',
                     'data' => null,
+                    'charged' => $chargeResult ? true : false,
+                    'charge_amount' => $chargeResult['charge_amount'] ?? 0,
                 ];
             }
 
@@ -451,6 +502,9 @@ class KycService
                 'success' => true,
                 'message' => 'Bank account verified successfully',
                 'data' => $result['data'],
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+                'transaction_reference' => $chargeResult['transaction_reference'] ?? null,
             ];
 
         } catch (Exception $e) {
@@ -460,6 +514,119 @@ class KycService
                 'success' => false,
                 'message' => 'Bank account verification failed: ' . $e->getMessage(),
                 'data' => null,
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+            ];
+        }
+    }
+
+    /**
+     * Deduct KYC charge from company wallet
+     */
+    protected function deductKycCharge(int $companyId, string $serviceName): array
+    {
+        try {
+            // 1. Get charge configuration
+            $charge = DB::table('service_charges')
+                ->where('company_id', $companyId)
+                ->where('service_category', 'kyc')
+                ->where('service_name', $serviceName)
+                ->where('is_active', true)
+                ->first();
+
+            // Fallback to global default if company-specific not found
+            if (!$charge) {
+                $charge = DB::table('service_charges')
+                    ->where('company_id', 1)
+                    ->where('service_category', 'kyc')
+                    ->where('service_name', $serviceName)
+                    ->where('is_active', true)
+                    ->first();
+            }
+
+            if (!$charge) {
+                return [
+                    'success' => false,
+                    'message' => 'KYC charge configuration not found for ' . $serviceName,
+                ];
+            }
+
+            $chargeAmount = $charge->charge_value;
+
+            // 2. Check wallet balance
+            $wallet = DB::table('company_wallets')
+                ->where('company_id', $companyId)
+                ->first();
+
+            if (!$wallet || $wallet->balance < $chargeAmount) {
+                return [
+                    'success' => false,
+                    'message' => sprintf(
+                        'Insufficient balance. Required: ₦%.2f, Available: ₦%.2f',
+                        $chargeAmount,
+                        $wallet->balance ?? 0
+                    ),
+                ];
+            }
+
+            // 3. Deduct from wallet and create transaction
+            return DB::transaction(function () use ($companyId, $serviceName, $chargeAmount, $wallet) {
+                // Deduct from wallet
+                DB::table('company_wallets')
+                    ->where('company_id', $companyId)
+                    ->decrement('balance', $chargeAmount);
+
+                // Create transaction record
+                $reference = 'KYC_' . strtoupper($serviceName) . '_' . time() . '_' . rand(1000, 9999);
+                
+                $transactionId = DB::table('transactions')->insertGetId([
+                    'company_id' => $companyId,
+                    'reference' => $reference,
+                    'type' => 'debit',
+                    'category' => 'kyc_charge',
+                    'amount' => $chargeAmount,
+                    'fee' => 0,
+                    'net_amount' => $chargeAmount,
+                    'balance_before' => $wallet->balance,
+                    'balance_after' => $wallet->balance - $chargeAmount,
+                    'status' => 'success',
+                    'description' => 'KYC Verification Charge - ' . ucwords(str_replace('_', ' ', $serviceName)),
+                    'metadata' => json_encode([
+                        'service_name' => $serviceName,
+                        'service_category' => 'kyc',
+                        'charge_type' => 'flat',
+                    ]),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+                Log::info('KYC Charge Deducted', [
+                    'company_id' => $companyId,
+                    'service_name' => $serviceName,
+                    'amount' => $chargeAmount,
+                    'transaction_id' => $transactionId,
+                    'reference' => $reference,
+                ]);
+
+                return [
+                    'success' => true,
+                    'message' => 'KYC charge deducted successfully',
+                    'charge_amount' => $chargeAmount,
+                    'transaction_id' => $transactionId,
+                    'transaction_reference' => $reference,
+                ];
+            });
+
+        } catch (Exception $e) {
+            Log::error('KYC Charge Deduction Error', [
+                'company_id' => $companyId,
+                'service_name' => $serviceName,
+                'error' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Failed to deduct KYC charge: ' . $e->getMessage(),
             ];
         }
     }

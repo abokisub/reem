@@ -825,13 +825,14 @@ Route::prefix('v1')->group(function () {
 // Phase 5: KYC & Document Management Routes
 // ============================================
 
-// Company KYC Routes (V1 API - Use MerchantAuth)
+// Company KYC Routes (V1 API - Use MerchantAuth with Charge Deduction)
 Route::middleware([\App\Http\Middleware\V1\MerchantAuth::class])->prefix('v1/kyc')->group(function () {
     Route::get('/status', [App\Http\Controllers\API\V1\KycController::class, 'getStatus']);
     Route::post('/submit/{section}', [App\Http\Controllers\API\V1\KycController::class, 'submitSection']);
-    Route::post('/verify-bvn', [App\Http\Controllers\API\V1\KycController::class, 'verifyBVN']);
-    Route::post('/verify-nin', [App\Http\Controllers\API\V1\KycController::class, 'verifyNIN']);
-    Route::post('/verify-bank-account', [App\Http\Controllers\API\V1\KycController::class, 'verifyBankAccount']);
+    // KYC Verification with automatic charge deduction
+    Route::post('/verify-bvn', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyBVN']);
+    Route::post('/verify-nin', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyNIN']);
+    Route::post('/verify-bank-account', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyBankAccount']);
 });
 
 // Document Upload Routes (Authenticated Companies)
