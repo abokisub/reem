@@ -43,7 +43,9 @@ class AccountVerificationService
             $accountName = $response['data']['accountName'] ?? null;
 
             if (!$accountName) {
-                throw new \Exception('Account verification failed: ' . ($response['respMsg'] ?? 'Unknown error'));
+                // Parse error message from PalmPay response
+                $errorMsg = $this->parseErrorMessage($response);
+                throw new \Exception($errorMsg);
             }
 
             Log::info('Account Verified Successfully', [
@@ -62,14 +64,90 @@ class AccountVerificationService
             Log::error('Account Verification Failed', [
                 'account_number' => $accountNumber,
                 'bank_code' => $bankCode,
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'raw_response' => $response ?? null
             ]);
+
+            // Clean up error message
+            $errorMessage = $this->cleanErrorMessage($e->getMessage());
 
             return [
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => $errorMessage,
+                'raw_error' => $e->getMessage(), // Keep original for debugging
             ];
         }
+    }
+
+    /**
+     * Parse error message from PalmPay response
+     * 
+     * @param array $response
+     * @return string
+     */
+    private function parseErrorMessage(array $response): string
+    {
+        $respMsg = $response['respMsg'] ?? ($response['message'] ?? null);
+        $respCode = $response['respCode'] ?? ($response['code'] ?? null);
+
+        // If respMsg is empty, generic, or confusing
+        if (empty($respMsg) || in_array(strtolower($respMsg), ['success', 'ok', 'failed'])) {
+            // Try to determine error from response code
+            if ($respCode) {
+                return $this->getErrorMessageFromCode($respCode);
+            }
+            return 'Account not found or invalid';
+        }
+
+        return $respMsg;
+    }
+
+    /**
+     * Get user-friendly error message from PalmPay error code
+     * 
+     * @param string $code
+     * @return string
+     */
+    private function getErrorMessageFromCode(string $code): string
+    {
+        $errorCodes = [
+            'OPEN_GW_000001' => 'Invalid request parameters',
+            'OPEN_GW_000002' => 'Account not found',
+            'OPEN_GW_000003' => 'Bank service temporarily unavailable',
+            'OPEN_GW_000004' => 'Invalid bank code',
+            'OPEN_GW_000005' => 'Account verification not supported for this bank',
+            'OPEN_GW_000012' => 'Service configuration error',
+        ];
+
+        return $errorCodes[$code] ?? "Account verification failed (Code: {$code})";
+    }
+
+    /**
+     * Clean up confusing error messages
+     * 
+     * @param string $message
+     * @return string
+     */
+    private function cleanErrorMessage(string $message): string
+    {
+        // Remove "Account verification failed: " prefix if it exists
+        $message = preg_replace('/^Account verification failed:\s*/i', '', $message);
+        
+        // If message is just "success" or similar confusing terms
+        if (in_array(strtolower(trim($message)), ['success', 'ok', 'failed', 'error'])) {
+            return 'Account not found or bank does not support verification';
+        }
+
+        // If message contains "PalmPay Error:" extract the actual error
+        if (preg_match('/PalmPay Error:\s*(.+?)(?:\s*\(Code:|$)/i', $message, $matches)) {
+            $extractedMsg = trim($matches[1]);
+            // Check if extracted message is also confusing
+            if (!in_array(strtolower($extractedMsg), ['success', 'ok', 'failed'])) {
+                return $extractedMsg;
+            }
+        }
+
+        return $message;
     }
 
     /**

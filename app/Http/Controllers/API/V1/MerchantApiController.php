@@ -839,6 +839,7 @@ class MerchantApiController extends Controller
                     'success' => false,
                     'error' => 'Invalid bank code',
                     'error_code' => 'INVALID_BANK_CODE',
+                    'message' => 'The provided bank code does not exist in our system. Use GET /banks to get valid codes.',
                     'status' => 400
                 ], 400);
             }
@@ -850,27 +851,48 @@ class MerchantApiController extends Controller
             if (!$result['success']) {
                 // Parse error message to provide proper error codes
                 $errorMessage = $result['message'] ?? 'Account verification failed';
+                $rawError = $result['raw_error'] ?? $errorMessage;
                 $errorCode = 'VERIFICATION_FAILED';
                 
-                // Detect specific error types
-                if (stripos($errorMessage, 'not found') !== false || stripos($errorMessage, 'invalid account') !== false) {
+                // Detect specific error types from cleaned message
+                $lowerError = strtolower($errorMessage);
+                
+                if (stripos($lowerError, 'not found') !== false || 
+                    stripos($lowerError, 'invalid account') !== false ||
+                    stripos($lowerError, 'does not exist') !== false) {
                     $errorCode = 'ACCOUNT_NOT_FOUND';
                     $errorMessage = 'Account not found';
-                } elseif (stripos($errorMessage, 'invalid bank') !== false) {
+                } elseif (stripos($lowerError, 'not supported') !== false || 
+                          stripos($lowerError, 'unavailable') !== false) {
+                    $errorCode = 'BANK_NOT_SUPPORTED';
+                    $errorMessage = 'This bank does not support account verification';
+                } elseif (stripos($lowerError, 'invalid bank') !== false) {
                     $errorCode = 'INVALID_BANK_CODE';
                     $errorMessage = 'Invalid bank code';
-                } elseif (stripos($errorMessage, 'unauthorized') !== false || stripos($errorMessage, 'credentials') !== false) {
-                    $errorCode = 'INVALID_CREDENTIALS';
-                    $errorMessage = 'Invalid API credentials';
-                } elseif (stripos($errorMessage, 'timeout') !== false || stripos($errorMessage, 'unavailable') !== false) {
-                    $errorCode = 'SERVICE_UNAVAILABLE';
+                } elseif (stripos($lowerError, 'unauthorized') !== false || 
+                          stripos($lowerError, 'credentials') !== false ||
+                          stripos($lowerError, 'configuration') !== false) {
+                    $errorCode = 'SERVICE_ERROR';
                     $errorMessage = 'Service temporarily unavailable';
+                } elseif (stripos($lowerError, 'timeout') !== false) {
+                    $errorCode = 'TIMEOUT';
+                    $errorMessage = 'Request timeout - please try again';
                 }
+
+                Log::warning('Account Verification Failed', [
+                    'account_number' => $request->account_number,
+                    'bank_code' => $request->bank_code,
+                    'bank_name' => $bank->name,
+                    'error_code' => $errorCode,
+                    'error_message' => $errorMessage,
+                    'raw_error' => $rawError
+                ]);
 
                 return response()->json([
                     'success' => false,
                     'error' => $errorMessage,
                     'error_code' => $errorCode,
+                    'bank_name' => $bank->name,
                     'status' => 400
                 ], 400);
             }
@@ -895,9 +917,9 @@ class MerchantApiController extends Controller
             
             return response()->json([
                 'success' => false,
-                'error' => 'Account verification failed',
+                'error' => 'Service temporarily unavailable',
                 'error_code' => 'INTERNAL_ERROR',
-                'message' => $e->getMessage(),
+                'message' => 'An unexpected error occurred. Please try again later.',
                 'status' => 500
             ], 500);
         }
