@@ -525,12 +525,16 @@ class MerchantApiController extends Controller
                     $ledger->recordEntry($internalRef . '-FEE', $wallet->id, $revenueAccount->id, $transferFee, "Transfer Fee");
                 }
 
-                $response = $this->palmPay->post('/transfer/v1/initiate', [
-                    'amount' => $request->amount,
-                    'bankCode' => $request->bank_code,
-                    'accountNumber' => $request->account_number,
-                    'accountName' => $request->account_name,
-                    'reference' => $internalRef,
+                // Use correct PalmPay endpoint and request format
+                $response = $this->palmPay->post('/api/v2/merchant/payment/payout', [
+                    'orderId' => $internalRef,
+                    'payeeBankCode' => $request->bank_code,
+                    'payeeBankAccNo' => $request->account_number,
+                    'payeeName' => $request->account_name,
+                    'amount' => (int) ($request->amount * 100), // Convert to kobo
+                    'currency' => 'NGN',
+                    'notifyUrl' => config('app.url') . '/api/v1/palmpay/webhook/payout',
+                    'remark' => 'Bank Transfer via API',
                 ]);
                 $providerRef = $response['data']['orderNo'] ?? null;
                 
