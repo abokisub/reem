@@ -462,7 +462,8 @@ class Trans extends Controller
                     // Default: show only customer-facing types
                     // Include 'transfer' and 'settlement_withdrawal' for company transfers
                     // Include 'kyc_charge' for KYC verification charges
-                    $query->whereIn('transaction_type', ['va_deposit', 'api_transfer', 'company_withdrawal', 'kyc_charge', 'refund', 'transfer', 'settlement_withdrawal']);
+                    // Include 'manual_funding' and 'manual_debit' for admin manual transactions
+                    $query->whereIn('transaction_type', ['va_deposit', 'api_transfer', 'company_withdrawal', 'kyc_charge', 'refund', 'transfer', 'settlement_withdrawal', 'manual_funding', 'manual_debit']);
                 }
 
                 // Apply search filters
