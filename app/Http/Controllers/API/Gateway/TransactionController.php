@@ -19,10 +19,12 @@ class TransactionController extends Controller
     private VirtualAccountService $virtualAccountService;
     private TransferService $transferService;
 
-    public function __construct()
-    {
-        $this->virtualAccountService = new VirtualAccountService();
-        $this->transferService = new TransferService();
+    public function __construct(
+        VirtualAccountService $virtualAccountService,
+        TransferService $transferService
+    ) {
+        $this->virtualAccountService = $virtualAccountService;
+        $this->transferService = $transferService;
     }
 
     /**
