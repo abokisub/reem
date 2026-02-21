@@ -896,4 +896,299 @@ class MerchantApiController extends Controller
             return $this->respond(false, 'Bank account verification failed: ' . $e->getMessage(), [], 500);
         }
     }
+
+    /**
+     * Face Recognition - Compare two face images
+     * POST /api/v1/kyc/face-compare
+     */
+    public function compareFaces(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'source_image' => 'required|string',
+            'target_image' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $companyId = $request->attributes->get('company_id');
+            $kycService = app(\App\Services\KYC\KycService::class);
+            
+            $result = $kycService->compareFaces(
+                $request->source_image,
+                $request->target_image,
+                $companyId
+            );
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, $result['message'], [
+                'similarity' => $result['data']['similarity'] ?? 0,
+                'match' => ($result['data']['similarity'] ?? 0) > 60,
+                'charged' => $result['charged'] ?? false,
+                'charge_amount' => $result['charge_amount'] ?? 0,
+                'transaction_reference' => $result['transaction_reference'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Face Recognition API Error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return $this->respond(false, 'Face recognition failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Initialize Liveness Detection
+     * POST /api/v1/kyc/liveness/initialize
+     */
+    public function initializeLiveness(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'biz_id' => 'required|string',
+            'redirect_url' => 'required|url',
+            'user_id' => 'sometimes|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $companyId = $request->attributes->get('company_id');
+            $kycService = app(\App\Services\KYC\KycService::class);
+            
+            $result = $kycService->initializeLiveness(
+                $request->biz_id,
+                $request->redirect_url,
+                $request->user_id ?? null,
+                $companyId
+            );
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, $result['message'], [
+                'jump_url' => $result['data']['jumpUrl'] ?? null,
+                'transaction_id' => $result['data']['transactionId'] ?? null,
+                'charged' => $result['charged'] ?? false,
+                'charge_amount' => $result['charge_amount'] ?? 0,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Liveness Initialize API Error', [
+                'error' => $e->getMessage()
+            ]);
+            return $this->respond(false, 'Liveness initialization failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Query Liveness Detection Result
+     * POST /api/v1/kyc/liveness/query
+     */
+    public function queryLivenessResult(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'transaction_id' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $easeIdClient = app(\App\Services\KYC\EaseIdClient::class);
+            $result = $easeIdClient->queryLivenessResult($request->transaction_id);
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, 'Liveness result retrieved', [
+                'photo_base64' => $result['data']['photoBase64'] ?? null,
+                'biz_id' => $result['data']['bizId'] ?? null,
+                'user_id' => $result['data']['userId'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Liveness Query API Error', [
+                'error' => $e->getMessage()
+            ]);
+            return $this->respond(false, 'Liveness query failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Check Blacklist
+     * POST /api/v1/kyc/blacklist-check
+     */
+    public function checkBlacklist(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'phone_number' => 'sometimes|string',
+            'bvn' => 'sometimes|string',
+            'nin' => 'sometimes|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        // At least one parameter required
+        if (!$request->phone_number && !$request->bvn && !$request->nin) {
+            return $this->respond(false, 'At least one of phone_number, bvn, or nin is required', [], 422);
+        }
+
+        try {
+            $companyId = $request->attributes->get('company_id');
+            $kycService = app(\App\Services\KYC\KycService::class);
+            
+            $result = $kycService->checkBlacklist(
+                $request->phone_number ?? null,
+                $request->bvn ?? null,
+                $request->nin ?? null,
+                $companyId
+            );
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, $result['message'], [
+                'result' => $result['data']['result'] ?? 'no_hit',
+                'hit_time' => $result['data']['hitTime'] ?? null,
+                'on_blacklist' => ($result['data']['result'] ?? 'no_hit') === 'hit',
+                'charged' => $result['charged'] ?? false,
+                'charge_amount' => $result['charge_amount'] ?? 0,
+                'transaction_reference' => $result['transaction_reference'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Blacklist Check API Error', [
+                'error' => $e->getMessage()
+            ]);
+            return $this->respond(false, 'Blacklist check failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Get Credit Score (Nigeria)
+     * POST /api/v1/kyc/credit-score
+     */
+    public function getCreditScore(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'mobile_no' => 'required|string',
+            'id_number' => 'required|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $companyId = $request->attributes->get('company_id');
+            $kycService = app(\App\Services\KYC\KycService::class);
+            
+            $result = $kycService->getCreditScore(
+                $request->mobile_no,
+                $request->id_number,
+                $companyId
+            );
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, $result['message'], [
+                'credit_score' => $result['data']['creditScore'] ?? null,
+                'credit_score_v3' => $result['data']['creditScoreV3'] ?? null,
+                'version' => $result['data']['version'] ?? null,
+                'charged' => $result['charged'] ?? false,
+                'charge_amount' => $result['charge_amount'] ?? 0,
+                'transaction_reference' => $result['transaction_reference'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Credit Score API Error', [
+                'error' => $e->getMessage()
+            ]);
+            return $this->respond(false, 'Credit score query failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Get Loan Features
+     * POST /api/v1/kyc/loan-features
+     */
+    public function getLoanFeatures(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'value' => 'required|string',
+            'type' => 'sometimes|integer|in:1,2,3',
+            'access_type' => 'sometimes|string',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->respond(false, 'Validation failed', $validator->errors(), 422);
+        }
+
+        try {
+            $companyId = $request->attributes->get('company_id');
+            $kycService = app(\App\Services\KYC\KycService::class);
+            
+            $result = $kycService->getLoanFeatures(
+                $request->value,
+                $request->type ?? 1,
+                $request->access_type ?? '01',
+                $companyId
+            );
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, $result['message'], [
+                'features' => $result['data'] ?? [],
+                'charged' => $result['charged'] ?? false,
+                'charge_amount' => $result['charge_amount'] ?? 0,
+                'transaction_reference' => $result['transaction_reference'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Loan Features API Error', [
+                'error' => $e->getMessage()
+            ]);
+            return $this->respond(false, 'Loan features query failed: ' . $e->getMessage(), [], 500);
+        }
+    }
+
+    /**
+     * Get EaseID Balance
+     * GET /api/v1/kyc/easeid-balance
+     */
+    public function getEaseIDBalance(Request $request)
+    {
+        try {
+            $easeIdClient = app(\App\Services\KYC\EaseIdClient::class);
+            $result = $easeIdClient->getBalance();
+
+            if (!$result['success']) {
+                return $this->respond(false, $result['message'], [], 400);
+            }
+
+            return $this->respond(true, 'EaseID balance retrieved', [
+                'app_id' => $result['data']['appID'] ?? null,
+                'currency' => $result['data']['currency'] ?? 'NGN',
+                'balance_amount' => $result['data']['balanceAmount'] ?? 0,
+                'query_time' => $result['data']['queryTime'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('EaseID Balance API Error', [
+                'error' => $e->getMessage()
+            ]);
+            return $this->respond(false, 'Balance query failed: ' . $e->getMessage(), [], 500);
+        }
+    }
 }

@@ -277,4 +277,186 @@ class EaseIdClient
     {
         return Str::random(32);
     }
+
+    /**
+     * Face Recognition - Compare two face images
+     * Returns similarity score (>60 = same person)
+     */
+    public function compareFaces(string $sourceImage, string $targetImage): array
+    {
+        $endpoint = '/api/easeid-kyc-service/facecapture/compare';
+
+        $requestData = [
+            'appId' => $this->appId,
+            'sourceImage' => $sourceImage,
+            'targetImage' => $targetImage,
+            'requestTime' => $this->getRequestTime(),
+            'version' => 'V1.1',
+            'nonceStr' => $this->generateNonceStr(),
+        ];
+
+        Log::info('EaseID Face Recognition Request');
+
+        return $this->makeRequest('POST', $endpoint, $requestData);
+    }
+
+    /**
+     * Initialize Liveness Detection (H5)
+     * Returns URL for user to perform liveness check
+     */
+    public function initializeLiveness(string $bizId, string $redirectUrl, ?string $userId = null): array
+    {
+        $endpoint = '/api/easeid-kyc-service/facecapture/h5/initialize';
+
+        $requestData = [
+            'appId' => $this->appId,
+            'bizId' => $bizId,
+            'redirectUrl' => $redirectUrl,
+            'metaInfo' => '1',
+            'serviceLevel' => 1,
+            'secureLevel' => '1',
+            'requestTime' => $this->getRequestTime(),
+            'version' => 'V1.1',
+            'nonceStr' => $this->generateNonceStr(),
+        ];
+
+        if ($userId) {
+            $requestData['userId'] = $userId;
+        }
+
+        Log::info('EaseID Liveness Initialize Request', ['bizId' => $bizId]);
+
+        return $this->makeRequest('POST', $endpoint, $requestData);
+    }
+
+    /**
+     * Query Liveness Detection Result
+     */
+    public function queryLivenessResult(string $transactionId): array
+    {
+        $endpoint = '/api/easeid-kyc-service/facecapture/query';
+
+        $requestData = [
+            'appId' => $this->appId,
+            'transactionId' => $transactionId,
+            'requestTime' => $this->getRequestTime(),
+            'version' => 'V1.1',
+            'nonceStr' => $this->generateNonceStr(),
+        ];
+
+        Log::info('EaseID Liveness Query Request', ['transactionId' => $transactionId]);
+
+        return $this->makeRequest('POST', $endpoint, $requestData);
+    }
+
+    /**
+     * Check Blacklist
+     * Check if customer is on credit blacklist
+     */
+    public function checkBlacklist(?string $phoneNumber = null, ?string $bvn = null, ?string $nin = null): array
+    {
+        $endpoint = '/api/v1/okcard-risk-control/query/blacklist';
+
+        $requestData = [
+            'appId' => $this->appId,
+            'requestTime' => $this->getRequestTime(),
+            'version' => 'V1.1',
+            'nonceStr' => $this->generateNonceStr(),
+        ];
+
+        if ($phoneNumber) $requestData['phoneNumber'] = $phoneNumber;
+        if ($bvn) $requestData['bvnNo'] = $bvn;
+        if ($nin) $requestData['ninNo'] = $nin;
+
+        Log::info('EaseID Blacklist Check Request');
+
+        return $this->makeRequest('POST', $endpoint, $requestData);
+    }
+
+    /**
+     * Credit Score (Nigeria)
+     * Get customer credit score
+     */
+    public function getCreditScoreNigeria(string $mobileNo, string $idNumber): array
+    {
+        $endpoint = '/api/v1/okcard-risk-control/query/score';
+
+        $requestData = [
+            'appId' => $this->appId,
+            'mobileNo' => $mobileNo,
+            'idNumber' => $idNumber,
+            'requestTime' => $this->getRequestTime(),
+            'version' => 'V1.1',
+            'nonceStr' => $this->generateNonceStr(),
+        ];
+
+        Log::info('EaseID Credit Score (NG) Request');
+
+        return $this->makeRequest('POST', $endpoint, $requestData);
+    }
+
+    /**
+     * Credit Score (Tanzania)
+     */
+    public function getCreditScoreTanzania(string $gaid, string $phoneNumber): array
+    {
+        $endpoint = '/api/v1/risk-score/query/score';
+
+        $requestData = [
+            'appId' => $this->appId,
+            'gaid' => $gaid,
+            'phoneNumber' => $phoneNumber,
+            'requestTime' => $this->getRequestTime(),
+            'version' => 'V1.1',
+            'nonceStr' => $this->generateNonceStr(),
+        ];
+
+        Log::info('EaseID Credit Score (TZ) Request');
+
+        $response = $this->makeRequest('POST', $endpoint, $requestData);
+        
+        // Change country code for Tanzania
+        return $response;
+    }
+
+    /**
+     * Loan Features Query (Nigeria)
+     */
+    public function getLoanFeatures(string $value, int $type = 1, string $accessType = '01'): array
+    {
+        $endpoint = '/api/v1/group';
+
+        $requestData = [
+            'type' => $type,
+            'accessType' => $accessType,
+            'value' => $value,
+            'encrypt' => '0',
+            'requestTime' => $this->getRequestTime(),
+            'version' => 'V1.1',
+            'nonceStr' => $this->generateNonceStr(),
+        ];
+
+        Log::info('EaseID Loan Features Request');
+
+        return $this->makeRequest('POST', $endpoint, $requestData);
+    }
+
+    /**
+     * Query EaseID Account Balance
+     */
+    public function getBalance(): array
+    {
+        $endpoint = '/api/enquiry/balance';
+
+        $requestData = [
+            'appId' => $this->appId,
+            'requestTime' => $this->getRequestTime(),
+            'version' => 'V1.1',
+            'nonceStr' => $this->generateNonceStr(),
+        ];
+
+        Log::info('EaseID Balance Query Request');
+
+        return $this->makeRequest('POST', $endpoint, $requestData);
+    }
 }

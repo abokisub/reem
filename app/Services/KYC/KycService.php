@@ -677,4 +677,209 @@ class KycService
             ];
         }
     }
+
+    /**
+     * Face Recognition - Compare two faces
+     */
+    public function compareFaces(string $sourceImage, string $targetImage, ?int $companyId = null, bool $chargeForVerification = true): array
+    {
+        // Deduct charge if requested
+        $chargeResult = null;
+        if ($companyId && $chargeForVerification) {
+            $chargeResult = $this->deductKycCharge($companyId, 'face_recognition');
+            if (!$chargeResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $chargeResult['message'],
+                    'data' => null,
+                    'charged' => false,
+                ];
+            }
+        }
+
+        try {
+            $result = $this->easeIdClient->compareFaces($sourceImage, $targetImage);
+
+            return [
+                'success' => $result['success'],
+                'message' => $result['message'] ?? 'Face comparison completed',
+                'data' => $result['data'],
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+                'transaction_reference' => $chargeResult['transaction_reference'] ?? null,
+            ];
+        } catch (Exception $e) {
+            Log::error('Face Recognition Error', ['error' => $e->getMessage()]);
+            return [
+                'success' => false,
+                'message' => 'Face recognition failed: ' . $e->getMessage(),
+                'data' => null,
+                'charged' => $chargeResult ? true : false,
+            ];
+        }
+    }
+
+    /**
+     * Initialize Liveness Detection
+     */
+    public function initializeLiveness(string $bizId, string $redirectUrl, ?string $userId, ?int $companyId = null, bool $chargeForVerification = true): array
+    {
+        // Deduct charge if requested
+        $chargeResult = null;
+        if ($companyId && $chargeForVerification) {
+            $chargeResult = $this->deductKycCharge($companyId, 'liveness_detection');
+            if (!$chargeResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $chargeResult['message'],
+                    'data' => null,
+                    'charged' => false,
+                ];
+            }
+        }
+
+        try {
+            $result = $this->easeIdClient->initializeLiveness($bizId, $redirectUrl, $userId);
+
+            return [
+                'success' => $result['success'],
+                'message' => $result['message'] ?? 'Liveness initialized',
+                'data' => $result['data'],
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+                'transaction_reference' => $chargeResult['transaction_reference'] ?? null,
+            ];
+        } catch (Exception $e) {
+            Log::error('Liveness Initialize Error', ['error' => $e->getMessage()]);
+            return [
+                'success' => false,
+                'message' => 'Liveness initialization failed: ' . $e->getMessage(),
+                'data' => null,
+                'charged' => $chargeResult ? true : false,
+            ];
+        }
+    }
+
+    /**
+     * Check Blacklist
+     */
+    public function checkBlacklist(?string $phoneNumber, ?string $bvn, ?string $nin, ?int $companyId = null, bool $chargeForVerification = true): array
+    {
+        // Deduct charge if requested
+        $chargeResult = null;
+        if ($companyId && $chargeForVerification) {
+            $chargeResult = $this->deductKycCharge($companyId, 'blacklist_check');
+            if (!$chargeResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $chargeResult['message'],
+                    'data' => null,
+                    'charged' => false,
+                ];
+            }
+        }
+
+        try {
+            $result = $this->easeIdClient->checkBlacklist($phoneNumber, $bvn, $nin);
+
+            return [
+                'success' => $result['success'],
+                'message' => $result['message'] ?? 'Blacklist check completed',
+                'data' => $result['data'],
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+                'transaction_reference' => $chargeResult['transaction_reference'] ?? null,
+            ];
+        } catch (Exception $e) {
+            Log::error('Blacklist Check Error', ['error' => $e->getMessage()]);
+            return [
+                'success' => false,
+                'message' => 'Blacklist check failed: ' . $e->getMessage(),
+                'data' => null,
+                'charged' => $chargeResult ? true : false,
+            ];
+        }
+    }
+
+    /**
+     * Get Credit Score (Nigeria)
+     */
+    public function getCreditScore(string $mobileNo, string $idNumber, ?int $companyId = null, bool $chargeForVerification = true): array
+    {
+        // Deduct charge if requested
+        $chargeResult = null;
+        if ($companyId && $chargeForVerification) {
+            $chargeResult = $this->deductKycCharge($companyId, 'credit_score');
+            if (!$chargeResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $chargeResult['message'],
+                    'data' => null,
+                    'charged' => false,
+                ];
+            }
+        }
+
+        try {
+            $result = $this->easeIdClient->getCreditScoreNigeria($mobileNo, $idNumber);
+
+            return [
+                'success' => $result['success'],
+                'message' => $result['message'] ?? 'Credit score retrieved',
+                'data' => $result['data'],
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+                'transaction_reference' => $chargeResult['transaction_reference'] ?? null,
+            ];
+        } catch (Exception $e) {
+            Log::error('Credit Score Error', ['error' => $e->getMessage()]);
+            return [
+                'success' => false,
+                'message' => 'Credit score query failed: ' . $e->getMessage(),
+                'data' => null,
+                'charged' => $chargeResult ? true : false,
+            ];
+        }
+    }
+
+    /**
+     * Get Loan Features
+     */
+    public function getLoanFeatures(string $value, int $type, string $accessType, ?int $companyId = null, bool $chargeForVerification = true): array
+    {
+        // Deduct charge if requested
+        $chargeResult = null;
+        if ($companyId && $chargeForVerification) {
+            $chargeResult = $this->deductKycCharge($companyId, 'loan_features');
+            if (!$chargeResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => $chargeResult['message'],
+                    'data' => null,
+                    'charged' => false,
+                ];
+            }
+        }
+
+        try {
+            $result = $this->easeIdClient->getLoanFeatures($value, $type, $accessType);
+
+            return [
+                'success' => $result['success'],
+                'message' => $result['message'] ?? 'Loan features retrieved',
+                'data' => $result['data'],
+                'charged' => $chargeResult ? true : false,
+                'charge_amount' => $chargeResult['charge_amount'] ?? 0,
+                'transaction_reference' => $chargeResult['transaction_reference'] ?? null,
+            ];
+        } catch (Exception $e) {
+            Log::error('Loan Features Error', ['error' => $e->getMessage()]);
+            return [
+                'success' => false,
+                'message' => 'Loan features query failed: ' . $e->getMessage(),
+                'data' => null,
+                'charged' => $chargeResult ? true : false,
+            ];
+        }
+    }
 }

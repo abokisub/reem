@@ -834,6 +834,15 @@ Route::middleware([\App\Http\Middleware\V1\MerchantAuth::class])->prefix('v1/kyc
     Route::post('/verify-bvn', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyBVN']);
     Route::post('/verify-nin', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyNIN']);
     Route::post('/verify-bank-account', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyBankAccount']);
+    
+    // Advanced KYC Services
+    Route::post('/face-compare', [App\Http\Controllers\API\V1\MerchantApiController::class, 'compareFaces']);
+    Route::post('/liveness/initialize', [App\Http\Controllers\API\V1\MerchantApiController::class, 'initializeLiveness']);
+    Route::post('/liveness/query', [App\Http\Controllers\API\V1\MerchantApiController::class, 'queryLivenessResult']);
+    Route::post('/blacklist-check', [App\Http\Controllers\API\V1\MerchantApiController::class, 'checkBlacklist']);
+    Route::post('/credit-score', [App\Http\Controllers\API\V1\MerchantApiController::class, 'getCreditScore']);
+    Route::post('/loan-features', [App\Http\Controllers\API\V1\MerchantApiController::class, 'getLoanFeatures']);
+    Route::get('/easeid-balance', [App\Http\Controllers\API\V1\MerchantApiController::class, 'getEaseIDBalance']);
 });
 
 // Document Upload Routes (Authenticated Companies)
