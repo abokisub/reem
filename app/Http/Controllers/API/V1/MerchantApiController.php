@@ -379,7 +379,7 @@ class MerchantApiController extends Controller
             $banks = DB::table('banks')
                 ->where('active', 1)
                 ->orderBy('name')
-                ->get(['id', 'name', 'code', 'slug']);
+                ->get(['id', 'name', 'code']);
 
             // Format response
             $formattedBanks = $banks->map(function($bank) {
@@ -387,7 +387,6 @@ class MerchantApiController extends Controller
                     'id' => $bank->id,
                     'name' => $bank->name,
                     'code' => $bank->code,
-                    'slug' => $bank->slug,
                     'active' => true
                 ];
             })->toArray();
