@@ -134,7 +134,10 @@ class CompanyController extends Controller
             $rawCompany = DB::table('companies')->where('id', $company->id)->first();
         }
 
-        // Return credentials using raw data to avoid decryption issues
+        // Try to decrypt webhook secrets, regenerate if fails
+        $webhookSecret = null;
+        $testWebhookSecret = null;
+        
         try {
             $webhookSecret = $company->webhook_secret;
             $testWebhookSecret = $company->test_webhook_secret;
@@ -150,6 +153,21 @@ class CompanyController extends Controller
             
             DB::table('companies')->where('id', $company->id)->update([
                 'webhook_secret' => encrypt($webhookSecret),
+                'test_webhook_secret' => encrypt($testWebhookSecret),
+            ]);
+        }
+        
+        // If still null, generate new ones
+        if (!$webhookSecret) {
+            $webhookSecret = 'whsec_' . bin2hex(random_bytes(32));
+            DB::table('companies')->where('id', $company->id)->update([
+                'webhook_secret' => encrypt($webhookSecret),
+            ]);
+        }
+        
+        if (!$testWebhookSecret) {
+            $testWebhookSecret = 'whsec_test_' . bin2hex(random_bytes(32));
+            DB::table('companies')->where('id', $company->id)->update([
                 'test_webhook_secret' => encrypt($testWebhookSecret),
             ]);
         }
