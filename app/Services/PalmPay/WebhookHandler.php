@@ -439,7 +439,7 @@ class WebhookHandler
                             'transaction_id' => $transaction->transaction_id,
                             'amount' => $transaction->amount,
                             'fee' => $transaction->fee,
-                            'net_amount' => $transaction->netAmount,
+                            'net_amount' => $transaction->net_amount,
                             'reference' => $transaction->reference,
                             'status' => 'success',
                             'customer' => [
