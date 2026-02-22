@@ -1,0 +1,132 @@
+================================================================================
+WEBHOOK SIGNATURE FIX - BOTH SYSTEMS
+================================================================================
+
+PROBLEM IDENTIFIED:
+-------------------
+PointWave and Kobopoint are computing signatures on DIFFERENT data:
+- PointWave: Computes signature on one JSON string, sends a different one
+- Kobopoint: Receives the payload and computes signature, but it doesn't match
+
+ROOT CAUSE:
+-----------
+1. PointWave used json_encode() for signature, but Http::post() re-encodes
+2. Different JSON formatting = different signatures
+3. Prefix mismatch (sha256= vs no prefix)
+
+
+================================================================================
+POINTWAVE FIX (ALREADY APPLIED)
+================================================================================
+
+File: app/Jobs/SendOutgoingWebhook.php
+
+CHANGED:
+--------
+✅ Encode JSON once with consistent flags
+✅ Compute signature on exact JSON being sent
+✅ Send signature without "sha256=" prefix
+✅ Use withBody() to send raw JSON
+
+DEPLOY:
+-------
+1. git add app/Jobs/SendOutgoingWebhook.php
+2. git commit -m "Fix webhook signature - consistent JSON encoding"
+3. git push origin main
+4. On server: bash DEPLOY_WEBHOOK_FIX.sh
+
+
+================================================================================
+KOBOPOINT REQUIREMENTS
+================================================================================
+
+Kobopoint webhook handler MUST:
+
+1. Get raw payload:
+   $payload = $request->getContent();
+
+2. Get signature (no prefix expected):
+   $signature = $request->header('X-PointWave-Signature');
+
+3. Get secret from .env:
+   $secret = env('POINTWAVE_WEBHOOK_SECRET');
+
+4. Compute expected signature:
+   $expected = hash_hmac('sha256', $payload, $secret);
+
+5. Compare:
+   if (!hash_equals($expected, $signature)) {
+       return response()->json(['error' => 'Invalid signature'], 401);
+   }
+
+IMPORTANT:
+----------
+- Use $request->getContent() NOT $request->all() or $request->json()
+- Compare raw signature (no sha256= prefix)
+- Use hash_equals() for timing-safe comparison
+- Webhook secret must match EXACTLY with PointWave
+
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+BEFORE TESTING:
+---------------
+☐ PointWave fix deployed
+☐ PointWave caches cleared
+☐ Webhook secrets match on both systems
+☐ Kobopoint webhook handler uses $request->getContent()
+☐ Kobopoint expects signature without prefix
+
+TESTING:
+--------
+1. Run: php compare_webhook_secrets.php (on PointWave)
+2. Verify secret matches on Kobopoint .env
+3. Run: php retry_failed_company_webhooks.php (on PointWave)
+4. Check: php check_company_webhook_logs.php (on PointWave)
+5. Make test deposit to Kobopoint virtual account
+6. Verify customer balance updates on Kobopoint
+
+SUCCESS INDICATORS:
+-------------------
+✅ PointWave logs: "Webhook sent successfully"
+✅ Kobopoint logs: "PointWave webhook received"
+✅ HTTP 200 responses
+✅ Customer balances updating
+✅ No "Invalid signature" errors
+✅ No webhooks in DLQ
+
+
+================================================================================
+COMMANDS TO RUN
+================================================================================
+
+ON POINTWAVE SERVER:
+--------------------
+cd /path/to/app.pointwave.ng
+bash DEPLOY_WEBHOOK_FIX.sh
+php compare_webhook_secrets.php
+php retry_failed_company_webhooks.php
+php check_company_webhook_logs.php
+
+ON KOBOPOINT SERVER:
+--------------------
+cd /path/to/app.kobopoint.com
+grep POINTWAVE_WEBHOOK_SECRET .env
+# Verify it matches PointWave's webhook_secret for company_id=4
+php artisan config:clear
+tail -f storage/logs/laravel.log
+
+
+================================================================================
+CURRENT STATUS
+================================================================================
+
+✅ PointWave fix applied to code
+⏳ Waiting for deployment
+⏳ Waiting for Kobopoint verification
+⏳ Waiting for retry test
+
+NEXT ACTION: Deploy PointWave fix and verify webhook secret matches
+================================================================================

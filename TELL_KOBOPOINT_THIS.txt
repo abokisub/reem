@@ -1,0 +1,401 @@
+================================================================================
+URGENT: YOUR WEBHOOK ENDPOINT IS REJECTING OUR NOTIFICATIONS
+================================================================================
+
+Hi Kobopoint Team,
+
+Your webhook endpoint at https://app.kobopoint.com/webhooks/pointwave is 
+returning error codes (401, 402, 405, 419) and rejecting our payment notifications.
+
+This means your customers are NOT being notified when they receive payments.
+
+================================================================================
+THE ERRORS WE'RE SEEING
+================================================================================
+
+HTTP 401 - Unauthorized (signature verification failing)
+HTTP 402 - Payment Required (???)
+HTTP 405 - Method Not Allowed (your route doesn't accept POST)
+HTTP 419 - CSRF Token Mismatch (Laravel CSRF protection blocking webhooks)
+
+
+================================================================================
+THE FIX - DO THIS NOW
+================================================================================
+
+1. DISABLE CSRF PROTECTION FOR WEBHOOK ROUTE
+   
+   File: app/Http/Middleware/VerifyCsrfToken.php
+   
+   Add this:
+   
+   protected $except = [
+       'webhooks/*',
+       'api/*'
+   ];
+
+
+2. CREATE THE WEBHOOK ROUTE (MUST BE POST)
+   
+   File: routes/api.php
+   
+   Route::post('/webhooks/pointwave', [App\Http\Controllers\Webhooks\PointWaveWebhookController::class, 'handle'])
+       ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+
+
+3. CREATE THE WEBHOOK CONTROLLER
+   
+   File: app/Http/Controllers/Webhooks/PointWaveWebhookController.php
+   
+<?php
+
+namespace App\Http\Controllers\Webhooks;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+
+class PointWaveWebhookController extends Controller
+{
+    public function handle(Request $request)
+    {
+        // Get raw payload
+        $payload = $request->getContent();
+        
+        // Get signature from header
+        $receivedSignature = $request->header('X-PointWave-Signature');
+        
+        // Get webhook secret from .env
+        $webhookSecret = env('POINTWAVE_WEBHOOK_SECRET');
+        
+        // Verify signature exists
+        if (!$receivedSignature) {
+            Log::warning('PointWave webhook missing signature');
+            return response()->json(['error' => 'Missing signature'], 401);
+        }
+        
+        // Compute expected signature
+        $expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
+        
+        // Compare signatures
+        if (!hash_equals($expectedSignature, $receivedSignature)) {
+            Log::warning('Invalid PointWave webhook signature', [
+                'received' => substr($receivedSignature, 0, 20) . '...',
+                'expected' => substr($expectedSignature, 0, 20) . '...'
+            ]);
+            return response()->json(['error' => 'Invalid signature'], 401);
+        }
+        
+        // Parse payload
+        $data = json_decode($payload, true);
+        
+        if (!$data) {
+            Log::error('Invalid JSON from PointWave');
+            return response()->json(['error' => 'Invalid JSON'], 400);
+        }
+        
+        // Get event details
+        $eventType = $data['event'] ?? null;
+        $eventId = $request->header('X-PointWave-Event-ID');
+        
+        // Check for duplicate
+        $exists = \DB::table('webhook_events')
+            ->where('event_id', $eventId)
+            ->exists();
+            
+        if ($exists) {
+            Log::info('Duplicate PointWave event', ['event_id' => $eventId]);
+            return response()->json(['message' => 'Already processed'], 200);
+        }
+        
+        // Store event
+        \DB::table('webhook_events')->insert([
+            'event_id' => $eventId,
+            'event_type' => $eventType,
+            'payload' => $payload,
+            'processed' => false,
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+        
+        // Queue processing
+        dispatch(new \App\Jobs\ProcessPointWaveWebhook($data, $eventId));
+        
+        Log::info('PointWave webhook received', [
+            'event_id' => $eventId,
+            'event_type' => $eventType
+        ]);
+        
+        // MUST return 200 immediately
+        return response()->json(['message' => 'Webhook received'], 200);
+    }
+}
+
+
+4. CREATE THE PROCESSING JOB
+   
+   File: app/Jobs/ProcessPointWaveWebhook.php
+   
+<?php
+
+namespace App\Jobs;
+
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
+
+class ProcessPointWaveWebhook implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    protected $data;
+    protected $eventId;
+
+    public function __construct(array $data, string $eventId)
+    {
+        $this->data = $data;
+        $this->eventId = $eventId;
+    }
+
+    public function handle()
+    {
+        $eventType = $this->data['event'];
+        
+        Log::info('Processing PointWave webhook', [
+            'event_id' => $this->eventId,
+            'event_type' => $eventType
+        ]);
+        
+        try {
+            if ($eventType === 'payment.success' || $eventType === 'transaction.success') {
+                $this->handlePaymentSuccess();
+            }
+            
+            // Mark as processed
+            \DB::table('webhook_events')
+                ->where('event_id', $this->eventId)
+                ->update(['processed' => true, 'updated_at' => now()]);
+                
+        } catch (\Exception $e) {
+            Log::error('Error processing PointWave webhook', [
+                'event_id' => $this->eventId,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
+        }
+    }
+    
+    private function handlePaymentSuccess()
+    {
+        $txnData = $this->data['data'];
+        
+        $transactionId = $txnData['transaction_id'];
+        $amount = $txnData['amount'];
+        $fee = $txnData['fee'];
+        $netAmount = $txnData['net_amount'];
+        $customerId = $txnData['customer']['id'] ?? null;
+        
+        // Find user by PointWave customer ID
+        $user = \App\Models\User::where('pointwave_customer_id', $customerId)->first();
+        
+        if (!$user) {
+            Log::error('User not found for PointWave customer', [
+                'customer_id' => $customerId,
+                'transaction_id' => $transactionId
+            ]);
+            return;
+        }
+        
+        // Credit wallet
+        $user->wallet()->increment('balance', $netAmount);
+        
+        // Create transaction
+        \App\Models\Transaction::create([
+            'user_id' => $user->id,
+            'transaction_id' => $transactionId,
+            'amount' => $amount,
+            'fee' => $fee,
+            'net_amount' => $netAmount,
+            'type' => 'deposit',
+            'status' => 'success',
+            'provider' => 'pointwave',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+        
+        Log::info('User wallet credited', [
+            'user_id' => $user->id,
+            'amount' => $netAmount,
+            'transaction_id' => $transactionId
+        ]);
+    }
+}
+
+
+5. CREATE DATABASE TABLE
+   
+   Run: php artisan make:migration create_webhook_events_table
+   
+   Then edit the migration:
+   
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+class CreateWebhookEventsTable extends Migration
+{
+    public function up()
+    {
+        Schema::create('webhook_events', function (Blueprint $table) {
+            $table->id();
+            $table->string('event_id')->unique();
+            $table->string('event_type');
+            $table->text('payload');
+            $table->boolean('processed')->default(false);
+            $table->timestamps();
+            
+            $table->index('event_id');
+            $table->index('processed');
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('webhook_events');
+    }
+}
+
+   Then run: php artisan migrate
+
+
+6. UPDATE YOUR .ENV FILE
+   
+   Make sure this line exists EXACTLY as shown:
+   
+   POINTWAVE_WEBHOOK_SECRET=whsec_aad2319b0eb134b2f598ad63d4c2a7a2a4b054f42781b6599b92a7cc1a97fc68
+
+
+7. DEPLOY THE FIX
+   
+   Run these commands on your server:
+   
+   php artisan config:clear
+   php artisan route:clear
+   php artisan cache:clear
+   php artisan migrate
+   
+   Then restart your application.
+
+
+================================================================================
+WHAT WE SEND YOU
+================================================================================
+
+URL: POST https://app.kobopoint.com/webhooks/pointwave
+
+Headers:
+  X-PointWave-Signature: <hmac_sha256_hash>
+  X-PointWave-Event-ID: <uuid>
+  X-PointWave-Event-Type: payment.success
+  X-PointWave-Timestamp: <unix_timestamp>
+  Content-Type: application/json
+
+Body:
+{
+  "event": "payment.success",
+  "event_id": "550e8400-e29b-41d4-a716-446655440000",
+  "timestamp": "2026-02-22T12:17:49.000000Z",
+  "data": {
+    "transaction_id": "txn_699ae5ddad47894058",
+    "reference": "MI2025530422154399744",
+    "session_id": "100004260222111739152965385413",
+    "type": "virtual_account_deposit",
+    "amount": "100.00",
+    "fee": "0.60",
+    "net_amount": "99.40",
+    "currency": "NGN",
+    "status": "success",
+    "customer": {
+      "id": "42",
+      "name": "ABOKI TELECOMMUNICATION SERVICES",
+      "account_number": "6611630442",
+      "bank_name": "PointWave Virtual Account"
+    },
+    "virtual_account": {
+      "account_number": "6611630442",
+      "account_name": "kobopoint-Kobo Point(PointWave)",
+      "bank_name": "PalmPay"
+    },
+    "created_at": "2026-02-22T12:17:49Z"
+  }
+}
+
+
+================================================================================
+CRITICAL POINTS
+================================================================================
+
+✅ Disable CSRF protection for webhook routes
+✅ Route MUST accept POST method
+✅ Use $request->getContent() for raw payload
+✅ Read signature from X-PointWave-Signature header
+✅ Use hash_hmac('sha256', $payload, $secret)
+✅ Use hash_equals() for comparison
+✅ Return 200 immediately
+✅ Queue the processing (don't process in webhook handler)
+✅ Check for duplicate events using event_id
+
+
+================================================================================
+TESTING
+================================================================================
+
+After deployment, we'll send a test webhook. You should see:
+
+✅ HTTP 200 response
+✅ Log: "PointWave webhook received"
+✅ Log: "Processing PointWave webhook"
+✅ Log: "User wallet credited"
+
+NOT:
+❌ HTTP 401, 402, 405, 419 errors
+❌ "Invalid signature"
+❌ "CSRF token mismatch"
+
+
+================================================================================
+CURRENT STATUS
+================================================================================
+
+We have sent 8 webhooks to your endpoint:
+- All 8 failed with HTTP 401, 402, 405, or 419 errors
+- Your customers are NOT being notified of their payments
+- Payments are being held in our system
+
+Once you fix your endpoint, we will:
+1. Automatically retry the failed webhooks
+2. Start sending new webhooks immediately
+3. Your customers will see their balances update
+
+
+================================================================================
+NEED HELP?
+================================================================================
+
+If you still have issues:
+
+1. Check your Laravel logs for errors
+2. Verify the webhook secret in .env matches exactly
+3. Make sure CSRF protection is disabled for webhooks
+4. Ensure the route accepts POST requests
+5. Clear all caches after deployment
+
+Contact us with your logs if problems persist.
+
+
+================================================================================

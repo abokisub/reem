@@ -67,17 +67,21 @@ class SendOutgoingWebhook implements ShouldQueue
                 return;
             }
 
-            $payload = json_encode($this->webhookLog->payload);
-            $signature = hash_hmac('sha256', $payload, $secret);
+            // Encode payload with consistent formatting
+            $payloadJson = json_encode($this->webhookLog->payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            
+            // Compute signature on the exact JSON string we're sending
+            $signature = hash_hmac('sha256', $payloadJson, $secret);
 
-            // Send the webhook
+            // Send the webhook with raw JSON body
             $response = Http::timeout(15)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'User-Agent' => 'PointWave-Webhook/1.0',
-                    'X-PointWave-Signature' => 'sha256=' . $signature,
+                    'X-PointWave-Signature' => $signature,  // No prefix - Kobopoint expects raw hash
                 ])
-                ->post($this->webhookLog->webhook_url, $this->webhookLog->payload);
+                ->withBody($payloadJson, 'application/json')
+                ->post($this->webhookLog->webhook_url);
 
             $status = $response->successful() ? 'delivered' : 'failed';
 
