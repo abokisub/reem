@@ -30,6 +30,7 @@ class CompanyWebhookLog extends Model
     protected $casts = [
         'payload' => 'array',
         'sent_at' => 'datetime',
+        'last_attempt_at' => 'datetime',
         'next_retry_at' => 'datetime',
     ];
 

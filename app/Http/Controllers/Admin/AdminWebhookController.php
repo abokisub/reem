@@ -67,8 +67,10 @@ class AdminWebhookController extends Controller
                 'payload' => $webhook->payload, // Full payload for admin
                 'status' => $webhook->status,
                 'attempt_count' => $webhook->attempt_number ?? 0,
-                'last_attempt_at' => $webhook->last_attempt_at?->toISOString(),
-                'next_retry_at' => $webhook->next_retry_at?->toISOString(),
+                'last_attempt_at' => $webhook->last_attempt_at ? 
+                    (is_string($webhook->last_attempt_at) ? $webhook->last_attempt_at : $webhook->last_attempt_at->toISOString()) : null,
+                'next_retry_at' => $webhook->next_retry_at ? 
+                    (is_string($webhook->next_retry_at) ? $webhook->next_retry_at : $webhook->next_retry_at->toISOString()) : null,
                 'http_status' => $webhook->http_status,
                 'response_body' => $webhook->response_body, // Full response for admin
                 'created_at' => $webhook->created_at->toISOString(),
@@ -99,8 +101,10 @@ class AdminWebhookController extends Controller
             'payload' => $webhook->payload,
             'status' => $webhook->status,
             'attempt_count' => $webhook->attempt_number ?? 0,
-            'last_attempt_at' => $webhook->last_attempt_at?->toISOString(),
-            'next_retry_at' => $webhook->next_retry_at?->toISOString(),
+            'last_attempt_at' => $webhook->last_attempt_at ? 
+                (is_string($webhook->last_attempt_at) ? $webhook->last_attempt_at : $webhook->last_attempt_at->toISOString()) : null,
+            'next_retry_at' => $webhook->next_retry_at ? 
+                (is_string($webhook->next_retry_at) ? $webhook->next_retry_at : $webhook->next_retry_at->toISOString()) : null,
             'http_status' => $webhook->http_status,
             'response_body' => $webhook->response_body,
             'error_message' => $webhook->error_message,
