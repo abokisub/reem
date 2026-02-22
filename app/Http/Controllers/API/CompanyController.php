@@ -139,8 +139,22 @@ class CompanyController extends Controller
         $testWebhookSecret = null;
         
         try {
-            $webhookSecret = $company->webhook_secret;
-            $testWebhookSecret = $company->test_webhook_secret;
+            // Manually decrypt to avoid serialization issues
+            $encryptedWebhookSecret = DB::table('companies')
+                ->where('id', $company->id)
+                ->value('webhook_secret');
+            
+            $encryptedTestWebhookSecret = DB::table('companies')
+                ->where('id', $company->id)
+                ->value('test_webhook_secret');
+            
+            if ($encryptedWebhookSecret) {
+                $webhookSecret = decrypt($encryptedWebhookSecret);
+            }
+            
+            if ($encryptedTestWebhookSecret) {
+                $testWebhookSecret = decrypt($encryptedTestWebhookSecret);
+            }
         } catch (\Exception $e) {
             // If decryption fails, regenerate the secrets
             \Log::error('Webhook secret decryption failed, regenerating', [
