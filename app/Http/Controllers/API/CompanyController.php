@@ -123,7 +123,9 @@ class CompanyController extends Controller
                 'test_secret_key' => $company->test_secret_key,
                 'public_key' => $company->api_public_key,
                 'webhook_url' => $company->webhook_url,
+                'webhook_secret' => $company->webhook_secret,
                 'test_webhook_url' => $company->test_webhook_url,
+                'test_webhook_secret' => $company->test_webhook_secret,
                 'is_active' => $company->is_active,
             ]
         ]);
