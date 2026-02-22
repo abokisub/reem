@@ -95,40 +95,83 @@ class CompanyController extends Controller
         }
 
         // Check if credentials need to be generated
-        $needsGeneration = !$company->api_public_key || !$company->api_secret_key || 
-                          !$company->test_public_key || !$company->test_secret_key ||
-                          !$company->business_id || !$company->webhook_secret || !$company->test_webhook_secret;
-
-        if ($needsGeneration) {
-            $updates = [];
-            
-            // Generate missing credentials
-            if (!$company->business_id) {
-                $updates['business_id'] = bin2hex(random_bytes(20));
-            }
+        $needsGeneration = false;
+        $updates = [];
+        
+        // Check each field individually with try-catch for decryption errors
+        try {
             if (!$company->api_public_key) {
                 $updates['api_public_key'] = bin2hex(random_bytes(20));
+                $needsGeneration = true;
             }
+        } catch (\Exception $e) {
+            $updates['api_public_key'] = bin2hex(random_bytes(20));
+            $needsGeneration = true;
+        }
+        
+        try {
             if (!$company->api_secret_key) {
                 $updates['api_secret_key'] = bin2hex(random_bytes(60));
+                $needsGeneration = true;
             }
+        } catch (\Exception $e) {
+            $updates['api_secret_key'] = bin2hex(random_bytes(60));
+            $needsGeneration = true;
+        }
+        
+        try {
             if (!$company->test_public_key) {
                 $updates['test_public_key'] = bin2hex(random_bytes(20));
+                $needsGeneration = true;
             }
+        } catch (\Exception $e) {
+            $updates['test_public_key'] = bin2hex(random_bytes(20));
+            $needsGeneration = true;
+        }
+        
+        try {
             if (!$company->test_secret_key) {
                 $updates['test_secret_key'] = bin2hex(random_bytes(60));
+                $needsGeneration = true;
             }
+        } catch (\Exception $e) {
+            $updates['test_secret_key'] = bin2hex(random_bytes(60));
+            $needsGeneration = true;
+        }
+        
+        try {
+            if (!$company->business_id) {
+                $updates['business_id'] = bin2hex(random_bytes(20));
+                $needsGeneration = true;
+            }
+        } catch (\Exception $e) {
+            $updates['business_id'] = bin2hex(random_bytes(20));
+            $needsGeneration = true;
+        }
+        
+        try {
             if (!$company->webhook_secret) {
                 $updates['webhook_secret'] = 'whsec_' . bin2hex(random_bytes(32));
+                $needsGeneration = true;
             }
+        } catch (\Exception $e) {
+            $updates['webhook_secret'] = 'whsec_' . bin2hex(random_bytes(32));
+            $needsGeneration = true;
+        }
+        
+        try {
             if (!$company->test_webhook_secret) {
                 $updates['test_webhook_secret'] = 'whsec_test_' . bin2hex(random_bytes(32));
+                $needsGeneration = true;
             }
-            
-            if (!empty($updates)) {
-                $company->update($updates);
-                $company = $company->fresh();
-            }
+        } catch (\Exception $e) {
+            $updates['test_webhook_secret'] = 'whsec_test_' . bin2hex(random_bytes(32));
+            $needsGeneration = true;
+        }
+
+        if ($needsGeneration && !empty($updates)) {
+            $company->update($updates);
+            $company = $company->fresh();
         }
 
         // Return credentials (secret keys are hidden by model)

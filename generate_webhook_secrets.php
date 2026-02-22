@@ -6,12 +6,15 @@ $app = require_once __DIR__.'/bootstrap/app.php';
 $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
 use App\Models\Company;
+use Illuminate\Support\Facades\DB;
 
 echo "========================================\n";
 echo "Generate Webhook Secrets for All Companies\n";
 echo "========================================\n\n";
 
-$companies = Company::whereNull('webhook_secret')
+// Use raw query to avoid decryption issues
+$companies = DB::table('companies')
+    ->whereNull('webhook_secret')
     ->orWhereNull('test_webhook_secret')
     ->get();
 
@@ -23,7 +26,7 @@ if ($companies->isEmpty()) {
 echo "Found " . $companies->count() . " company(ies) without webhook secrets\n\n";
 
 foreach ($companies as $company) {
-    echo "[{$company->id}] {$company->company_name} ({$company->email})\n";
+    echo "[{$company->id}] {$company->name} ({$company->email})\n";
     
     $updates = [];
     
@@ -38,7 +41,9 @@ foreach ($companies as $company) {
     }
     
     if (!empty($updates)) {
-        $company->update($updates);
+        DB::table('companies')
+            ->where('id', $company->id)
+            ->update($updates);
     }
     
     echo "\n";
