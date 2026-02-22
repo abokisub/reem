@@ -67,12 +67,22 @@ class OutgoingWebhookService
         $webhookEvent->update(['last_attempt_at' => now()]);
 
         try {
-            // Send HTTP POST request
+            // Get company webhook secret for signature
+            $company = $webhookEvent->company;
+            $webhookSecret = $company->webhook_secret;
+            
+            // Generate HMAC-SHA256 signature
+            $jsonPayload = json_encode($webhookEvent->payload);
+            $signature = hash_hmac('sha256', $jsonPayload, $webhookSecret);
+            
+            // Send HTTP POST request with signature
             $response = Http::timeout(10)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
-                    'X-Webhook-Event-ID' => $webhookEvent->event_id,
-                    'X-Webhook-Event-Type' => $webhookEvent->event_type,
+                    'X-PointWave-Signature' => $signature,
+                    'X-PointWave-Event-ID' => $webhookEvent->event_id,
+                    'X-PointWave-Event-Type' => $webhookEvent->event_type,
+                    'X-PointWave-Timestamp' => now()->timestamp,
                 ])
                 ->post($webhookEvent->endpoint_url, $webhookEvent->payload);
 
@@ -130,23 +140,32 @@ class OutgoingWebhookService
     private function preparePayload(Transaction $transaction, string $eventType): array
     {
         return [
-            'event_type' => $eventType,
+            'event' => $eventType,
             'event_id' => Str::uuid()->toString(),
             'timestamp' => now()->toISOString(),
             'data' => [
-                'transaction_ref' => $transaction->transaction_ref,
+                'transaction_id' => $transaction->transaction_ref,
+                'reference' => $transaction->provider_reference ?? $transaction->transaction_ref,
                 'session_id' => $transaction->session_id,
-                'transaction_type' => $transaction->transaction_type,
+                'type' => $transaction->transaction_type,
                 'amount' => $transaction->amount,
                 'fee' => $transaction->fee,
                 'net_amount' => $transaction->net_amount,
+                'currency' => $transaction->currency ?? 'NGN',
                 'status' => $transaction->status,
                 'settlement_status' => $transaction->settlement_status,
                 'customer' => [
-                    'name' => $transaction->customer->name ?? null,
+                    'name' => $transaction->payer_name ?? $transaction->customer->name ?? null,
+                    'account_number' => $transaction->payer_account_number ?? null,
+                    'bank_name' => $transaction->payer_bank_name ?? null,
                     'email' => $transaction->customer->email ?? null,
                 ],
+                'virtual_account' => [
+                    'account_number' => $transaction->virtualAccount->account_number ?? null,
+                    'account_name' => $transaction->virtualAccount->account_name ?? null,
+                ],
                 'created_at' => $transaction->created_at->toISOString(),
+                'updated_at' => $transaction->updated_at->toISOString(),
             ]
         ];
     }
