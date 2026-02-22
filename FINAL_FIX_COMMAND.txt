@@ -1,0 +1,59 @@
+================================================================================
+FINAL FIX - RUN THIS NOW
+================================================================================
+
+The issue was identified: Laravel's "encrypted" cast automatically SERIALIZES
+values before encrypting them. So when we manually decrypt, we get serialized
+strings like s:70:"whsec_...".
+
+The fix adds UNSERIALIZATION after decryption to get clean values.
+
+RUN THIS COMMAND:
+-----------------
+
+git pull origin main && php artisan config:clear && php artisan cache:clear && php test_credentials_api.php
+
+
+EXPECTED OUTPUT:
+----------------
+
+=== Testing Credentials API Response ===
+
+Company ID: 4
+Company Name: kobopoint
+
+Testing Webhook Secret Decryption:
+✓ webhook_secret (decrypted + unserialized): whsec_aad2319b0eb134b2f598ad63d4c2a7a2a4b054f42781b6599b92a7cc1a97fc68
+✓ test_webhook_secret (decrypted + unserialized): whsec_test_6104274c5192e923ddf4cb697e32810aa30d194fd3a4386448a0a35f3e6cd2f9
+
+Simulating API Response:
+{
+    "business_id": "b91fb8b76a315135ab9acaa9a21fab58a6ee60a3",
+    "api_key": "ebe4fd4d1159168dc7086fc541c8bc29e451b570",
+    "secret_key": "2db0097ca80769411bc6d67213c95a61ce427dd7...",
+    "webhook_url": "https://app.kobopoint.com/webhooks/pointwave",
+    "webhook_secret": "whsec_aad2319b0eb134b2f598ad63d4c2a7a2a4b054f42781b6599b92a7cc1a97fc68",
+    "test_webhook_url": null,
+    "test_webhook_secret": "whsec_test_6104274c5192e923ddf4cb697e32810aa30d194fd3a4386448a0a35f3e6cd2f9"
+}
+
+=== End Test ===
+
+
+WHAT WAS FIXED:
+---------------
+
+1. CompanyController.php - Added unserialize() after decrypt()
+2. test_credentials_api.php - Added unserialize() after decrypt()
+
+Now webhook secrets will display as clean strings in the API response!
+
+
+VERIFY ON FRONTEND:
+-------------------
+
+After running the command above, log in to your Developer API page and check
+if webhook secrets are now visible and clean (no s:70:"..." format).
+
+
+================================================================================
