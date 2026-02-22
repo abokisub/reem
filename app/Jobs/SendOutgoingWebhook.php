@@ -60,8 +60,8 @@ class SendOutgoingWebhook implements ShouldQueue
             $response = Http::timeout(15)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
-                    'User-Agent' => 'PointPay-Webhook/1.2',
-                    'X-PointPay-Signature' => 'sha256=' . $signature,
+                    'User-Agent' => 'PointWave-Webhook/1.0',
+                    'X-PointWave-Signature' => 'sha256=' . $signature,
                 ])
                 ->post($this->webhookLog->webhook_url, $this->webhookLog->payload);
 
