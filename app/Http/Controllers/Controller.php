@@ -65,7 +65,13 @@ class Controller extends BaseController
 
     public function autopilot_request($endpoint, $payload)
     {
-        $key = str_replace(' ', '', $this->habukhan_key()->autopilot_key);
+        $settings = $this->habukhan_key();
+        if (!$settings || !isset($settings->autopilot_key)) {
+            \Log::error('Autopilot API Error: Settings not configured');
+            return ['success' => false, 'message' => 'Autopilot settings not configured'];
+        }
+        
+        $key = str_replace(' ', '', $settings->autopilot_key);
         // Determine if we should use test or live based on key prefix
         $baseUrl = 'https://autopilotng.com/api/live';
         if (str_starts_with($key, 'test_')) {

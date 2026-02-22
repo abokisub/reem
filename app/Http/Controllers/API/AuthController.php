@@ -87,7 +87,9 @@ class AuthController extends Controller
                 $user->date = Carbon::now("Africa/Lagos");
                 $user->kyc = '0';
                 $user->status = 'pending';
-                $user->user_limit = $this->habukhan_key()->default_limit;
+                // Get default limit from settings, fallback to 999999999 (unlimited) if not configured
+                $settings = $this->habukhan_key();
+                $user->user_limit = $settings ? $settings->default_limit : 999999999;
                 $user->pin = null; // Removed from registration
                 $user->save();
                 if ($user != null) {

@@ -428,7 +428,9 @@ class AdminController extends Controller
                         $user->date = Carbon::now("Africa/Lagos");
                         $user->kyc = $kyc;
                         $user->status = $status;
-                        $user->user_limit = $this->habukhan_key()->default_limit;
+                        // Get default limit from settings, fallback to 999999999 (unlimited) if not configured
+                        $settings = $this->habukhan_key();
+                        $user->user_limit = $settings ? $settings->default_limit : 999999999;
                         $user->pin = $request->pin;
                         $user->webhook = $request->webhook;
                         $user->about = $request->about;
