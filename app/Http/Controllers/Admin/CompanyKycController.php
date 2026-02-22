@@ -232,15 +232,18 @@ class CompanyKycController extends Controller
 
         $company = Company::findOrFail($id);
 
-        $company->update([
-            'is_active' => $request->is_active,
-            'kyc_status' => $request->is_active ? 'approved' : 'suspended'
-        ]);
-
         // Auto-generate PalmPay virtual account when company is activated
         if ($request->is_active && !$company->palmpay_account_number) {
             try {
                 $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
+                
+                \Log::info('Creating master wallet for company activation', [
+                    'company_id' => $company->id,
+                    'company_name' => $company->name,
+                    'has_director_bvn' => !empty($company->director_bvn),
+                    'has_director_nin' => !empty($company->director_nin),
+                    'has_rc_number' => !empty($company->business_registration_number),
+                ]);
                 
                 // Create master wallet for the company
                 $virtualAccount = $virtualAccountService->createVirtualAccount(
@@ -257,25 +260,30 @@ class CompanyKycController extends Controller
                 );
 
                 // Update company with PalmPay master wallet details
-                $company->update([
-                    'palmpay_account_number' => $virtualAccount->account_number,
-                    'palmpay_account_name' => $virtualAccount->account_name,
-                    'palmpay_bank_name' => 'PalmPay',
-                    'palmpay_bank_code' => '100033',
-                ]);
+                $company->palmpay_account_number = $virtualAccount->account_number;
+                $company->palmpay_account_name = $virtualAccount->account_name;
+                $company->palmpay_bank_name = 'PalmPay';
+                $company->palmpay_bank_code = '100033';
 
-                \Log::info('Company master wallet created', [
+                \Log::info('Company master wallet created successfully', [
                     'company_id' => $company->id,
-                    'account_number' => $virtualAccount->account_number
+                    'account_number' => $virtualAccount->account_number,
+                    'account_name' => $virtualAccount->account_name,
                 ]);
             } catch (\Exception $e) {
                 \Log::error('Failed to create company master wallet', [
                     'company_id' => $company->id,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
                 ]);
                 // Don't fail activation if virtual account creation fails
             }
         }
+
+        $company->update([
+            'is_active' => $request->is_active,
+            'kyc_status' => $request->is_active ? 'approved' : 'suspended'
+        ]);
 
         // Log history
         CompanyKycHistory::logAction(

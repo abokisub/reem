@@ -782,6 +782,49 @@ class AuthController extends Controller
                     $user = DB::table('users')->where(['id' => $user->id])->first();
                     \Log::info('Login Step 3 (User Refresh): ' . (microtime(true) - $t4) . 's');
 
+                    // Auto-create master wallet for active companies missing one
+                    try {
+                        $company = DB::table('companies')
+                            ->where('user_id', $user->id)
+                            ->where('is_active', true)
+                            ->whereNull('palmpay_account_number')
+                            ->first();
+                        
+                        if ($company) {
+                            \Log::info('Auto-creating master wallet for company on login', ['company_id' => $company->id]);
+                            
+                            $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
+                            $virtualAccount = $virtualAccountService->createVirtualAccount(
+                                $company->id,
+                                'company_master_' . $company->id,
+                                [
+                                    'name' => $company->name,
+                                    'email' => $company->email,
+                                    'phone' => $company->phone,
+                                ],
+                                '100033',
+                                null
+                            );
+
+                            DB::table('companies')->where('id', $company->id)->update([
+                                'palmpay_account_number' => $virtualAccount->account_number,
+                                'palmpay_account_name' => $virtualAccount->account_name,
+                                'palmpay_bank_name' => 'PalmPay',
+                                'palmpay_bank_code' => '100033',
+                            ]);
+
+                            \Log::info('Master wallet auto-created on login', [
+                                'company_id' => $company->id,
+                                'account_number' => $virtualAccount->account_number
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        \Log::error('Failed to auto-create master wallet on login', [
+                            'user_id' => $user->id,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+
                     // Fetch Virtual Account if available
                     $virtualAccount = DB::table('virtual_accounts')->where('user_id', $user->id)->where('status', 'active')->first();
 
