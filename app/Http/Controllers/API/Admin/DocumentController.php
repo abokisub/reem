@@ -121,4 +121,37 @@ class DocumentController extends Controller
             ], 400);
         }
     }
+
+    /**
+     * View/Download a document
+     * GET /api/admin/documents/{documentId}/view
+     */
+    public function view($documentId)
+    {
+        try {
+            $document = \App\Models\CompanyDocument::findOrFail($documentId);
+            
+            // Check if file exists
+            if (!$document->file_path || !\Storage::disk('local')->exists($document->file_path)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Document file not found',
+                ], 404);
+            }
+
+            $filePath = storage_path('app/' . $document->file_path);
+            $mimeType = \Storage::disk('local')->mimeType($document->file_path);
+
+            return response()->file($filePath, [
+                'Content-Type' => $mimeType,
+                'Content-Disposition' => 'inline; filename="' . basename($document->file_path) . '"'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 404);
+        }
+    }
 }

@@ -866,6 +866,7 @@ Route::middleware(['auth.token', 'admin'])->prefix('admin/kyc')->group(function 
 // Admin Document Approval Routes (Admin Only)
 Route::middleware(['auth.token', 'admin'])->prefix('admin/documents')->group(function () {
     Route::get('/company/{companyId}', [App\Http\Controllers\API\Admin\DocumentController::class, 'getCompanyDocuments']);
+    Route::get('/{documentId}/view', [App\Http\Controllers\API\Admin\DocumentController::class, 'view']);
     Route::post('/{documentId}/approve', [App\Http\Controllers\API\Admin\DocumentController::class, 'approve']);
     Route::post('/{documentId}/reject', [App\Http\Controllers\API\Admin\DocumentController::class, 'reject']);
 });
