@@ -31,18 +31,44 @@ echo "Company Name: {$company->name}\n\n";
 
 // Test decryption
 echo "Testing Webhook Secret Decryption:\n";
+
+// Test using raw DB + decrypt (like the API does now)
+$encryptedWebhookSecret = DB::table('companies')
+    ->where('id', $company->id)
+    ->value('webhook_secret');
+
+$encryptedTestWebhookSecret = DB::table('companies')
+    ->where('id', $company->id)
+    ->value('test_webhook_secret');
+
 try {
-    $webhookSecret = $company->webhook_secret;
-    echo "✓ webhook_secret: " . ($webhookSecret ?: 'EMPTY/NULL') . "\n";
+    $webhookSecret = decrypt($encryptedWebhookSecret);
+    
+    // Check if it's serialized (Laravel's encrypted cast serializes values)
+    if (is_string($webhookSecret) && (strpos($webhookSecret, 's:') === 0 || strpos($webhookSecret, 'a:') === 0)) {
+        $webhookSecret = unserialize($webhookSecret);
+        echo "✓ webhook_secret (decrypted + unserialized): " . $webhookSecret . "\n";
+    } else {
+        echo "✓ webhook_secret (decrypted): " . $webhookSecret . "\n";
+    }
 } catch (\Exception $e) {
     echo "✗ webhook_secret ERROR: " . $e->getMessage() . "\n";
+    $webhookSecret = null;
 }
 
 try {
-    $testWebhookSecret = $company->test_webhook_secret;
-    echo "✓ test_webhook_secret: " . ($testWebhookSecret ?: 'EMPTY/NULL') . "\n";
+    $testWebhookSecret = decrypt($encryptedTestWebhookSecret);
+    
+    // Check if it's serialized (Laravel's encrypted cast serializes values)
+    if (is_string($testWebhookSecret) && (strpos($testWebhookSecret, 's:') === 0 || strpos($testWebhookSecret, 'a:') === 0)) {
+        $testWebhookSecret = unserialize($testWebhookSecret);
+        echo "✓ test_webhook_secret (decrypted + unserialized): " . $testWebhookSecret . "\n";
+    } else {
+        echo "✓ test_webhook_secret (decrypted): " . $testWebhookSecret . "\n";
+    }
 } catch (\Exception $e) {
     echo "✗ test_webhook_secret ERROR: " . $e->getMessage() . "\n";
+    $testWebhookSecret = null;
 }
 
 echo "\n";

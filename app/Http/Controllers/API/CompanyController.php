@@ -150,10 +150,20 @@ class CompanyController extends Controller
             
             if ($encryptedWebhookSecret) {
                 $webhookSecret = decrypt($encryptedWebhookSecret);
+                
+                // Laravel's encrypted cast serializes values, so we need to unserialize
+                if (is_string($webhookSecret) && (strpos($webhookSecret, 's:') === 0 || strpos($webhookSecret, 'a:') === 0)) {
+                    $webhookSecret = unserialize($webhookSecret);
+                }
             }
             
             if ($encryptedTestWebhookSecret) {
                 $testWebhookSecret = decrypt($encryptedTestWebhookSecret);
+                
+                // Laravel's encrypted cast serializes values, so we need to unserialize
+                if (is_string($testWebhookSecret) && (strpos($testWebhookSecret, 's:') === 0 || strpos($testWebhookSecret, 'a:') === 0)) {
+                    $testWebhookSecret = unserialize($testWebhookSecret);
+                }
             }
         } catch (\Exception $e) {
             // If decryption fails, regenerate the secrets
