@@ -695,6 +695,210 @@ async function getCachedBanks() {
                 <strong>💡 Next Steps:</strong> Once you have the banks list, you can use it for <a
                     href="{{ route('docs.transfers') }}">transfers</a> or account verification.
             </div>
+
+            <!-- Verify Bank Account -->
+            <h2 id="verify-account">Verify Bank Account</h2>
+            <p>Verify a bank account number and retrieve the account holder's name. This is essential before making transfers to ensure you're sending money to the correct recipient.</p>
+
+            <div class="alert warning">
+                <strong>⚠️ Important:</strong> Always verify account details before initiating transfers to prevent sending money to wrong accounts.
+            </div>
+
+            <div class="endpoint">
+                <span class="method post">POST</span>
+                <code>/api/gateway/banks/verify</code>
+            </div>
+
+            <h3>Request Parameters</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Type</th>
+                        <th>Required</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>accountNumber</code></td>
+                        <td>string</td>
+                        <td><span class="badge required">Required</span></td>
+                        <td>Bank account number (10 digits)</td>
+                    </tr>
+                    <tr>
+                        <td><code>bankCode</code></td>
+                        <td>string</td>
+                        <td><span class="badge required">Required</span></td>
+                        <td>Bank code from GET /api/gateway/banks</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3>Request</h3>
+            <div class="code-example">
+                <div class="code-tabs">
+                    <div class="code-tab active" onclick="showCode('curl-verify')">cURL</div>
+                    <div class="code-tab" onclick="showCode('php-verify')">PHP</div>
+                    <div class="code-tab" onclick="showCode('node-verify')">Node.js</div>
+                    <div class="code-tab" onclick="showCode('python-verify')">Python</div>
+                </div>
+
+                <div id="curl-verify" class="code-content">
+                    <pre><code class="language-bash">curl -X POST "https://app.pointwave.ng/api/gateway/banks/verify" \
+  -H "Authorization: Bearer YOUR_SECRET_KEY" \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "x-business-id: YOUR_BUSINESS_ID" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "accountNumber": "0123456789",
+    "bankCode": "058"
+  }'</code></pre>
+                </div>
+
+                <div id="php-verify" class="code-content" style="display:none;">
+                    <pre><code class="language-php">&lt;?php
+$curl = curl_init();
+
+curl_setopt_array($curl, [
+    CURLOPT_URL => "https://app.pointwave.ng/api/gateway/banks/verify",
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_POST => true,
+    CURLOPT_HTTPHEADER => [
+        "Authorization: Bearer YOUR_SECRET_KEY",
+        "x-api-key: YOUR_API_KEY",
+        "x-business-id: YOUR_BUSINESS_ID",
+        "Content-Type: application/json"
+    ],
+    CURLOPT_POSTFIELDS => json_encode([
+        "accountNumber" => "0123456789",
+        "bankCode" => "058"
+    ])
+]);
+
+$response = curl_exec($curl);
+$result = json_decode($response, true);
+
+curl_close($curl);
+
+if ($result['success']) {
+    echo "Account Name: " . $result['data']['accountName'];
+} else {
+    echo "Verification failed: " . $result['message'];
+}</code></pre>
+                </div>
+
+                <div id="node-verify" class="code-content" style="display:none;">
+                    <pre><code class="language-javascript">const axios = require('axios');
+
+const verifyAccount = async (accountNumber, bankCode) => {
+    try {
+        const response = await axios.post(
+            'https://app.pointwave.ng/api/gateway/banks/verify',
+            {
+                accountNumber: accountNumber,
+                bankCode: bankCode
+            },
+            {
+                headers: {
+                    'Authorization': 'Bearer YOUR_SECRET_KEY',
+                    'x-api-key': 'YOUR_API_KEY',
+                    'x-business-id': 'YOUR_BUSINESS_ID',
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        
+        if (response.data.success) {
+            console.log('Account Name:', response.data.data.accountName);
+            return response.data.data;
+        }
+    } catch (error) {
+        console.error('Verification failed:', error.response.data);
+    }
+};
+
+verifyAccount('0123456789', '058');</code></pre>
+                </div>
+
+                <div id="python-verify" class="code-content" style="display:none;">
+                    <pre><code class="language-python">import requests
+import json
+
+url = "https://app.pointwave.ng/api/gateway/banks/verify"
+headers = {
+    "Authorization": "Bearer YOUR_SECRET_KEY",
+    "x-api-key": "YOUR_API_KEY",
+    "x-business-id": "YOUR_BUSINESS_ID",
+    "Content-Type": "application/json"
+}
+data = {
+    "accountNumber": "0123456789",
+    "bankCode": "058"
+}
+
+response = requests.post(url, headers=headers, json=data)
+result = response.json()
+
+if result['success']:
+    print(f"Account Name: {result['data']['accountName']}")
+else:
+    print(f"Verification failed: {result['message']}")</code></pre>
+                </div>
+            </div>
+
+            <h3>Response</h3>
+            <div class="response">
+                <h4>200 OK</h4>
+                <pre><code class="language-json">{
+    "success": true,
+    "data": {
+        "accountNumber": "0123456789",
+        "accountName": "JOHN DOE",
+        "bankCode": "058"
+    }
+}</code></pre>
+            </div>
+
+            <h3>Error Response</h3>
+            <pre><code class="language-json">{
+    "success": false,
+    "message": "Account verification failed",
+    "errors": {
+        "accountNumber": ["Invalid account number"]
+    }
+}</code></pre>
+
+            <div class="alert success">
+                <strong>✅ Best Practice:</strong> Always verify account details before making transfers. Show the account name to users for confirmation before proceeding with the transfer.
+            </div>
+
+            <h3>Common Use Case</h3>
+            <p>Here's a complete transfer flow with account verification:</p>
+            <pre><code class="language-javascript">// Step 1: Get banks list
+const banks = await getBanks();
+
+// Step 2: User selects bank and enters account number
+const selectedBank = '058'; // GTBank
+const accountNumber = '0123456789';
+
+// Step 3: Verify account
+const verification = await verifyAccount(accountNumber, selectedBank);
+
+if (verification.success) {
+    // Step 4: Show account name to user for confirmation
+    console.log(`Transfer to: ${verification.data.accountName}`);
+    
+    // Step 5: User confirms and initiates transfer
+    const transfer = await initiateTransfer({
+        account_bank: selectedBank,
+        account_number: accountNumber,
+        amount: 5000,
+        narration: "Payment for services"
+    });
+}
+</code></pre>
+
         </main>
     </div>
 
