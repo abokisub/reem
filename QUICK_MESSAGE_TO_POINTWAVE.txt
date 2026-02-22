@@ -1,0 +1,29 @@
+Hi PointWave Team,
+
+WEBHOOK SIGNATURE ISSUE - FIXED ✅
+
+The Problem:
+- We were computing signature on one JSON string
+- But sending a different JSON string
+- Kobopoint computed different signature → HTTP 401 errors
+
+The Fix (Already Pushed):
+- Modified app/Jobs/SendOutgoingWebhook.php
+- Now we sign the EXACT JSON we send
+- Removed "sha256=" prefix
+- Used consistent JSON encoding
+
+Deploy Now:
+1. cd /path/to/app.pointwave.ng
+2. bash DEPLOY_WEBHOOK_FIX.sh
+3. php retry_failed_company_webhooks.php
+
+Expected Result:
+✅ All webhooks will succeed with HTTP 200
+✅ Kobopoint customers will see balance updates
+✅ No more "Invalid signature" errors
+
+Commit: b79709f
+File Changed: app/Jobs/SendOutgoingWebhook.php
+
+Please deploy and confirm.

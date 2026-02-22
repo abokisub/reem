@@ -1,0 +1,180 @@
+================================================================================
+MESSAGE TO POINTWAVE DEVELOPMENT TEAM
+================================================================================
+
+Hi PointWave Team,
+
+I've identified and FIXED the webhook signature mismatch issue between PointWave 
+and Kobopoint. The problem was in how we were computing and sending signatures.
+
+================================================================================
+THE PROBLEM
+================================================================================
+
+Our webhook signatures were failing because:
+
+1. We computed the signature on one JSON string: json_encode($payload)
+2. But Laravel's Http::post($url, $array) re-encoded it differently
+3. The JSON sent didn't match the JSON we signed
+4. Result: Kobopoint computed a different signature and rejected with HTTP 401
+
+Example from logs:
+- PointWave sent signature: 1daac64e83e9bf9b3078...
+- Kobopoint expected:      14872ebf923bf277b5a7...
+- They're completely different because we signed different data!
+
+
+================================================================================
+THE FIX (ALREADY APPLIED AND PUSHED)
+================================================================================
+
+File: app/Jobs/SendOutgoingWebhook.php
+
+BEFORE (WRONG):
+---------------
+$payload = json_encode($this->webhookLog->payload);
+$signature = hash_hmac('sha256', $payload, $secret);
+
+Http::post($url, $this->webhookLog->payload);  // Laravel re-encodes this!
+
+
+AFTER (CORRECT):
+----------------
+// Encode once with consistent flags
+$payloadJson = json_encode($this->webhookLog->payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+// Sign the exact JSON we're sending
+$signature = hash_hmac('sha256', $payloadJson, $secret);
+
+// Send raw JSON body (not array)
+Http::withBody($payloadJson, 'application/json')->post($url);
+
+
+CHANGES:
+--------
+✅ Consistent JSON encoding with flags
+✅ Sign the exact JSON being sent
+✅ Removed "sha256=" prefix (Kobopoint expects raw hash)
+✅ Use withBody() to send raw JSON
+
+
+================================================================================
+DEPLOYMENT REQUIRED
+================================================================================
+
+The fix is already pushed to GitHub (commit b79709f).
+
+Please deploy to PointWave production server:
+
+1. SSH into PointWave server
+2. cd /path/to/app.pointwave.ng
+3. bash DEPLOY_WEBHOOK_FIX.sh
+
+This will:
+- Pull latest code
+- Clear all caches
+- Show webhook secret for verification
+
+
+================================================================================
+AFTER DEPLOYMENT
+================================================================================
+
+1. Verify webhook secret matches:
+   php compare_webhook_secrets.php
+
+2. Retry all failed webhooks:
+   php retry_failed_company_webhooks.php
+
+3. Check webhook status:
+   php check_company_webhook_logs.php
+
+4. Test with new deposit to Kobopoint virtual account
+
+
+================================================================================
+EXPECTED RESULTS
+================================================================================
+
+After deployment, you should see:
+
+✅ Webhooks sent with HTTP 200 responses
+✅ No more "Invalid signature" errors from Kobopoint
+✅ No more webhooks in DLQ (Dead Letter Queue)
+✅ Kobopoint customer balances updating automatically
+
+Logs should show:
+[production.INFO] Client Payment Detected
+[production.INFO] Virtual Account Credited
+[production.INFO] Webhook sent successfully (HTTP 200)
+
+NOT:
+❌ [WEBHOOK_DLQ]: Webhook permanently failed
+❌ HTTP 401 errors
+
+
+================================================================================
+TECHNICAL DETAILS
+================================================================================
+
+What we send now:
+
+POST https://app.kobopoint.com/webhooks/pointwave
+Headers:
+  X-PointWave-Signature: <raw_hmac_sha256_hash>
+  Content-Type: application/json
+  User-Agent: PointWave-Webhook/1.0
+
+Body: (exact JSON used for signature)
+{
+  "event": "payment.success",
+  "event_id": "...",
+  "timestamp": "...",
+  "data": { ... }
+}
+
+Signature calculation:
+hash_hmac('sha256', $exactJsonBody, $webhookSecret)
+
+
+================================================================================
+MONITORING
+================================================================================
+
+After deployment, monitor:
+
+1. Webhook logs:
+   tail -f storage/logs/laravel.log | grep webhook
+
+2. Webhook status:
+   php check_company_webhook_logs.php
+
+3. DLQ (should be empty):
+   SELECT COUNT(*) FROM dead_webhooks WHERE company_id = 4;
+
+
+================================================================================
+ROLLBACK (if needed)
+================================================================================
+
+If this causes any issues:
+
+git revert b79709f
+git push origin main
+# Then deploy
+
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+1. Deploy this fix to PointWave production
+2. Retry failed webhooks
+3. Test with new deposit
+4. Confirm Kobopoint customers see balance updates
+
+Please confirm deployment and let me know the results.
+
+Thanks!
+
+================================================================================
