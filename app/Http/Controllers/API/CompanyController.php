@@ -97,19 +97,38 @@ class CompanyController extends Controller
         // Check if credentials need to be generated
         $needsGeneration = !$company->api_public_key || !$company->api_secret_key || 
                           !$company->test_public_key || !$company->test_secret_key ||
-                          !$company->business_id;
+                          !$company->business_id || !$company->webhook_secret || !$company->test_webhook_secret;
 
         if ($needsGeneration) {
-            // Generate new credentials (40 char hex for public, 120 char hex for secret)
-            $company->update([
-                'business_id' => $company->business_id ?: bin2hex(random_bytes(20)),
-                'api_public_key' => bin2hex(random_bytes(20)),
-                'api_secret_key' => bin2hex(random_bytes(60)),
-                'test_public_key' => bin2hex(random_bytes(20)),
-                'test_secret_key' => bin2hex(random_bytes(60)),
-            ]);
+            $updates = [];
             
-            $company = $company->fresh();
+            // Generate missing credentials
+            if (!$company->business_id) {
+                $updates['business_id'] = bin2hex(random_bytes(20));
+            }
+            if (!$company->api_public_key) {
+                $updates['api_public_key'] = bin2hex(random_bytes(20));
+            }
+            if (!$company->api_secret_key) {
+                $updates['api_secret_key'] = bin2hex(random_bytes(60));
+            }
+            if (!$company->test_public_key) {
+                $updates['test_public_key'] = bin2hex(random_bytes(20));
+            }
+            if (!$company->test_secret_key) {
+                $updates['test_secret_key'] = bin2hex(random_bytes(60));
+            }
+            if (!$company->webhook_secret) {
+                $updates['webhook_secret'] = 'whsec_' . bin2hex(random_bytes(32));
+            }
+            if (!$company->test_webhook_secret) {
+                $updates['test_webhook_secret'] = 'whsec_test_' . bin2hex(random_bytes(32));
+            }
+            
+            if (!empty($updates)) {
+                $company->update($updates);
+                $company = $company->fresh();
+            }
         }
 
         // Return credentials (secret keys are hidden by model)
