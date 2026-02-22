@@ -154,6 +154,28 @@ class KycService
                 'reviewed_at' => now(),
             ]);
 
+            // Copy BVN/NIN data to companies table when bvn_info section is approved
+            if ($section === 'bvn_info' && $approval->data) {
+                $company = Company::find($companyId);
+                $bvnData = is_string($approval->data) ? json_decode($approval->data, true) : $approval->data;
+                
+                $updates = [];
+                if (!empty($bvnData['director_bvn'])) {
+                    $updates['director_bvn'] = $bvnData['director_bvn'];
+                }
+                if (!empty($bvnData['director_nin'])) {
+                    $updates['director_nin'] = $bvnData['director_nin'];
+                }
+                
+                if (!empty($updates)) {
+                    $company->update($updates);
+                    Log::info('Copied BVN/NIN to company record', [
+                        'company_id' => $companyId,
+                        'updates' => array_keys($updates)
+                    ]);
+                }
+            }
+
             // Log the approval
             CompanyKycHistory::logAction(
                 $companyId,
