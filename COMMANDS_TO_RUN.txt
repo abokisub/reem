@@ -1,0 +1,119 @@
+================================================================================
+WEBHOOK SECRET FIX - COMMANDS TO RUN ON PRODUCTION SERVER
+================================================================================
+
+STEP 1: Pull Latest Code
+-------------------------
+cd /home/aboksdfs/app.pointwave.ng
+git pull origin main
+
+
+STEP 2: Verify Files Exist
+---------------------------
+ls -la fix_webhook_secrets_encryption.php
+ls -la diagnose_webhook_secrets.php
+ls -la test_credentials_api.php
+
+
+STEP 3: Run Diagnostic (Optional)
+----------------------------------
+php diagnose_webhook_secrets.php
+
+
+STEP 4: Run Fix Script
+-----------------------
+php fix_webhook_secrets_encryption.php
+
+
+STEP 5: Clear Cache
+--------------------
+php artisan config:clear
+php artisan cache:clear
+
+
+STEP 6: Test the Fix
+---------------------
+php test_credentials_api.php
+
+
+STEP 7: Test API Endpoint (Optional)
+-------------------------------------
+# Replace {token} with actual company bearer token
+curl -H "Authorization: Bearer {token}" https://app.pointwave.ng/api/company/credentials
+
+
+================================================================================
+ONE-LINER (ALL STEPS):
+================================================================================
+
+cd /home/aboksdfs/app.pointwave.ng && git pull origin main && php fix_webhook_secrets_encryption.php && php artisan config:clear && php artisan cache:clear && php test_credentials_api.php
+
+
+================================================================================
+EXPECTED OUTPUT FROM test_credentials_api.php:
+================================================================================
+
+=== Testing Credentials API Response ===
+
+Company ID: 4
+Company Name: kobopoint
+
+Testing Webhook Secret Decryption:
+✓ webhook_secret: whsec_aad2319b0eb134b2f598ad63d4c2a7a2a4b054f42781b6599b92a7cc1a97fc68
+✓ test_webhook_secret: whsec_test_6104274c5192e923ddf4cb697e32810aa30d194fd3a4386448a0a35f3e6cd2f9
+
+Simulating API Response:
+{
+    "business_id": "b91fb8b76a315135ab9acaa9a21fab58a6ee60a3",
+    "api_key": "ebe4fd4d1159168dc7086fc541c8bc29e451b570",
+    "secret_key": "2db0097ca80769411bc6d67213c95a61ce427dd7...",
+    "webhook_url": "https://app.kobopoint.com/webhooks/pointwave",
+    "webhook_secret": "whsec_aad2319b0eb134b2f598ad63d4c2a7a2a4b054f42781b6599b92a7cc1a97fc68",
+    "test_webhook_url": null,
+    "test_webhook_secret": "whsec_test_6104274c5192e923ddf4cb697e32810aa30d194fd3a4386448a0a35f3e6cd2f9"
+}
+
+=== End Test ===
+
+
+================================================================================
+WHAT TO LOOK FOR:
+================================================================================
+
+✅ GOOD: webhook_secret shows as "whsec_abc123..."
+❌ BAD:  webhook_secret shows as "s:70:\"whsec_...\""
+
+If you see the BAD format, the fix didn't work. Check:
+1. Did fix script run successfully?
+2. Did you clear cache?
+3. Check storage/logs/laravel.log for errors
+
+
+================================================================================
+TROUBLESHOOTING:
+================================================================================
+
+If fix_webhook_secrets_encryption.php not found:
+-------------------------------------------------
+git fetch origin
+git reset --hard origin/main
+ls -la fix_webhook_secrets_encryption.php
+
+
+If still showing serialized format after fix:
+----------------------------------------------
+1. Check if fix script actually updated database
+2. Run: php diagnose_webhook_secrets.php
+3. Check APP_KEY in .env file
+4. Check storage/logs/laravel.log for errors
+
+
+If frontend still not showing secrets:
+---------------------------------------
+1. Check browser console for errors
+2. Test API directly with curl command above
+3. Clear browser cache
+4. Check if frontend is using correct API endpoint
+
+
+================================================================================
