@@ -424,6 +424,8 @@ class WebhookHandler
             // Dispatch webhook to company
             $company = $virtualAccount->company;
             if ($company && $company->webhook_url) {
+                $eventId = \Illuminate\Support\Str::uuid()->toString();
+                
                 $webhookLog = \App\Models\CompanyWebhookLog::create([
                     'company_id' => $company->id,
                     'transaction_id' => $transaction->id,
@@ -431,6 +433,8 @@ class WebhookHandler
                     'webhook_url' => $company->webhook_url,
                     'payload' => [
                         'event' => 'payment.success',
+                        'event_id' => $eventId,
+                        'timestamp' => now()->toIso8601String(),
                         'data' => [
                             'transaction_id' => $transaction->transaction_id,
                             'amount' => $transaction->amount,
