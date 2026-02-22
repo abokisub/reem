@@ -94,100 +94,80 @@ class CompanyController extends Controller
             ], 403);
         }
 
-        // Check if credentials need to be generated
-        $needsGeneration = false;
+        // Check if credentials need to be generated - use raw DB to avoid decryption issues
         $updates = [];
         
-        // Check each field individually with try-catch for decryption errors
-        try {
-            if (!$company->api_public_key) {
-                $updates['api_public_key'] = bin2hex(random_bytes(20));
-                $needsGeneration = true;
-            }
-        } catch (\Exception $e) {
+        // Use raw DB query to check for NULL values without triggering decryption
+        $rawCompany = DB::table('companies')->where('id', $company->id)->first();
+        
+        if (!$rawCompany->api_public_key) {
             $updates['api_public_key'] = bin2hex(random_bytes(20));
-            $needsGeneration = true;
         }
         
-        try {
-            if (!$company->api_secret_key) {
-                $updates['api_secret_key'] = bin2hex(random_bytes(60));
-                $needsGeneration = true;
-            }
-        } catch (\Exception $e) {
+        if (!$rawCompany->api_secret_key) {
             $updates['api_secret_key'] = bin2hex(random_bytes(60));
-            $needsGeneration = true;
         }
         
-        try {
-            if (!$company->test_public_key) {
-                $updates['test_public_key'] = bin2hex(random_bytes(20));
-                $needsGeneration = true;
-            }
-        } catch (\Exception $e) {
+        if (!$rawCompany->test_public_key) {
             $updates['test_public_key'] = bin2hex(random_bytes(20));
-            $needsGeneration = true;
         }
         
-        try {
-            if (!$company->test_secret_key) {
-                $updates['test_secret_key'] = bin2hex(random_bytes(60));
-                $needsGeneration = true;
-            }
-        } catch (\Exception $e) {
+        if (!$rawCompany->test_secret_key) {
             $updates['test_secret_key'] = bin2hex(random_bytes(60));
-            $needsGeneration = true;
         }
         
-        try {
-            if (!$company->business_id) {
-                $updates['business_id'] = bin2hex(random_bytes(20));
-                $needsGeneration = true;
-            }
-        } catch (\Exception $e) {
+        if (!$rawCompany->business_id) {
             $updates['business_id'] = bin2hex(random_bytes(20));
-            $needsGeneration = true;
         }
         
-        try {
-            if (!$company->webhook_secret) {
-                $updates['webhook_secret'] = 'whsec_' . bin2hex(random_bytes(32));
-                $needsGeneration = true;
-            }
-        } catch (\Exception $e) {
+        if (!$rawCompany->webhook_secret) {
             $updates['webhook_secret'] = 'whsec_' . bin2hex(random_bytes(32));
-            $needsGeneration = true;
         }
         
-        try {
-            if (!$company->test_webhook_secret) {
-                $updates['test_webhook_secret'] = 'whsec_test_' . bin2hex(random_bytes(32));
-                $needsGeneration = true;
-            }
-        } catch (\Exception $e) {
+        if (!$rawCompany->test_webhook_secret) {
             $updates['test_webhook_secret'] = 'whsec_test_' . bin2hex(random_bytes(32));
-            $needsGeneration = true;
         }
 
-        if ($needsGeneration && !empty($updates)) {
-            $company->update($updates);
-            $company = $company->fresh();
+        if (!empty($updates)) {
+            DB::table('companies')->where('id', $company->id)->update($updates);
+            // Reload only the updated fields without triggering full model refresh
+            $rawCompany = DB::table('companies')->where('id', $company->id)->first();
+        }
+
+        // Return credentials using raw data to avoid decryption issues
+        try {
+            $webhookSecret = $company->webhook_secret;
+            $testWebhookSecret = $company->test_webhook_secret;
+        } catch (\Exception $e) {
+            // If decryption fails, regenerate the secrets
+            \Log::error('Webhook secret decryption failed, regenerating', [
+                'company_id' => $company->id,
+                'error' => $e->getMessage()
+            ]);
+            
+            $webhookSecret = 'whsec_' . bin2hex(random_bytes(32));
+            $testWebhookSecret = 'whsec_test_' . bin2hex(random_bytes(32));
+            
+            DB::table('companies')->where('id', $company->id)->update([
+                'webhook_secret' => encrypt($webhookSecret),
+                'test_webhook_secret' => encrypt($testWebhookSecret),
+            ]);
         }
 
         // Return credentials (secret keys are hidden by model)
         return response()->json([
             'status' => 'success',
             'data' => [
-                'business_id' => $company->business_id,
-                'api_key' => $company->api_public_key,
-                'secret_key' => $company->api_secret_key,
-                'test_api_key' => $company->test_public_key,
-                'test_secret_key' => $company->test_secret_key,
-                'public_key' => $company->api_public_key,
+                'business_id' => !empty($updates) ? $rawCompany->business_id : $company->business_id,
+                'api_key' => !empty($updates) ? $rawCompany->api_public_key : $company->api_public_key,
+                'secret_key' => !empty($updates) ? $rawCompany->api_secret_key : $company->api_secret_key,
+                'test_api_key' => !empty($updates) ? $rawCompany->test_public_key : $company->test_public_key,
+                'test_secret_key' => !empty($updates) ? $rawCompany->test_secret_key : $company->test_secret_key,
+                'public_key' => !empty($updates) ? $rawCompany->api_public_key : $company->api_public_key,
                 'webhook_url' => $company->webhook_url,
-                'webhook_secret' => $company->webhook_secret,
+                'webhook_secret' => $webhookSecret,
                 'test_webhook_url' => $company->test_webhook_url,
-                'test_webhook_secret' => $company->test_webhook_secret,
+                'test_webhook_secret' => $testWebhookSecret,
                 'is_active' => $company->is_active,
             ]
         ]);
