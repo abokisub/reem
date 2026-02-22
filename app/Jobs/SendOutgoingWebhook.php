@@ -51,7 +51,21 @@ class SendOutgoingWebhook implements ShouldQueue
         try {
             // Get company secret
             $company = $this->webhookLog->company;
-            $secret = $this->webhookLog->is_test ? ($company->test_webhook_secret ?? 'test_secret') : ($company->webhook_secret ?? 'live_secret');
+            $secret = $this->webhookLog->is_test ? $company->test_webhook_secret : $company->webhook_secret;
+            
+            if (!$secret) {
+                Log::error('Webhook secret not configured for company', [
+                    'company_id' => $company->id,
+                    'is_test' => $this->webhookLog->is_test
+                ]);
+                
+                $this->webhookLog->update([
+                    'status' => 'failed',
+                    'error_message' => 'Webhook secret not configured'
+                ]);
+                
+                return;
+            }
 
             $payload = json_encode($this->webhookLog->payload);
             $signature = hash_hmac('sha256', $payload, $secret);

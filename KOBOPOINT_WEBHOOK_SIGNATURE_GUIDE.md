@@ -2,19 +2,54 @@
 
 ## Good News!
 
-Your webhook endpoint is now working! We can see it's accepting POST requests. However, you're checking for a signature that needs to be configured properly.
+Your webhook endpoint is now working! We can see it's accepting POST requests.
 
-## What We're Sending
+## Important: Signature Verification is OPTIONAL
 
-PointWave sends webhooks with these headers:
+PointWave webhooks can work with or without signature verification:
 
+- **Without signature**: Webhooks work immediately (easier to get started)
+- **With signature**: More secure (recommended for production)
+
+## Quick Fix: Skip Signature Verification
+
+Your logs show you're checking for a signature. For now, you can skip this check:
+
+```php
+public function handlePointWaveWebhook(Request $request)
+{
+    // Get the webhook data
+    $data = $request->json()->all();
+    
+    Log::info('PointWave webhook received', $data);
+    
+    // Process based on event type
+    switch ($data['event_type']) {
+        case 'payment.success':
+            $this->handlePaymentSuccess($data);
+            break;
+            
+        case 'transfer.success':
+            $this->handleTransferSuccess($data);
+            break;
+            
+        case 'transfer.failed':
+            $this->handleTransferFailed($data);
+            break;
+    }
+    
+    // Return 200 OK
+    return response()->json(['status' => 'received'], 200);
+}
 ```
-Content-Type: application/json
-User-Agent: PointWave-Webhook/1.0
-X-PointWave-Signature: sha256=<signature_hash>
-```
 
-## How to Verify the Signature
+This will make webhooks work immediately!
+
+---
+
+## Optional: Enable Signature Verification Later
+
+If you want to add signature verification for extra security, here's how:
 
 ### Step 1: Get Your Webhook Secret
 

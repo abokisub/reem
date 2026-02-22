@@ -117,6 +117,8 @@ class AuthController extends Controller
                             'secret_key' => $keys['api_secret_key'],
                             'api_key' => $keys['api_public_key'],
                             'test_api_key' => $testKeys['api_public_key'],
+                            'webhook_secret' => 'whsec_' . bin2hex(random_bytes(32)),
+                            'test_webhook_secret' => 'whsec_test_' . bin2hex(random_bytes(32)),
                             'created_at' => now(),
                             'updated_at' => now(),
                         ];
