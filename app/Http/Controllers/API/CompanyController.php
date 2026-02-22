@@ -5,9 +5,9 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use App\Models\CompanyKycHistory;
-
 use App\Models\CompanyWebhookLog;
 
 class CompanyController extends Controller
