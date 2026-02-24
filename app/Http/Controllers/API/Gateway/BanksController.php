@@ -39,11 +39,14 @@ class BanksController extends Controller
                 ->get(['id', 'name', 'code', 'supports_transfers', 'supports_account_verification']);
 
             return response()->json([
-                'success' => true,
+                'status' => 'success',
                 'data' => $banks->map(function ($bank) {
                     return [
-                        'bankCode' => $bank->code,
-                        'bankName' => $bank->name,
+                        'id' => $bank->id,
+                        'name' => $bank->name,
+                        'code' => $bank->code,
+                        'bankCode' => $bank->code, // For backward compatibility
+                        'bankName' => $bank->name, // For backward compatibility
                         'supportsTransfers' => $bank->supports_transfers,
                         'supportsVerification' => $bank->supports_account_verification,
                     ];
@@ -56,7 +59,7 @@ class BanksController extends Controller
             ]);
 
             return response()->json([
-                'success' => false,
+                'status' => 'error',
                 'message' => 'Failed to fetch banks'
             ], 500);
         }
@@ -81,7 +84,7 @@ class BanksController extends Controller
 
             if ($validator->fails()) {
                 return response()->json([
-                    'success' => false,
+                    'status' => 'error',
                     'message' => 'Validation failed',
                     'errors' => $validator->errors()
                 ], 422);
@@ -95,13 +98,13 @@ class BanksController extends Controller
 
             if (!$result['success']) {
                 return response()->json([
-                    'success' => false,
+                    'status' => 'error',
                     'message' => $result['message'] ?? 'Account verification failed'
                 ], 400);
             }
 
             return response()->json([
-                'success' => true,
+                'status' => 'success',
                 'data' => [
                     'accountNumber' => $result['account_number'],
                     'accountName' => $result['account_name'],
@@ -111,12 +114,13 @@ class BanksController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Account Verification Failed', [
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
             ]);
 
             return response()->json([
-                'success' => false,
-                'message' => 'Account verification failed'
+                'status' => 'error',
+                'message' => 'Account verification failed: ' . $e->getMessage()
             ], 500);
         }
     }

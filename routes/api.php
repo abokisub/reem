@@ -785,6 +785,10 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/history', [App\Http\Controllers\Admin\SettlementController::class, 'getSettlementHistory']);
         Route::get('/statistics', [App\Http\Controllers\Admin\SettlementController::class, 'getStatistics']);
     });
+
+    // Banks (for admin use - no auth required on gateway)
+    Route::get('/banks', [App\Http\Controllers\API\Gateway\BanksController::class, 'index']);
+    Route::post('/banks/verify', [App\Http\Controllers\API\Gateway\BanksController::class, 'verify']);
 });
 // ============================================================================
 // POINTWAVE GATEWAY API V1 (Multi-tenant & Master Ledger)
