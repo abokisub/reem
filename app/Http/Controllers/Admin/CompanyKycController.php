@@ -101,9 +101,18 @@ class CompanyKycController extends Controller
             'failed_transactions' => 0,
         ];
 
+        // Transform virtualAccounts to virtual_accounts for frontend compatibility
+        $companyArray = $company->toArray();
+        if (isset($companyArray['virtual_accounts'])) {
+            $companyArray['virtual_accounts'] = $companyArray['virtual_accounts'];
+        } elseif (isset($companyArray['virtualAccounts'])) {
+            $companyArray['virtual_accounts'] = $companyArray['virtualAccounts'];
+            unset($companyArray['virtualAccounts']);
+        }
+
         return response()->json([
             'status' => 'success',
-            'data' => $company
+            'data' => $companyArray
         ]);
     }
 
@@ -193,6 +202,15 @@ class CompanyKycController extends Controller
      */
     private function approveCompany(Company $company)
     {
+        // CRITICAL: Check if company has KYC before approval
+        $hasKyc = !empty($company->director_bvn) || 
+                  !empty($company->director_nin) || 
+                  !empty($company->business_registration_number);
+        
+        if (!$hasKyc) {
+            throw new \Exception('Cannot approve company: Missing KYC information. Company must provide either Director BVN, Director NIN, or RC Number before approval.');
+        }
+
         // Generate and save API credentials
         $credentials = Company::generateApiKeys();
         $company->update($credentials);
@@ -228,44 +246,50 @@ class CompanyKycController extends Controller
         }
 
         // Create master virtual account if company has director BVN
-        if ($company->director_bvn) {
-            try {
-                $masterAccount = \App\Models\VirtualAccount::where('company_id', $company->id)
-                    ->where('is_master', 1)
-                    ->where('provider', 'pointwave')
-                    ->first();
+        try {
+            $masterAccount = \App\Models\VirtualAccount::where('company_id', $company->id)
+                ->where('is_master', 1)
+                ->where('provider', 'pointwave')
+                ->first();
 
-                if (!$masterAccount) {
-                    $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
-                    $result = $virtualAccountService->createVirtualAccount(
-                        $company->id,
-                        null, // No customer_id for master account
-                        $company->name,
-                        $company->email,
-                        $company->phone,
-                        $company->director_bvn,
-                        null, // No NIN
-                        true  // is_master = true
-                    );
+            if (!$masterAccount) {
+                $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
+                
+                // VirtualAccountService will automatically use:
+                // 1. Director BVN (if available) - AGGREGATOR MODEL
+                // 2. Director NIN (if available)
+                // 3. RC Number (fallback for corporate)
+                $virtualAccount = $virtualAccountService->createVirtualAccount(
+                    $company->id,
+                    'company_master_' . $company->id,
+                    [
+                        'name' => $company->name,
+                        'email' => $company->email,
+                        'phone' => $company->phone,
+                        'account_type' => 'static',
+                    ],
+                    '100033',
+                    null
+                );
 
-                    if ($result['success']) {
-                        \Log::info("Created master virtual account for approved company", [
-                            'company_id' => $company->id,
-                            'account_number' => $result['account_number']
-                        ]);
-                    } else {
-                        \Log::error("Failed to create master virtual account for approved company", [
-                            'company_id' => $company->id,
-                            'error' => $result['message']
-                        ]);
-                    }
-                }
-            } catch (\Exception $e) {
-                \Log::error("Exception creating master virtual account for approved company", [
+                // Mark as master account
+                $virtualAccount->update([
+                    'is_master' => true,
+                    'provider' => 'pointwave',
+                ]);
+
+                \Log::info("Created master virtual account for approved company", [
                     'company_id' => $company->id,
-                    'error' => $e->getMessage()
+                    'account_number' => $virtualAccount->account_number,
+                    'kyc_used' => $virtualAccount->kyc_source,
                 ]);
             }
+        } catch (\Exception $e) {
+            \Log::error("Exception creating master virtual account for approved company", [
+                'company_id' => $company->id,
+                'error' => $e->getMessage()
+            ]);
+            // Don't fail approval, but log the error
         }
 
         // TODO: Send approval email with API credentials
@@ -285,6 +309,20 @@ class CompanyKycController extends Controller
         ]);
 
         $company = Company::findOrFail($id);
+
+        // CRITICAL: Check if company has KYC before activation
+        if ($request->is_active) {
+            $hasKyc = !empty($company->director_bvn) || 
+                      !empty($company->director_nin) || 
+                      !empty($company->business_registration_number);
+            
+            if (!$hasKyc) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Cannot activate company: Missing KYC information. Company must provide either Director BVN, Director NIN, or RC Number before activation.'
+                ], 400);
+            }
+        }
 
         // Create company wallet if it doesn't exist
         if ($request->is_active) {
@@ -316,11 +354,16 @@ class CompanyKycController extends Controller
                         'company_name' => $company->name,
                         'has_director_bvn' => !empty($company->director_bvn),
                         'has_director_nin' => !empty($company->director_nin),
+                        'has_rc_number' => !empty($company->business_registration_number),
                     ]);
 
                     $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
                     
                     // Create master wallet using correct signature
+                    // VirtualAccountService will automatically use:
+                    // 1. Director BVN (if available) - AGGREGATOR MODEL
+                    // 2. Director NIN (if available)
+                    // 3. RC Number (fallback for corporate)
                     $virtualAccount = $virtualAccountService->createVirtualAccount(
                         $company->id,
                         'company_master_' . $company->id, // Unique user_id for company master wallet
@@ -351,6 +394,7 @@ class CompanyKycController extends Controller
                         'company_id' => $company->id,
                         'account_number' => $virtualAccount->account_number,
                         'account_name' => $virtualAccount->account_name,
+                        'kyc_used' => $virtualAccount->kyc_source,
                     ]);
                 } else {
                     \Log::info('Master account already exists', [
@@ -364,7 +408,12 @@ class CompanyKycController extends Controller
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
                 ]);
-                // Don't fail activation if virtual account creation fails
+                
+                // Return error to admin - don't silently fail!
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Company activated but master wallet creation failed: ' . $e->getMessage() . '. Please check logs and retry or contact support.'
+                ], 500);
             }
         }
 
@@ -455,6 +504,74 @@ class CompanyKycController extends Controller
             'data' => $stats
         ]);
     }
+    /**
+     * Update company information (Admin Edit).
+     */
+    public function update(Request $request, $id)
+    {
+        $request->validate([
+            'name' => 'nullable|string|max:255',
+            'email' => 'nullable|email|max:255',
+            'phone' => 'nullable|string|max:20',
+            'address' => 'nullable|string|max:500',
+            'business_registration_number' => 'nullable|string|max:50',
+            'director_bvn' => 'nullable|string|size:11',
+            'director_nin' => 'nullable|string|size:11',
+            'bank_name' => 'nullable|string|max:100',
+            'account_number' => 'nullable|string|max:20',
+            'account_name' => 'nullable|string|max:255',
+            'bank_code' => 'nullable|string|max:10',
+        ]);
+
+        $company = Company::findOrFail($id);
+
+        DB::beginTransaction();
+        try {
+            // Update company fields
+            $updateData = array_filter([
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone' => $request->phone,
+                'address' => $request->address,
+                'business_registration_number' => $request->business_registration_number,
+                'director_bvn' => $request->director_bvn,
+                'director_nin' => $request->director_nin,
+                'bank_name' => $request->bank_name,
+                'account_number' => $request->account_number,
+                'account_name' => $request->account_name,
+                'bank_code' => $request->bank_code,
+            ], function ($value) {
+                return $value !== null;
+            });
+
+            $company->update($updateData);
+
+            // Log history
+            CompanyKycHistory::logAction(
+                $company->id,
+                'all',
+                'updated',
+                auth()->id(),
+                'Company information updated by admin'
+            );
+
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Company information updated successfully',
+                'data' => $company->fresh()
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update company: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
     /**
      * Delete a company and all related records.
      */

@@ -40,7 +40,13 @@ class CompanyKycSubmissionController extends Controller
             'directors',
             'shareholders',
             'bvn',
-            'nin'
+            'nin',
+            'director_bvn',
+            'director_nin',
+            'business_registration_number',
+            'address',
+            'business_type',
+            'business_category'
         ];
 
         foreach ($fillableFields as $field) {

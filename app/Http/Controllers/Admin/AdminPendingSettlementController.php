@@ -19,7 +19,7 @@ class AdminPendingSettlementController extends Controller
     public function getPendingSettlements(Request $request)
     {
         try {
-            $filter = $request->input('filter', 'yesterday'); // yesterday or today
+            $filter = $request->input('filter', 'yesterday'); // yesterday, today, or all_pending
             
             // Calculate date range based on filter
             $now = Carbon::now('Africa/Lagos');
@@ -28,10 +28,19 @@ class AdminPendingSettlementController extends Controller
                 // Yesterday: from yesterday 00:00 to yesterday 23:59
                 $startDate = $now->copy()->subDay()->startOfDay();
                 $endDate = $now->copy()->subDay()->endOfDay();
-            } else {
+            } elseif ($filter === 'today') {
                 // Today: from today 00:00 to now
                 $startDate = $now->copy()->startOfDay();
                 $endDate = $now;
+            } elseif ($filter === 'all_pending') {
+                // All Pending: Everything older than 24 hours (exclude today's transactions)
+                // Start from beginning of time, end 24 hours ago
+                $startDate = Carbon::parse('2020-01-01'); // Far back in history
+                $endDate = $now->copy()->subHours(24); // 24 hours ago
+            } else {
+                // Default to yesterday
+                $startDate = $now->copy()->subDay()->startOfDay();
+                $endDate = $now->copy()->subDay()->endOfDay();
             }
             
             // Get all VA deposits for the period (regardless of settlement status)
@@ -143,7 +152,7 @@ class AdminPendingSettlementController extends Controller
     public function processSettlements(Request $request)
     {
         $request->validate([
-            'filter' => 'required|in:yesterday,today',
+            'filter' => 'required|in:yesterday,today,all_pending',
         ]);
         
         DB::beginTransaction();
@@ -157,9 +166,16 @@ class AdminPendingSettlementController extends Controller
             if ($filter === 'yesterday') {
                 $startDate = $now->copy()->subDay()->startOfDay();
                 $endDate = $now->copy()->subDay()->endOfDay();
-            } else {
+            } elseif ($filter === 'today') {
                 $startDate = $now->copy()->startOfDay();
                 $endDate = $now;
+            } elseif ($filter === 'all_pending') {
+                // All Pending: Everything older than 24 hours
+                $startDate = Carbon::parse('2020-01-01');
+                $endDate = $now->copy()->subHours(24);
+            } else {
+                $startDate = $now->copy()->subDay()->startOfDay();
+                $endDate = $now->copy()->subDay()->endOfDay();
             }
             
             // Get pending VA deposits only

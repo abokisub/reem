@@ -45,6 +45,7 @@ class VirtualAccount extends Model
         'director_bvn',
         'status',
         'is_test',
+        'is_master',
         'activated_at',
         'expires_at',
     ];
@@ -55,6 +56,8 @@ class VirtualAccount extends Model
         'kyc_upgraded_at' => 'datetime',
         'amount' => 'decimal:2',
         'kyc_upgraded' => 'boolean',
+        'is_master' => 'boolean',
+        'is_test' => 'boolean',
     ];
 
     protected static function booted()

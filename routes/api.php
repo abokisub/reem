@@ -749,6 +749,7 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/pending-kyc', [App\Http\Controllers\Admin\CompanyKycController::class, 'pendingKyc']);
         Route::get('/statistics', [App\Http\Controllers\Admin\CompanyKycController::class, 'statistics']);
         Route::get('/{id}', [App\Http\Controllers\Admin\CompanyKycController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\Admin\CompanyKycController::class, 'update']);
         Route::post('/{id}/review/{section}', [App\Http\Controllers\Admin\CompanyKycController::class, 'reviewSection']);
         Route::post('/{id}/toggle-status', [App\Http\Controllers\Admin\CompanyKycController::class, 'toggleStatus']);
         Route::post('/{id}/regenerate-credentials', [App\Http\Controllers\Admin\CompanyKycController::class, 'regenerateCredentials']);

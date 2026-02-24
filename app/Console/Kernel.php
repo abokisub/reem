@@ -22,6 +22,9 @@ class Kernel extends ConsoleKernel
 
         // Settlement processing (check every 5 mins for due settlements)
         $schedule->command('settlements:process')->everyFiveMinutes();
+        
+        // Fallback: Process overdue settlements every hour (in case main command misses some)
+        $schedule->command('settlements:process-overdue')->hourly();
 
         // Settlement & Reconciliation (Enterprise Requirements)
         $schedule->command('gateway:settle')->dailyAt('02:00');
