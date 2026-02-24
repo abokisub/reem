@@ -126,7 +126,7 @@ $transactionsWithoutQueue = DB::select("
     AND t.status = 'successful'
     AND t.settlement_status = 'unsettled'
     AND sq.id IS NULL
-    AND t.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAYS)
+    AND t.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     ORDER BY t.created_at DESC
 ");
 
