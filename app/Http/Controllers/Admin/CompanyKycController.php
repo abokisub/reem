@@ -214,6 +214,60 @@ class CompanyKycController extends Controller
             'All sections approved - API credentials generated'
         );
 
+        // Create company wallet if it doesn't exist
+        $wallet = \App\Models\CompanyWallet::where('company_id', $company->id)->first();
+        if (!$wallet) {
+            \App\Models\CompanyWallet::create([
+                'company_id' => $company->id,
+                'currency' => 'NGN',
+                'balance' => 0,
+                'ledger_balance' => 0,
+                'pending_balance' => 0,
+            ]);
+            \Log::info("Created company wallet for approved company", ['company_id' => $company->id]);
+        }
+
+        // Create master virtual account if company has director BVN
+        if ($company->director_bvn) {
+            try {
+                $masterAccount = \App\Models\VirtualAccount::where('company_id', $company->id)
+                    ->where('is_master', 1)
+                    ->where('provider', 'pointwave')
+                    ->first();
+
+                if (!$masterAccount) {
+                    $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
+                    $result = $virtualAccountService->createVirtualAccount(
+                        $company->id,
+                        null, // No customer_id for master account
+                        $company->name,
+                        $company->email,
+                        $company->phone,
+                        $company->director_bvn,
+                        null, // No NIN
+                        true  // is_master = true
+                    );
+
+                    if ($result['success']) {
+                        \Log::info("Created master virtual account for approved company", [
+                            'company_id' => $company->id,
+                            'account_number' => $result['account_number']
+                        ]);
+                    } else {
+                        \Log::error("Failed to create master virtual account for approved company", [
+                            'company_id' => $company->id,
+                            'error' => $result['message']
+                        ]);
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::error("Exception creating master virtual account for approved company", [
+                    'company_id' => $company->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
         // TODO: Send approval email with API credentials
         // Mail::to($company->email)->send(new CompanyKycApproved($company, $apiKey, $secretKey));
 
