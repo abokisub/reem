@@ -2057,8 +2057,10 @@ class AuthController extends Controller
             'name' => $user->name,
             'phone' => $user->phone,
             'email' => $user->email,
-            'balance' => number_format($user->balance, 2),
-            'referral_balance' => number_format($user->referral_balance, 2),
+            'balance' => (float) $user->balance, // Return as number, not formatted string
+            'balance_formatted' => number_format($user->balance, 2), // Formatted version for display
+            'referral_balance' => (float) $user->referral_balance, // Return as number
+            'referral_balance_formatted' => number_format($user->referral_balance, 2), // Formatted version
             'kyc' => $user->kyc,
             'type' => $user->type,
             'pin' => $user->pin,
