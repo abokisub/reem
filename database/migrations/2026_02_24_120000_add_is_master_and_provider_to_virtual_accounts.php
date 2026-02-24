@@ -11,40 +11,32 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('virtual_accounts', function (Blueprint $table) {
-            // Add is_master flag to identify company master accounts
-            if (!Schema::hasColumn('virtual_accounts', 'is_master')) {
+        // Add is_master column if it doesn't exist
+        if (!Schema::hasColumn('virtual_accounts', 'is_master')) {
+            Schema::table('virtual_accounts', function (Blueprint $table) {
                 $table->boolean('is_master')->default(false)->after('status');
-            }
-            
-            // Add provider to track which provider created the account (if not exists)
-            // pointwave = our PalmPay master account
-            // xixapay, monnify, paystack = third-party providers
-            if (!Schema::hasColumn('virtual_accounts', 'provider')) {
-                $table->string('provider')->default('pointwave')->after('is_master');
-            }
-        });
+            });
+        }
         
-        // Add indexes separately to avoid conflicts
-        Schema::table('virtual_accounts', function (Blueprint $table) {
-            if (!$this->indexExists('virtual_accounts', 'virtual_accounts_company_id_is_master_index')) {
-                $table->index(['company_id', 'is_master']);
-            }
-            if (!$this->indexExists('virtual_accounts', 'virtual_accounts_provider_index')) {
-                $table->index('provider');
-            }
-        });
-    }
-    
-    /**
-     * Check if an index exists on a table.
-     */
-    private function indexExists($table, $index)
-    {
-        $connection = Schema::getConnection();
-        $indexes = $connection->getDoctrineSchemaManager()
-            ->listTableIndexes($table);
-        return array_key_exists($index, $indexes);
+        // Add provider column if it doesn't exist
+        if (!Schema::hasColumn('virtual_accounts', 'provider')) {
+            Schema::table('virtual_accounts', function (Blueprint $table) {
+                $table->string('provider')->default('pointwave')->after('is_master');
+            });
+        }
+        
+        // Add indexes using raw SQL to avoid conflicts
+        try {
+            DB::statement('CREATE INDEX virtual_accounts_company_id_is_master_index ON virtual_accounts(company_id, is_master)');
+        } catch (\Exception $e) {
+            // Index might already exist, ignore
+        }
+        
+        try {
+            DB::statement('CREATE INDEX virtual_accounts_provider_index ON virtual_accounts(provider)');
+        } catch (\Exception $e) {
+            // Index might already exist, ignore
+        }
     }
 
     /**
@@ -52,10 +44,27 @@ return new class extends Migration
      */
     public function down(): void
     {
+        // Drop indexes
+        try {
+            DB::statement('DROP INDEX virtual_accounts_company_id_is_master_index ON virtual_accounts');
+        } catch (\Exception $e) {
+            // Ignore if doesn't exist
+        }
+        
+        try {
+            DB::statement('DROP INDEX virtual_accounts_provider_index ON virtual_accounts');
+        } catch (\Exception $e) {
+            // Ignore if doesn't exist
+        }
+        
+        // Drop columns
         Schema::table('virtual_accounts', function (Blueprint $table) {
-            $table->dropIndex(['company_id', 'is_master']);
-            $table->dropIndex(['provider']);
-            $table->dropColumn(['is_master', 'provider']);
+            if (Schema::hasColumn('virtual_accounts', 'is_master')) {
+                $table->dropColumn('is_master');
+            }
+            if (Schema::hasColumn('virtual_accounts', 'provider')) {
+                $table->dropColumn('provider');
+            }
         });
     }
 };
