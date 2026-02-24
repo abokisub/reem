@@ -286,44 +286,78 @@ class CompanyKycController extends Controller
 
         $company = Company::findOrFail($id);
 
-        // Auto-generate PalmPay virtual account when company is activated
-        if ($request->is_active && !$company->palmpay_account_number) {
+        // Create company wallet if it doesn't exist
+        if ($request->is_active) {
+            $wallet = \App\Models\CompanyWallet::where('company_id', $company->id)->first();
+            if (!$wallet) {
+                \App\Models\CompanyWallet::create([
+                    'company_id' => $company->id,
+                    'currency' => 'NGN',
+                    'balance' => 0,
+                    'ledger_balance' => 0,
+                    'pending_balance' => 0,
+                ]);
+                \Log::info("Created company wallet during activation", ['company_id' => $company->id]);
+            }
+        }
+
+        // Auto-generate master virtual account when company is activated
+        if ($request->is_active) {
             try {
-                $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
-                
-                \Log::info('Creating master wallet for company activation', [
-                    'company_id' => $company->id,
-                    'company_name' => $company->name,
-                    'has_director_bvn' => !empty($company->director_bvn),
-                    'has_director_nin' => !empty($company->director_nin),
-                    'has_rc_number' => !empty($company->business_registration_number),
-                ]);
-                
-                // Create master wallet for the company
-                $virtualAccount = $virtualAccountService->createVirtualAccount(
-                    $company->id,
-                    'company_master_' . $company->id, // Unique user_id for company master wallet
-                    [
-                        'name' => $company->name,
-                        'email' => $company->email,
-                        'phone' => $company->phone,
-                        // Uses director BVN automatically
-                    ],
-                    '100033', // PalmPay bank code
-                    null // No company_user_id for master wallet
-                );
+                // Check if master account already exists
+                $masterAccount = \App\Models\VirtualAccount::where('company_id', $company->id)
+                    ->where('is_master', 1)
+                    ->where('provider', 'pointwave')
+                    ->first();
 
-                // Update company with PalmPay master wallet details
-                $company->palmpay_account_number = $virtualAccount->account_number;
-                $company->palmpay_account_name = $virtualAccount->account_name;
-                $company->palmpay_bank_name = 'PalmPay';
-                $company->palmpay_bank_code = '100033';
+                if (!$masterAccount) {
+                    \Log::info('Creating master virtual account for company activation', [
+                        'company_id' => $company->id,
+                        'company_name' => $company->name,
+                        'has_director_bvn' => !empty($company->director_bvn),
+                        'has_director_nin' => !empty($company->director_nin),
+                    ]);
 
-                \Log::info('Company master wallet created successfully', [
-                    'company_id' => $company->id,
-                    'account_number' => $virtualAccount->account_number,
-                    'account_name' => $virtualAccount->account_name,
-                ]);
+                    $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
+                    
+                    // Create master wallet using correct signature
+                    $virtualAccount = $virtualAccountService->createVirtualAccount(
+                        $company->id,
+                        'company_master_' . $company->id, // Unique user_id for company master wallet
+                        [
+                            'name' => $company->name,
+                            'email' => $company->email,
+                            'phone' => $company->phone,
+                            'account_type' => 'static',
+                        ],
+                        '100033', // PalmPay bank code
+                        null // No company_user_id for master wallet
+                    );
+
+                    // Mark as master account
+                    $virtualAccount->update([
+                        'is_master' => true,
+                        'provider' => 'pointwave',
+                    ]);
+
+                    // Update company with PalmPay master wallet details
+                    $company->palmpay_account_number = $virtualAccount->account_number;
+                    $company->palmpay_account_name = $virtualAccount->account_name;
+                    $company->palmpay_bank_name = 'PalmPay';
+                    $company->palmpay_bank_code = '100033';
+                    $company->save();
+
+                    \Log::info('Company master wallet created successfully', [
+                        'company_id' => $company->id,
+                        'account_number' => $virtualAccount->account_number,
+                        'account_name' => $virtualAccount->account_name,
+                    ]);
+                } else {
+                    \Log::info('Master account already exists', [
+                        'company_id' => $company->id,
+                        'account_number' => $masterAccount->account_number,
+                    ]);
+                }
             } catch (\Exception $e) {
                 \Log::error('Failed to create company master wallet', [
                     'company_id' => $company->id,
@@ -336,7 +370,7 @@ class CompanyKycController extends Controller
 
         $company->update([
             'is_active' => $request->is_active,
-            'kyc_status' => $request->is_active ? 'approved' : 'suspended'
+            'kyc_status' => $request->is_active ? 'verified' : 'suspended'
         ]);
 
         // Log history
