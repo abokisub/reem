@@ -13,17 +13,38 @@ return new class extends Migration
     {
         Schema::table('virtual_accounts', function (Blueprint $table) {
             // Add is_master flag to identify company master accounts
-            $table->boolean('is_master')->default(false)->after('status');
+            if (!Schema::hasColumn('virtual_accounts', 'is_master')) {
+                $table->boolean('is_master')->default(false)->after('status');
+            }
             
-            // Add provider to track which provider created the account
+            // Add provider to track which provider created the account (if not exists)
             // pointwave = our PalmPay master account
             // xixapay, monnify, paystack = third-party providers
-            $table->string('provider')->default('pointwave')->after('is_master');
-            
-            // Add indexes for performance
-            $table->index(['company_id', 'is_master']);
-            $table->index('provider');
+            if (!Schema::hasColumn('virtual_accounts', 'provider')) {
+                $table->string('provider')->default('pointwave')->after('is_master');
+            }
         });
+        
+        // Add indexes separately to avoid conflicts
+        Schema::table('virtual_accounts', function (Blueprint $table) {
+            if (!$this->indexExists('virtual_accounts', 'virtual_accounts_company_id_is_master_index')) {
+                $table->index(['company_id', 'is_master']);
+            }
+            if (!$this->indexExists('virtual_accounts', 'virtual_accounts_provider_index')) {
+                $table->index('provider');
+            }
+        });
+    }
+    
+    /**
+     * Check if an index exists on a table.
+     */
+    private function indexExists($table, $index)
+    {
+        $connection = Schema::getConnection();
+        $indexes = $connection->getDoctrineSchemaManager()
+            ->listTableIndexes($table);
+        return array_key_exists($index, $indexes);
     }
 
     /**
