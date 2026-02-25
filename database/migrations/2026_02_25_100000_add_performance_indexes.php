@@ -55,27 +55,31 @@ return new class extends Migration
             }
         });
 
-        // Add indexes to company_webhook_logs table
-        Schema::table('company_webhook_logs', function (Blueprint $table) {
-            if (!$this->indexExists('company_webhook_logs', 'company_webhook_logs_company_id_created_at_index')) {
-                $table->index(['company_id', 'created_at'], 'company_webhook_logs_company_id_created_at_index');
-            }
-            
-            if (!$this->indexExists('company_webhook_logs', 'company_webhook_logs_status_index')) {
-                $table->index('status', 'company_webhook_logs_status_index');
-            }
-        });
+        // Add indexes to company_webhook_logs table (if it exists)
+        if (Schema::hasTable('company_webhook_logs')) {
+            Schema::table('company_webhook_logs', function (Blueprint $table) {
+                if (!$this->indexExists('company_webhook_logs', 'company_webhook_logs_company_id_created_at_index')) {
+                    $table->index(['company_id', 'created_at'], 'company_webhook_logs_company_id_created_at_index');
+                }
+                
+                if (!$this->indexExists('company_webhook_logs', 'company_webhook_logs_status_index')) {
+                    $table->index('status', 'company_webhook_logs_status_index');
+                }
+            });
+        }
 
-        // Add indexes to settlement_queue table
-        Schema::table('settlement_queue', function (Blueprint $table) {
-            if (!$this->indexExists('settlement_queue', 'settlement_queue_company_id_status_index')) {
-                $table->index(['company_id', 'status'], 'settlement_queue_company_id_status_index');
-            }
-            
-            if (!$this->indexExists('settlement_queue', 'settlement_queue_settlement_date_index')) {
-                $table->index('settlement_date', 'settlement_queue_settlement_date_index');
-            }
-        });
+        // Add indexes to settlement_queue table (if it exists)
+        if (Schema::hasTable('settlement_queue')) {
+            Schema::table('settlement_queue', function (Blueprint $table) {
+                if (!$this->indexExists('settlement_queue', 'settlement_queue_company_id_status_index')) {
+                    $table->index(['company_id', 'status'], 'settlement_queue_company_id_status_index');
+                }
+                
+                if (!$this->indexExists('settlement_queue', 'settlement_queue_settlement_date_index')) {
+                    $table->index('settlement_date', 'settlement_queue_settlement_date_index');
+                }
+            });
+        }
     }
 
     /**
@@ -102,15 +106,19 @@ return new class extends Migration
             $table->dropIndex('company_wallets_company_id_index');
         });
 
-        Schema::table('company_webhook_logs', function (Blueprint $table) {
-            $table->dropIndex('company_webhook_logs_company_id_created_at_index');
-            $table->dropIndex('company_webhook_logs_status_index');
-        });
+        if (Schema::hasTable('company_webhook_logs')) {
+            Schema::table('company_webhook_logs', function (Blueprint $table) {
+                $table->dropIndex('company_webhook_logs_company_id_created_at_index');
+                $table->dropIndex('company_webhook_logs_status_index');
+            });
+        }
 
-        Schema::table('settlement_queue', function (Blueprint $table) {
-            $table->dropIndex('settlement_queue_company_id_status_index');
-            $table->dropIndex('settlement_queue_settlement_date_index');
-        });
+        if (Schema::hasTable('settlement_queue')) {
+            Schema::table('settlement_queue', function (Blueprint $table) {
+                $table->dropIndex('settlement_queue_company_id_status_index');
+                $table->dropIndex('settlement_queue_settlement_date_index');
+            });
+        }
     }
 
     /**
