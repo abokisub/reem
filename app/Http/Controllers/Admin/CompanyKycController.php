@@ -251,7 +251,7 @@ class CompanyKycController extends Controller
         $company->update($credentials);
 
         $company->update([
-            'kyc_status' => 'approved',
+            'kyc_status' => 'verified', // Changed from 'approved' to 'verified' to match database ENUM
             'kyc_reviewed_at' => now(),
             'kyc_reviewed_by' => auth()->id(),
             'api_credentials_generated' => true,
