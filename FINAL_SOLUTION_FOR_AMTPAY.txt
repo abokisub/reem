@@ -1,0 +1,47 @@
+WEBHOOK SECRET MISMATCH - ROOT CAUSE IDENTIFIED
+================================================
+
+THE PROBLEM:
+------------
+PointWave is using a DIFFERENT webhook secret than what Amtpay has.
+
+From the test:
+- Amtpay's .env secret: whsec_383b656ab3e08d06598c6cec6f429d07a43047030265e45ff70b89d04f0f6e24
+- Amtpay calculates: 105e7b5b3a3cfc708338ac1066e906d66e1003e33bc32530732d6386c94cf799
+- PointWave sends: 978ad8405b2f656b19d9f6da39512052618733d75e7d99e5874d273b1fc3ad39
+
+These don't match = Amtpay has the WRONG secret.
+
+NEXT STEP - RUN THIS ON POINTWAVE SERVER:
+------------------------------------------
+php get_decrypted_webhook_secret.php
+
+This will show the CORRECT webhook secret that Amtpay should use.
+
+THEN TELL AMTPAY:
+-----------------
+1. Update your .env with the correct webhook secret (from script output)
+
+2. Fix your signature calculation code:
+   CHANGE: $payload = json_encode($request->all());
+   TO:     $payload = $request->getContent();
+
+3. Remove the "BYPASSING signature check" code
+
+4. Test with a real transaction
+
+WHY THIS HAPPENED:
+------------------
+Possible reasons:
+1. Amtpay copied an old/test webhook secret
+2. The webhook secret was regenerated after they copied it
+3. They copied from the wrong environment (test vs live)
+4. There was an issue with the dashboard display at the time
+
+THE FIX IS SIMPLE:
+------------------
+Just get the correct secret from PointWave database and update Amtpay's .env.
+Then fix the signature calculation code.
+Then remove the bypass.
+
+Done.
