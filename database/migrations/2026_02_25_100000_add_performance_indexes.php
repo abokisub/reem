@@ -75,8 +75,11 @@ return new class extends Migration
                     $table->index(['company_id', 'status'], 'settlement_queue_company_id_status_index');
                 }
                 
-                if (!$this->indexExists('settlement_queue', 'settlement_queue_settlement_date_index')) {
-                    $table->index('settlement_date', 'settlement_queue_settlement_date_index');
+                // Check if scheduled_settlement_date column exists before adding index
+                if (Schema::hasColumn('settlement_queue', 'scheduled_settlement_date')) {
+                    if (!$this->indexExists('settlement_queue', 'settlement_queue_scheduled_settlement_date_index')) {
+                        $table->index('scheduled_settlement_date', 'settlement_queue_scheduled_settlement_date_index');
+                    }
                 }
             });
         }
@@ -116,7 +119,9 @@ return new class extends Migration
         if (Schema::hasTable('settlement_queue')) {
             Schema::table('settlement_queue', function (Blueprint $table) {
                 $table->dropIndex('settlement_queue_company_id_status_index');
-                $table->dropIndex('settlement_queue_settlement_date_index');
+                if (Schema::hasColumn('settlement_queue', 'scheduled_settlement_date')) {
+                    $table->dropIndex('settlement_queue_scheduled_settlement_date_index');
+                }
             });
         }
     }
