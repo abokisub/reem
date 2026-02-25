@@ -1,0 +1,163 @@
+===============================================
+AMTPAY WEBHOOK TESTING INSTRUCTIONS
+Run these on PointWave LIVE SERVER
+===============================================
+
+STEP 1: Pull the latest code
+-----------------------------
+cd app.pointwave.ng
+git pull origin main
+
+You should see:
+- check_amtpay_webhook_secret.php
+- test_amtpay_webhook_live.php
+
+
+STEP 2: Check the webhook secret
+---------------------------------
+php check_amtpay_webhook_secret.php
+
+This will show:
+✓ Whether the secret is serialized or plain text
+✓ Whether it matches Amtpay's expected secret
+✓ Whether the code fix is deployed
+✓ Test signature generation
+
+Expected output:
+- If secret is SERIALIZED: You'll see "⚠️ SECRET IS SERIALIZED!"
+- If secret is PLAIN TEXT: You'll see "✅ SECRET IS PLAIN TEXT"
+- Should show: "✅ OutgoingWebhookService has the unserialization fix"
+- Should show: "✅ TransactionController has the unserialization fix"
+
+
+STEP 3: Test actual webhook delivery to Amtpay
+-----------------------------------------------
+php test_amtpay_webhook_live.php
+
+This will:
+1. Get Amtpay's webhook secret from database
+2. Apply the unserialization fix (if needed)
+3. Generate a test payload
+4. Calculate HMAC-SHA256 signature
+5. Send actual HTTP POST to Amtpay's webhook URL
+6. Show the response
+
+Expected outcomes:
+
+SUCCESS (Status 200-299):
+✅ Webhook delivered successfully
+✅ Amtpay accepted the signature
+→ Amtpay can now remove their bypass code!
+
+FAILURE (Status 400/401/403):
+❌ Signature validation failed
+→ Possible causes:
+   1. PHP-FPM hasn't restarted (old code in memory)
+   2. Webhook secrets don't match
+   3. Amtpay's validation logic has an issue
+
+
+STEP 4: If webhook fails, restart PHP-FPM
+------------------------------------------
+The code fix is deployed, but PHP might be running old code from memory.
+
+Try these commands:
+1. Via cPanel: Go to MultiPHP Manager → Restart PHP-FPM
+2. Via command (if you have access):
+   sudo systemctl restart php-fpm
+   OR
+   sudo systemctl restart php8.1-fpm
+
+After restart, run STEP 3 again.
+
+
+STEP 5: Verify with real transaction
+-------------------------------------
+Once test webhook succeeds:
+1. Ask Amtpay to create a test virtual account
+2. Send ₦100 to that account
+3. Check webhook logs on both sides
+4. Verify signature matches
+
+
+TROUBLESHOOTING
+===============
+
+Problem: "❌ MISMATCH! Secrets are different"
+Solution: The webhook secret in database doesn't match Amtpay's secret
+        → Need to update the secret in database
+        → Contact admin to verify correct secret
+
+Problem: "❌ OutgoingWebhookService DOES NOT have the fix"
+Solution: Code not deployed properly
+        → Run: git pull origin main
+        → Verify files are updated
+
+Problem: Test succeeds but real webhooks fail
+Solution: PHP-FPM is caching old code
+        → Restart PHP-FPM
+        → Clear OPcache if enabled
+
+Problem: Connection timeout or network error
+Solution: Check if Amtpay's webhook URL is accessible
+        → Verify URL is correct
+        → Check firewall/network settings
+
+
+WHAT AMTPAY SHOULD SEE
+======================
+
+When they receive the test webhook, they should see:
+
+Headers:
+- X-PointWave-Signature: [64-character hex string]
+- X-PointWave-Event-ID: test-[unique-id]
+- X-PointWave-Event-Type: payment.success
+- X-PointWave-Timestamp: [unix timestamp]
+
+Body (JSON):
+{
+  "event": "payment.success",
+  "event_id": "test-...",
+  "timestamp": "2026-02-25T...",
+  "data": {
+    "transaction_id": "TEST_...",
+    "amount": 100.00,
+    "fee": 0.60,
+    "net_amount": 99.40,
+    ...
+  }
+}
+
+Their validation code should:
+1. Get signature: $signature = $request->header('X-PointWave-Signature');
+2. Get raw body: $payload = $request->getContent();
+3. Calculate: $calculated = hash_hmac('sha256', $payload, $theirSecret);
+4. Compare: if ($signature === $calculated) { /* valid */ }
+
+
+EXPECTED RESULTS
+================
+
+✅ check_amtpay_webhook_secret.php shows:
+   - Secret is serialized (or plain text)
+   - Code fix is deployed
+   - Signatures match
+
+✅ test_amtpay_webhook_live.php shows:
+   - Status Code: 200 (or 2xx)
+   - Response indicates success
+   - Amtpay accepted the webhook
+
+✅ Next steps:
+   - Amtpay removes bypass code
+   - Test with real transaction
+   - Monitor webhook logs
+
+
+CONTACT
+=======
+If tests fail after PHP restart, contact:
+- Check Amtpay's webhook logs for exact error
+- Verify webhook secret matches on both sides
+- Ensure Amtpay is using $request->getContent() for payload
