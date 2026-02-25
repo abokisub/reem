@@ -157,25 +157,39 @@ class AdminPendingSettlementController extends Controller
                 $startDate = $now->copy()->startOfDay();
                 $endDate = $now;
             } elseif ($filter === 'all_pending') {
-                // All Pending: Everything older than 24 hours
+                // All Pending: ALL pending settlements regardless of date
                 $startDate = Carbon::parse('2020-01-01');
-                $endDate = $now->copy()->subHours(24);
+                $endDate = $now->copy()->addYears(10); // Far future
             } else {
                 $startDate = $now->copy()->subDay()->startOfDay();
                 $endDate = $now->copy()->subDay()->endOfDay();
             }
             
-            // Get pending VA deposits only
-            // This page is ONLY for VA deposits - when customers deposit money into company virtual accounts
-            // Settlement withdrawals are automatically settled when processed
-            $pendingTransactions = DB::table('transactions')
-                ->where('transaction_type', 'va_deposit')
-                ->where('status', 'successful')
-                ->where('settlement_status', 'unsettled')
-                ->whereBetween('created_at', [$startDate, $endDate])
+            // Get pending settlements from settlement_queue
+            $query = DB::table('settlement_queue')
+                ->join('transactions', 'settlement_queue.transaction_id', '=', 'transactions.id')
+                ->where('settlement_queue.status', 'pending');
+            
+            // Apply date filter based on transaction creation date
+            if ($filter !== 'all_pending') {
+                $query->whereBetween('transactions.created_at', [$startDate, $endDate]);
+            }
+            
+            $pendingSettlements = $query->select(
+                    'settlement_queue.id as queue_id',
+                    'settlement_queue.company_id',
+                    'settlement_queue.transaction_id',
+                    'settlement_queue.amount as settlement_amount',
+                    'transactions.id',
+                    'transactions.reference',
+                    'transactions.amount',
+                    'transactions.fee',
+                    'transactions.net_amount',
+                    'transactions.created_at'
+                )
                 ->get();
             
-            if ($pendingTransactions->isEmpty()) {
+            if ($pendingSettlements->isEmpty()) {
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
@@ -188,12 +202,12 @@ class AdminPendingSettlementController extends Controller
             $errors = [];
             
             // Group by company and process
-            $byCompany = $pendingTransactions->groupBy('company_id');
+            $byCompany = $pendingSettlements->groupBy('company_id');
             
-            foreach ($byCompany as $companyId => $transactions) {
+            foreach ($byCompany as $companyId => $settlements) {
                 try {
                     // Calculate total net amount for this company
-                    $companyNetAmount = $transactions->sum('net_amount');
+                    $companyNetAmount = $settlements->sum('net_amount');
                     
                     // Get company wallet (not just company record)
                     $wallet = DB::table('company_wallets')
@@ -218,7 +232,7 @@ class AdminPendingSettlementController extends Controller
                         ]);
                     
                     // Mark all transactions as settled
-                    $transactionIds = $transactions->pluck('id')->toArray();
+                    $transactionIds = $settlements->pluck('transaction_id')->toArray();
                     
                     DB::table('transactions')
                         ->whereIn('id', $transactionIds)
@@ -227,10 +241,15 @@ class AdminPendingSettlementController extends Controller
                             'updated_at' => now()
                         ]);
                     
-                    // Remove from settlement queue
+                    // Update settlement queue status to completed
+                    $queueIds = $settlements->pluck('queue_id')->toArray();
                     DB::table('settlement_queue')
-                        ->whereIn('transaction_id', $transactionIds)
-                        ->delete();
+                        ->whereIn('id', $queueIds)
+                        ->update([
+                            'status' => 'completed',
+                            'actual_settlement_date' => now(),
+                            'updated_at' => now()
+                        ]);
                     
                     $processedCount += count($transactionIds);
                     $totalAmount += $companyNetAmount;
