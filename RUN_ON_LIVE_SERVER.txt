@@ -1,0 +1,42 @@
+INSTRUCTIONS: Run This on PointWave LIVE Server
+================================================
+
+STEP 1: Upload the verification script
+---------------------------------------
+Upload this file to your PointWave LIVE server:
+  verify_amtpay_webhook_secret.php
+
+STEP 2: Run the script via SSH
+-------------------------------
+SSH into your PointWave LIVE server and run:
+
+  cd /path/to/pointwave
+  php verify_amtpay_webhook_secret.php
+
+STEP 3: Send me the output
+---------------------------
+Copy the ENTIRE output and send it to me.
+
+The script will tell us:
+- What webhook secret is stored in PointWave database for Amtpay
+- Whether it matches what PointWave is actually sending
+- Whether it matches what Amtpay has in their .env
+
+WHAT THIS WILL TELL US:
+------------------------
+The script tests with the actual payload from Amtpay's logs:
+- PointWave sent signature: 978ad8405b2f656b19d9f6da39512052618733d75e7d99e5874d273b1fc3ad39
+- Amtpay calculated: 105e7b5b3a3cfc708338ac1066e906d66e1003e33bc32530732d6386c94cf799
+- Amtpay's .env secret: whsec_383b656ab3e08d06598c6cec6f429d07a43047030265e45ff70b89d04f0f6e24
+
+If the database secret matches what PointWave sent, we know the problem.
+If it doesn't match, we need to update the database.
+
+AFTER WE KNOW THE RESULT:
+--------------------------
+We'll tell Amtpay exactly what to do:
+1. Use the correct webhook secret
+2. Fix their signature calculation code
+3. Remove the bypass
+
+This is the ONLY way to know for sure what's happening.
