@@ -25,34 +25,39 @@ class AdminPendingSettlementController extends Controller
             $now = Carbon::now('Africa/Lagos');
             
             if ($filter === 'yesterday') {
-                // Yesterday: from yesterday 00:00 to yesterday 23:59
+                // Yesterday: transactions created yesterday
                 $startDate = $now->copy()->subDay()->startOfDay();
                 $endDate = $now->copy()->subDay()->endOfDay();
             } elseif ($filter === 'today') {
-                // Today: from today 00:00 to now
+                // Today: transactions created today
                 $startDate = $now->copy()->startOfDay();
                 $endDate = $now;
             } elseif ($filter === 'all_pending') {
-                // All Pending: Everything older than 24 hours (exclude today's transactions)
-                // Start from beginning of time, end 24 hours ago
-                $startDate = Carbon::parse('2020-01-01'); // Far back in history
-                $endDate = $now->copy()->subHours(24); // 24 hours ago
+                // All Pending: ALL pending settlements regardless of date
+                $startDate = Carbon::parse('2020-01-01');
+                $endDate = $now->copy()->addYears(10); // Far future to include everything
             } else {
                 // Default to yesterday
                 $startDate = $now->copy()->subDay()->startOfDay();
                 $endDate = $now->copy()->subDay()->endOfDay();
             }
             
-            // Get all VA deposits for the period (regardless of settlement status)
-            // This page is ONLY for VA deposits - when customers deposit money into company virtual accounts
-            // Settlement withdrawals and transfers are handled separately
-            $allTransactions = DB::table('transactions')
-                ->join('companies', 'transactions.company_id', '=', 'companies.id')
+            // Query settlement_queue table directly for pending settlements
+            $query = DB::table('settlement_queue')
+                ->join('transactions', 'settlement_queue.transaction_id', '=', 'transactions.id')
+                ->join('companies', 'settlement_queue.company_id', '=', 'companies.id')
                 ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
-                ->where('transactions.transaction_type', 'va_deposit')
-                ->where('transactions.status', 'successful')
-                ->whereBetween('transactions.created_at', [$startDate, $endDate])
-                ->select(
+                ->where('settlement_queue.status', 'pending');
+            
+            // Apply date filter based on transaction creation date
+            if ($filter !== 'all_pending') {
+                $query->whereBetween('transactions.created_at', [$startDate, $endDate]);
+            }
+            
+            $allSettlements = $query->select(
+                    'settlement_queue.id as queue_id',
+                    'settlement_queue.status as settlement_status',
+                    'settlement_queue.scheduled_settlement_date',
                     'transactions.id',
                     'transactions.reference',
                     'transactions.amount',
@@ -60,54 +65,36 @@ class AdminPendingSettlementController extends Controller
                     'transactions.net_amount',
                     'transactions.created_at',
                     'transactions.company_id',
-                    'transactions.settlement_status',
                     'companies.name as company_name',
                     'companies.email as company_email',
                     'virtual_accounts.palmpay_account_number as va_account_number',
                     'virtual_accounts.palmpay_account_name as va_account_name'
                 )
+                ->orderBy('settlement_queue.scheduled_settlement_date', 'asc')
                 ->orderBy('transactions.created_at', 'desc')
                 ->get();
             
-            // Convert settlement_status NULL to 'unsettled' for consistency
-            $allTransactions = $allTransactions->map(function($tx) {
-                if (empty($tx->settlement_status)) {
-                    $tx->settlement_status = 'unsettled';
-                }
-                return $tx;
-            });
+            // Calculate totals
+            $totalTransactions = $allSettlements->count();
+            $totalGrossAmount = $allSettlements->sum('amount');
+            $totalFees = $allSettlements->sum('fee');
+            $totalNetAmount = $allSettlements->sum('net_amount');
             
-            // Separate into settled and unsettled
-            $pendingSettlements = $allTransactions->where('settlement_status', 'unsettled');
-            $settledTransactions = $allTransactions->where('settlement_status', 'settled');
-            
-            // Calculate totals (only for unsettled to show what needs processing)
-            $totalTransactions = $allTransactions->count();
-            $totalPending = $pendingSettlements->count();
-            $totalSettled = $settledTransactions->count();
-            $totalGrossAmount = $allTransactions->sum('amount');
-            $totalFees = $allTransactions->sum('fee');
-            $totalNetAmount = $allTransactions->sum('net_amount');
-            $pendingGrossAmount = $pendingSettlements->sum('amount');
-            $pendingNetAmount = $pendingSettlements->sum('net_amount');
-            
-            // Group by company for summary (all transactions)
-            $companySummary = $allTransactions->groupBy('company_id')->map(function ($transactions, $companyId) {
-                $first = $transactions->first();
-                $unsettled = $transactions->where('settlement_status', 'unsettled');
-                $settled = $transactions->where('settlement_status', 'settled');
+            // Group by company for summary
+            $companySummary = $allSettlements->groupBy('company_id')->map(function ($settlements, $companyId) {
+                $first = $settlements->first();
                 
                 return [
                     'company_id' => $companyId,
                     'company_name' => $first->company_name,
                     'company_email' => $first->company_email,
-                    'transaction_count' => $transactions->count(),
-                    'pending_count' => $unsettled->count(),
-                    'settled_count' => $settled->count(),
-                    'total_gross' => $transactions->sum('amount'),
-                    'total_fees' => $transactions->sum('fee'),
-                    'total_net' => $transactions->sum('net_amount'),
-                    'pending_net' => $unsettled->sum('net_amount'),
+                    'transaction_count' => $settlements->count(),
+                    'pending_count' => $settlements->count(), // All are pending
+                    'settled_count' => 0,
+                    'total_gross' => $settlements->sum('amount'),
+                    'total_fees' => $settlements->sum('fee'),
+                    'total_net' => $settlements->sum('net_amount'),
+                    'pending_net' => $settlements->sum('net_amount'),
                 ];
             })->values();
             
@@ -120,16 +107,16 @@ class AdminPendingSettlementController extends Controller
                 ],
                 'summary' => [
                     'total_transactions' => $totalTransactions,
-                    'pending_transactions' => $totalPending,
-                    'settled_transactions' => $totalSettled,
+                    'pending_transactions' => $totalTransactions,
+                    'settled_transactions' => 0,
                     'total_gross_amount' => $totalGrossAmount,
                     'total_fees' => $totalFees,
                     'total_net_amount' => $totalNetAmount,
-                    'pending_gross_amount' => $pendingGrossAmount,
-                    'pending_net_amount' => $pendingNetAmount,
+                    'pending_gross_amount' => $totalGrossAmount,
+                    'pending_net_amount' => $totalNetAmount,
                 ],
                 'company_summary' => $companySummary,
-                'transactions' => $allTransactions,
+                'transactions' => $allSettlements,
             ]);
             
         } catch (\Exception $e) {
