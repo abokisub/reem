@@ -198,6 +198,41 @@ class CompanyKycController extends Controller
     }
 
     /**
+     * Manually approve company (called by admin from UI)
+     */
+    public function approveCompanyManually($id)
+    {
+        $company = Company::findOrFail($id);
+
+        // Check if company already approved
+        if ($company->kyc_status === 'approved') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Company is already approved'
+            ], 400);
+        }
+
+        DB::beginTransaction();
+        try {
+            $this->approveCompany($company);
+            DB::commit();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Company approved successfully! API credentials generated and master wallet created.',
+                'data' => $company->fresh()
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to approve company: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Approve company and generate API credentials.
      */
     private function approveCompany(Company $company)

@@ -752,6 +752,7 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/{id}', [App\Http\Controllers\Admin\CompanyKycController::class, 'show']);
         Route::put('/{id}', [App\Http\Controllers\Admin\CompanyKycController::class, 'update']);
         Route::post('/{id}/review/{section}', [App\Http\Controllers\Admin\CompanyKycController::class, 'reviewSection']);
+        Route::post('/{id}/approve', [App\Http\Controllers\Admin\CompanyKycController::class, 'approveCompanyManually']);
         Route::post('/{id}/toggle-status', [App\Http\Controllers\Admin\CompanyKycController::class, 'toggleStatus']);
         Route::post('/{id}/regenerate-credentials', [App\Http\Controllers\Admin\CompanyKycController::class, 'regenerateCredentials']);
         Route::delete('/{id}', [App\Http\Controllers\Admin\CompanyKycController::class, 'destroy']);
