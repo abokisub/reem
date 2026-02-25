@@ -36,20 +36,24 @@ class CompanyController extends Controller
         if ($request->has('status') && $request->status !== 'All' && !empty($request->status)) {
             // Map frontend filter values to database status values
             $statusMap = [
-                'sent' => 'delivery_success',
-                'failed' => 'delivery_failed',
+                'sent' => ['delivery_success', 'delivered'],
+                'failed' => ['delivery_failed', 'failed'],
             ];
             
             $filterStatus = strtolower($request->status);
-            $dbStatus = $statusMap[$filterStatus] ?? $filterStatus;
+            $dbStatuses = $statusMap[$filterStatus] ?? [$filterStatus];
             
-            $query->where('status', $dbStatus);
+            if (is_array($dbStatuses)) {
+                $query->whereIn('status', $dbStatuses);
+            } else {
+                $query->where('status', $dbStatuses);
+            }
         }
 
         $events = $query->orderBy('created_at', 'desc')->paginate($request->limit ?? 10);
 
         $total_sent = CompanyWebhookLog::where('company_id', $user->company->id)
-            ->where('status', 'delivery_success')
+            ->whereIn('status', ['delivery_success', 'delivered'])
             ->count();
         $total_failed = CompanyWebhookLog::where('company_id', $user->company->id)
             ->whereIn('status', ['delivery_failed', 'failed'])
