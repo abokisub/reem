@@ -215,6 +215,8 @@ class CompanyController extends Controller
                 'test_webhook_url' => $company->test_webhook_url,
                 'test_webhook_secret' => $testWebhookSecret,
                 'is_active' => $company->is_active,
+                'status' => $company->status,
+                'api_access_enabled' => $company->isActive(), // TRUE if both status='active' AND is_active=true
             ]
         ]);
     }
@@ -350,9 +352,13 @@ class CompanyController extends Controller
         }
 
         $company = $user->company;
+        
+        // Update both is_active AND status to ensure API access works correctly
+        // The middleware checks BOTH fields via isActive() method
         $company->update([
             'webhook_url' => $request->webhook_url,
             'is_active' => $request->is_active,
+            'status' => $request->is_active ? 'active' : 'pending', // Set status based on is_active
         ]);
 
         // Log history for webhook if changed
@@ -367,7 +373,7 @@ class CompanyController extends Controller
         }
 
         // Log history for API status if changed
-        if ($company->wasChanged('is_active')) {
+        if ($company->wasChanged('is_active') || $company->wasChanged('status')) {
             CompanyKycHistory::logAction(
                 $company->id,
                 'all',
@@ -382,7 +388,9 @@ class CompanyController extends Controller
             'message' => 'Settings updated successfully',
             'data' => [
                 'webhook_url' => $company->webhook_url,
-                'is_active' => $company->is_active
+                'is_active' => $company->is_active,
+                'status' => $company->status,
+                'api_access_enabled' => $company->isActive()
             ]
         ]);
     }
