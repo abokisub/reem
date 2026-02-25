@@ -16,15 +16,15 @@ use Illuminate\Support\Facades\DB;
 echo "=== Settlement Queue Checker ===\n\n";
 
 // Check settlement_queue table
-echo "=== Settlement Queue (Today) ===\n";
+echo "=== Settlement Queue (Today and Future) ===\n";
 $settlements = DB::table('settlement_queue')
-    ->where('scheduled_date', '>=', date('Y-m-d'))
+    ->where('scheduled_settlement_date', '>=', date('Y-m-d'))
     ->orderBy('created_at', 'desc')
     ->get();
 
 if ($settlements->count() > 0) {
     foreach ($settlements as $settlement) {
-        echo "ID: {$settlement->id} | Company: {$settlement->company_id} | Amount: ₦{$settlement->net_amount} | Status: {$settlement->status} | Scheduled: {$settlement->scheduled_date}\n";
+        echo "ID: {$settlement->id} | Company: {$settlement->company_id} | Amount: ₦{$settlement->amount} | Status: {$settlement->status} | Scheduled: {$settlement->scheduled_settlement_date}\n";
     }
 } else {
     echo "No settlements in queue for today\n";
