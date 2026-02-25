@@ -79,7 +79,7 @@ try {
     $start = microtime(true);
     $transactions = DB::table('transactions')
         ->join('companies', 'transactions.company_id', '=', 'companies.id')
-        ->select('transactions.*', 'companies.company_name')
+        ->select('transactions.*', 'companies.business_name')
         ->limit(10)
         ->get();
     $complexQueryTime = round((microtime(true) - $start) * 1000, 2);

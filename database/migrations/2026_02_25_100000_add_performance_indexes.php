@@ -118,10 +118,11 @@ return new class extends Migration
      */
     private function indexExists($table, $index)
     {
-        $connection = Schema::getConnection();
-        $doctrineSchemaManager = $connection->getDoctrineSchemaManager();
-        $doctrineTable = $doctrineSchemaManager->listTableDetails($table);
-        
-        return $doctrineTable->hasIndex($index);
+        try {
+            $indexes = DB::select("SHOW INDEX FROM {$table} WHERE Key_name = ?", [$index]);
+            return count($indexes) > 0;
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 };
