@@ -116,7 +116,7 @@ class AccountVerificationService
             'OPEN_GW_000003' => 'Bank service temporarily unavailable',
             'OPEN_GW_000004' => 'Invalid bank code',
             'OPEN_GW_000005' => 'Account verification not supported for this bank',
-            'OPEN_GW_000012' => 'Service configuration error',
+            'OPEN_GW_000012' => 'IP not whitelisted - Please contact support to whitelist your server IP',
         ];
 
         return $errorCodes[$code] ?? "Account verification failed (Code: {$code})";
