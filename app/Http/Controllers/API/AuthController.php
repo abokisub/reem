@@ -1829,6 +1829,9 @@ class AuthController extends Controller
             'rc_number' => $user->rc_number, // Also save to rc_number for frontend compatibility
             'bvn' => $user->bvn,
             'nin' => $user->nin,
+            // CRITICAL FIX: Save director BVN/NIN to companies table for virtual account creation
+            'director_bvn' => $user->bvn, // Director BVN (same as user BVN for sole proprietors)
+            'director_nin' => $user->nin, // Director NIN (same as user NIN for sole proprietors)
             'bank_name' => $user->palmpay_bank_name,
             'account_number' => $user->paystack_account, // Use settlement account as account_number
             'account_name' => $user->palmpay_account_name,
