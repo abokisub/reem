@@ -188,9 +188,16 @@ class TransactionController extends Controller
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+            
+            // Get webhook secret and ensure it's plain string (not serialized)
+            $webhookSecret = $company->webhook_secret ?? '';
+            if (is_string($webhookSecret) && (strpos($webhookSecret, 's:') === 0 || strpos($webhookSecret, 'a:') === 0)) {
+                $webhookSecret = unserialize($webhookSecret);
+            }
+            
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
                 'Content-Type: application/json',
-                'X-Webhook-Signature: ' . hash_hmac('sha256', json_encode($payload), $company->webhook_secret ?? '')
+                'X-Webhook-Signature: ' . hash_hmac('sha256', json_encode($payload), $webhookSecret)
             ]);
             curl_setopt($ch, CURLOPT_TIMEOUT, 30);
             

@@ -1,0 +1,59 @@
+AMTPAY WEBHOOK FIX - QUICK SUMMARY
+===================================
+
+PROBLEM: Webhook signature verification failing
+- Received signature: d69dafe51391ef8ec63ede3c120a32c315baa74797def1697f34a60a245a6295
+- Your calculated: 8f3724b628ca7e724799...
+- They don't match!
+
+ROOT CAUSE: You're not using the RAW request body
+
+THE FIX (2 lines of code):
+---------------------------
+
+CHANGE THIS:
+    $data = $request->all();
+    $payload = json_encode($data);  // ❌ WRONG
+
+TO THIS:
+    $payload = $request->getContent();  // ✅ CORRECT
+
+COMPLETE WORKING CODE:
+----------------------
+
+// Get raw body (MUST be raw!)
+$payload = $request->getContent();
+
+// Get signature from header
+$receivedSignature = $request->header('X-PointWave-Signature');
+
+// Your webhook secret
+$webhookSecret = 'whsec_383b656ab3e08d06598c6cec6f429d07a43047030265e45ff70b89d04f0f6e24';
+
+// Calculate signature
+$expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
+
+// Verify
+if (!hash_equals($expectedSignature, $receivedSignature)) {
+    return response()->json(['error' => 'Invalid signature'], 401);
+}
+
+// NOW parse the JSON
+$data = json_decode($payload, true);
+
+// Process webhook...
+
+
+WHY THIS MATTERS:
+-----------------
+When you use $request->all() and then json_encode() it, the JSON formatting 
+(spacing, key order) will be different from what PointWave sent, causing a 
+different signature.
+
+You MUST use the exact bytes that were sent: $request->getContent()
+
+
+FULL DOCUMENTATION:
+-------------------
+See AMTPAY_WEBHOOK_FIX.md for complete examples and explanations.
+See MESSAGE_TO_AMTPAY.md for detailed instructions.

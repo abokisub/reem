@@ -1,0 +1,39 @@
+URGENT: Amtpay Database Fix Required
+=====================================
+
+Your webhook is now being processed (signature check bypassed), but failing due to TWO missing database columns.
+
+ERRORS:
+-------
+1. Column not found: 'pointwave_transaction_id' in table 'pointwave_transactions'
+2. Column not found: 'pointwave_customer_id' in table 'pointwave_transactions'
+
+QUICK FIX (Run this SQL now):
+------------------------------
+ALTER TABLE `pointwave_transactions` 
+ADD COLUMN `pointwave_transaction_id` VARCHAR(255) NULL AFTER `reference`,
+ADD COLUMN `pointwave_customer_id` VARCHAR(255) NULL AFTER `pointwave_transaction_id`,
+ADD INDEX `pointwave_transaction_id_index` (`pointwave_transaction_id`),
+ADD INDEX `pointwave_customer_id_index` (`pointwave_customer_id`);
+
+That's it! After running this, webhooks will work.
+
+NEXT STEPS (After database fix):
+---------------------------------
+1. Test webhook again - should work now
+2. Fix signature verification (see MESSAGE_TO_AMTPAY.md)
+3. Remove the "BYPASSING signature check" code
+
+The signature fix is simple:
+  CHANGE: $payload = json_encode($request->all());
+  TO:     $payload = $request->getContent();
+
+---
+
+CURRENT STATUS:
+✅ Webhook received correctly
+✅ User found (user_id: 8269)  
+⚠️ Signature check bypassed (temporary - needs proper fix)
+❌ Database insert failing (needs column added NOW)
+
+See AMTPAY_DATABASE_FIX.md for detailed instructions.

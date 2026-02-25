@@ -71,6 +71,12 @@ class OutgoingWebhookService
             $company = $webhookEvent->company;
             $webhookSecret = $company->webhook_secret;
             
+            // Ensure webhook secret is a plain string (not serialized)
+            // Laravel's encrypted cast may return serialized format
+            if (is_string($webhookSecret) && (strpos($webhookSecret, 's:') === 0 || strpos($webhookSecret, 'a:') === 0)) {
+                $webhookSecret = unserialize($webhookSecret);
+            }
+            
             // Generate HMAC-SHA256 signature
             $jsonPayload = json_encode($webhookEvent->payload);
             $signature = hash_hmac('sha256', $jsonPayload, $webhookSecret);

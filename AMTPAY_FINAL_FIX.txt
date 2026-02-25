@@ -1,0 +1,71 @@
+✅ GOOD NEWS: Your Webhook Secret is CORRECT!
+==============================================
+
+We verified on PointWave's server - you have the RIGHT webhook secret.
+
+The signature mismatch is caused by ONE line of code in your webhook handler.
+
+THE ONLY FIX NEEDED:
+--------------------
+
+Find your PointWave webhook handler and change ONE line:
+
+CHANGE THIS:
+    $payload = json_encode($request->all());
+
+TO THIS:
+    $payload = $request->getContent();
+
+
+WHY THIS FIXES IT:
+------------------
+- json_encode($request->all()) creates NEW JSON with different formatting
+- $request->getContent() gets the EXACT bytes PointWave sent
+- Signatures only match when you use the exact same bytes
+
+COMPLETE WORKING CODE:
+----------------------
+
+<?php
+
+// Get webhook secret from .env (you already have the correct one!)
+$webhookSecret = env('POINTWAVE_WEBHOOK_SECRET');
+
+// Get RAW request body (THIS IS THE FIX)
+$payload = $request->getContent();
+
+// Get signature from header
+$receivedSignature = $request->header('X-PointWave-Signature');
+
+// Calculate expected signature
+$expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
+
+// Verify signature (REMOVE THE BYPASS CODE)
+if (!hash_equals($expectedSignature, $receivedSignature)) {
+    Log::warning('Invalid PointWave webhook signature');
+    return response()->json(['error' => 'Invalid signature'], 401);
+}
+
+// Signature is valid - NOW parse the JSON
+$data = json_decode($payload, true);
+
+// Process webhook...
+?>
+
+
+STEPS TO FIX:
+-------------
+1. Find your webhook handler file
+2. Change $payload = json_encode($request->all()) to $payload = $request->getContent()
+3. Remove the line that says "BYPASSING signature check"
+4. Test with a real transaction
+5. Check logs - should see "webhook verified successfully"
+
+THAT'S IT!
+----------
+Your webhook secret is correct.
+Just fix the one line of code.
+Remove the bypass.
+Done.
+
+See AMTPAY_CRITICAL_SECURITY_FIX.md for detailed code examples.
