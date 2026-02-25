@@ -324,6 +324,7 @@ Route::get('system/admin/kyc/all/kyc/{id}/{page}/{status}', [AdminController::cl
 Route::get('system/all/reserved-accounts/habukhan/{id}/secure', [Trans::class, 'AllVirtualAccounts']);
 Route::get('system/admin/virtual-accounts/secure', [AdminController::class, 'getVirtualAccounts']);
 Route::post('system/admin/virtual-accounts/toggle-status/secure', [AdminController::class, 'toggleVirtualAccountStatus']);
+Route::post('system/admin/virtual-accounts/delete/secure', [AdminController::class, 'deleteVirtualAccount']);
 Route::post('system/admin/company/update-profile/secure', [AdminController::class, 'updateCompanyProfile']);
 Route::post('system/admin/company/toggle-status/secure', [AdminController::class, 'toggleCompanyStatus']);
 // Customers List (previously shared route)

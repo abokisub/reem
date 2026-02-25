@@ -1496,7 +1496,7 @@ class Trans extends Controller
         }
     }
 
-    public function CustomerDetail(Request $request)
+    public function CustomerDetail(Request $request, $customer_id)
     {
         $explode_url = explode(',', config('app.habukhan_app_key'));
         if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $explode_url)) {
@@ -1508,13 +1508,12 @@ class Trans extends Controller
                     return response()->json(['status' => 404, 'message' => 'Company not found'], 404);
                 }
 
-                $customer = CompanyUser::where('id', $request->customer_id)->where('company_id', $company->id)->first();
+                $customer = CompanyUser::where('id', $customer_id)->where('company_id', $company->id)->first();
 
                 if (!$customer) {
                     return response()->json(['status' => 404, 'message' => 'Customer not found'], 404);
                 }
 
-                // Fetch related data (Mocking mostly as relationships might not be fully defined yet)
                 // Fetch related data
                 $reserved_accounts = VirtualAccount::where('company_user_id', $customer->id)
                     ->orWhere('customer_email', $customer->email)
@@ -1524,40 +1523,66 @@ class Trans extends Controller
                         return [
                             'id' => $acc->id,
                             'account_id' => $acc->account_id,
-                            'customer_email' => $customer->email, // Add customer email
+                            'uuid' => $acc->uuid,
+                            'customer_email' => $customer->email,
                             'bank_name' => $acc->bank_name,
                             'account_number' => $acc->account_number,
                             'account_name' => $acc->account_name,
                             'status' => $acc->status,
                             'date' => $acc->created_at->format('d M Y, h:i A'),
-                            'created_at' => $acc->created_at->format('d M Y, h:i A'),
+                            'created_at' => $acc->created_at,
                         ];
                     });
+                
+                // Fetch transactions for this customer's virtual accounts
+                $accountIds = $reserved_accounts->pluck('id')->toArray();
                 $transactions = [];
+                
+                if (!empty($accountIds)) {
+                    $transactions = DB::table('transactions')
+                        ->whereIn('virtual_account_id', $accountIds)
+                        ->where('company_id', $company->id)
+                        ->orderBy('created_at', 'desc')
+                        ->limit(100)
+                        ->get()
+                        ->map(function ($txn) {
+                            return [
+                                'id' => $txn->id,
+                                'reference' => $txn->reference,
+                                'amount' => $txn->amount,
+                                'type' => $txn->type,
+                                'status' => $txn->status,
+                                'created_at' => $txn->created_at,
+                            ];
+                        })
+                        ->toArray();
+                }
+                
                 $cards = [];
 
                 $displayId = $customer->external_customer_id ?? ($customer->uuid ?? 'CUST-' . str_pad($customer->id, 6, '0', STR_PAD_LEFT));
 
                 return response()->json([
                     'status' => 'success',
-                    'customer' => [
-                        'id' => $customer->id,
-                        'customer_id' => $displayId,
-                        'email' => $customer->email,
-                        'phone' => $customer->phone,
-                        'first_name' => $customer->first_name,
-                        'last_name' => $customer->last_name,
-                        'name' => $customer->first_name . ' ' . $customer->last_name,
-                        // Add other fields needed for the detail view
-                        'address' => $customer->address,
-                        'city' => $customer->city,
-                        'state' => $customer->state,
-                        'postal_code' => $customer->postal_code,
-                        'date_of_birth' => $customer->date_of_birth,
-                    ],
-                    'reserved_accounts' => $reserved_accounts,
-                    'transactions' => $transactions,
-                    'cards' => $cards
+                    'data' => [
+                        'customer' => [
+                            'id' => $customer->id,
+                            'customer_id' => $displayId,
+                            'email' => $customer->email,
+                            'phone' => $customer->phone,
+                            'first_name' => $customer->first_name,
+                            'last_name' => $customer->last_name,
+                            'name' => $customer->first_name . ' ' . $customer->last_name,
+                            'address' => $customer->address,
+                            'city' => $customer->city,
+                            'state' => $customer->state,
+                            'postal_code' => $customer->postal_code,
+                            'date_of_birth' => $customer->date_of_birth,
+                        ],
+                        'virtual_accounts' => $reserved_accounts->toArray(),
+                        'transactions' => $transactions,
+                        'cards' => $cards
+                    ]
                 ], 200);
 
             } else {

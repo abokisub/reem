@@ -3339,6 +3339,54 @@ class AdminController extends Controller
         return response()->json(['status' => 'error', 'message' => 'Virtual account not found or status unchanged'], 404);
     }
 
+    public function deleteVirtualAccount(Request $request)
+    {
+        if (!$this->verifyOrigin($request)) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized origin'], 403);
+        }
+
+        $userId = $this->verifytoken($request->id);
+        if (!$userId || !DB::table('users')->where(['id' => $userId, 'type' => 'ADMIN'])->exists()) {
+            return response()->json(['status' => 'error', 'message' => 'Unauthorized'], 403);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'uuid' => 'required|string'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['status' => 'error', 'message' => $validator->errors()->first()], 400);
+        }
+
+        // Check if virtual account exists and is not a master account
+        $virtualAccount = DB::table('virtual_accounts')->where('uuid', $request->uuid)->first();
+        
+        if (!$virtualAccount) {
+            return response()->json(['status' => 'error', 'message' => 'Virtual account not found'], 404);
+        }
+
+        // Prevent deletion of master accounts
+        if ($virtualAccount->is_master) {
+            return response()->json(['status' => 'error', 'message' => 'Cannot delete master virtual account'], 400);
+        }
+
+        // Soft delete the virtual account
+        $deleted = DB::table('virtual_accounts')
+            ->where('uuid', $request->uuid)
+            ->update([
+                'deleted_at' => now()
+            ]);
+
+        if ($deleted) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Virtual account deleted successfully'
+            ]);
+        }
+
+        return response()->json(['status' => 'error', 'message' => 'Failed to delete virtual account'], 500);
+    }
+
     public function updateCompanyProfile(Request $request)
     {
         if (!$this->verifyOrigin($request)) {
