@@ -67,28 +67,24 @@ class OutgoingWebhookService
         $webhookEvent->update(['last_attempt_at' => now()]);
 
         try {
-            // Get company webhook secret for signature
+            // Get company for signature
             $company = $webhookEvent->company;
-            $webhookSecret = $company->webhook_secret;
             
-            // Ensure webhook secret is a plain string (not serialized)
-            // Laravel's encrypted cast may return serialized format
-            if (is_string($webhookSecret) && (strpos($webhookSecret, 's:') === 0 || strpos($webhookSecret, 'a:') === 0)) {
-                $webhookSecret = unserialize($webhookSecret);
-            }
+            // Use Secret Key (API key) for webhook signature - simpler and more professional
+            // This matches industry standard (Xixapay, Paystack, etc.)
+            $secretKey = $company->secret_key;
             
-            // Generate HMAC-SHA256 signature
+            // Generate HMAC-SHA256 signature using Secret Key
             // CRITICAL: Use the exact JSON string that will be sent
             $jsonPayload = json_encode($webhookEvent->payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            $signature = hash_hmac('sha256', $jsonPayload, $webhookSecret);
+            $signature = hash_hmac('sha256', $jsonPayload, $secretKey);
             
             // Log signature details for debugging
             Log::debug('Webhook signature generated', [
                 'event_id' => $webhookEvent->event_id,
                 'company_id' => $company->id,
                 'signature' => substr($signature, 0, 16) . '...',
-                'payload_length' => strlen($jsonPayload),
-                'secret_length' => strlen($webhookSecret)
+                'payload_length' => strlen($jsonPayload)
             ]);
             
             // Send HTTP POST request with signature

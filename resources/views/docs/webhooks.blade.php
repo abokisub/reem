@@ -272,22 +272,26 @@ Authorization: Bearer YOUR_SECRET_KEY
 
         <section class="section">
             <h2>Signature Verification</h2>
-            <p>Every webhook includes an <code>X-PointWave-Signature</code> header for security. Always verify this
+            <p>Every webhook includes a signature in the <code>X-PointWave-Signature</code> header for security. Always verify this
                 signature to ensure the webhook came from PointWave.</p>
 
             <h3>Verification Process</h3>
             <ol style="margin-left: 20px; margin-top: 10px;">
                 <li>Get the raw request body (JSON string)</li>
-                <li>Get your webhook secret from the dashboard</li>
-                <li>Compute HMAC SHA-256 hash of the body using your secret</li>
+                <li>Get your Secret Key from the dashboard</li>
+                <li>Compute HMAC SHA-256 hash of the body using your Secret Key</li>
                 <li>Compare with the signature in the header</li>
             </ol>
+
+            <div class="alert info">
+                <strong>Note:</strong> PointWave uses your Secret Key (not a separate webhook secret) to sign webhooks. This is the same key you use for API authentication.
+            </div>
 
             <h3>PHP Example</h3>
             <div class="code-block"><code>&lt;?php
 
-// Get webhook secret from dashboard
-$webhookSecret = 'your_webhook_secret_here';
+// Get your Secret Key from dashboard
+$secretKey = 'your_secret_key_here';
 
 // Get raw request body
 $payload = file_get_contents('php://input');
@@ -296,7 +300,7 @@ $payload = file_get_contents('php://input');
 $receivedSignature = $_SERVER['HTTP_X_POINTWAVE_SIGNATURE'] ?? '';
 
 // Compute expected signature
-$expectedSignature = hash_hmac('sha256', $payload, $webhookSecret);
+$expectedSignature = hash_hmac('sha256', $payload, $secretKey);
 
 // Verify signature
 if (!hash_equals($expectedSignature, $receivedSignature)) {
@@ -355,12 +359,12 @@ def webhook_handler(request):
     # Get signature from header
     signature_header = request.META.get('HTTP_X_POINTWAVE_SIGNATURE')
     
-    # Your webhook secret
-    webhook_secret = 'your_webhook_secret_here'
+    # Your Secret Key from dashboard
+    secret_key = 'your_secret_key_here'
     
     # Calculate expected signature
     calculated_signature = hmac.new(
-        webhook_secret.encode(),
+        secret_key.encode(),
         payload,
         hashlib.sha256
     ).hexdigest()
@@ -398,12 +402,12 @@ app.post('/webhook', express.raw({type: 'application/json'}), (req, res) => {
     // Get signature from header
     const signatureHeader = req.headers['x-pointwave-signature'];
     
-    // Your webhook secret
-    const webhookSecret = 'your_webhook_secret_here';
+    // Your Secret Key from dashboard
+    const secretKey = 'your_secret_key_here';
     
     // Calculate expected signature
     const calculatedSignature = crypto
-        .createHmac('sha256', webhookSecret)
+        .createHmac('sha256', secretKey)
         .update(payload)
         .digest('hex');
     
