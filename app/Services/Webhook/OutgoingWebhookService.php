@@ -78,10 +78,21 @@ class OutgoingWebhookService
             }
             
             // Generate HMAC-SHA256 signature
-            $jsonPayload = json_encode($webhookEvent->payload);
+            // CRITICAL: Use the exact JSON string that will be sent
+            $jsonPayload = json_encode($webhookEvent->payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
             $signature = hash_hmac('sha256', $jsonPayload, $webhookSecret);
             
+            // Log signature details for debugging
+            Log::debug('Webhook signature generated', [
+                'event_id' => $webhookEvent->event_id,
+                'company_id' => $company->id,
+                'signature' => substr($signature, 0, 16) . '...',
+                'payload_length' => strlen($jsonPayload),
+                'secret_length' => strlen($webhookSecret)
+            ]);
+            
             // Send HTTP POST request with signature
+            // Use withBody() to send the exact JSON we signed
             $response = Http::timeout(10)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
@@ -90,7 +101,8 @@ class OutgoingWebhookService
                     'X-PointWave-Event-Type' => $webhookEvent->event_type,
                     'X-PointWave-Timestamp' => now()->timestamp,
                 ])
-                ->post($webhookEvent->endpoint_url, $webhookEvent->payload);
+                ->withBody($jsonPayload, 'application/json')
+                ->post($webhookEvent->endpoint_url);
 
             $statusCode = $response->status();
             $responseBody = $response->body();
