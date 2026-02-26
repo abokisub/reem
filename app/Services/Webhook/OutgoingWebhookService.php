@@ -72,7 +72,8 @@ class OutgoingWebhookService
             
             // Use Secret Key (API key) for webhook signature - simpler and more professional
             // This matches industry standard (Xixapay, Paystack, etc.)
-            $secretKey = $company->secret_key;
+            // Use api_secret_key (not secret_key) as it's the authoritative source
+            $secretKey = $company->api_secret_key;
             
             // Generate HMAC-SHA256 signature using Secret Key
             // CRITICAL: Use the exact JSON string that will be sent
