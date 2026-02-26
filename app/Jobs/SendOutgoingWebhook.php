@@ -51,17 +51,20 @@ class SendOutgoingWebhook implements ShouldQueue
         try {
             // Get company secret
             $company = $this->webhookLog->company;
-            $secret = $this->webhookLog->is_test ? $company->test_webhook_secret : $company->webhook_secret;
+            
+            // Use Secret Key (API key) for webhook signatures - industry standard
+            // Use api_secret_key (not webhook_secret) as it's the authoritative source
+            $secret = $this->webhookLog->is_test ? $company->test_secret_key : $company->api_secret_key;
             
             if (!$secret) {
-                Log::error('Webhook secret not configured for company', [
+                Log::error('API secret key not configured for company', [
                     'company_id' => $company->id,
                     'is_test' => $this->webhookLog->is_test
                 ]);
                 
                 $this->webhookLog->update([
                     'status' => 'failed',
-                    'error_message' => 'Webhook secret not configured'
+                    'error_message' => 'API secret key not configured'
                 ]);
                 
                 return;
