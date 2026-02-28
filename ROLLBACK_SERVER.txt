@@ -1,0 +1,46 @@
+===============================================
+ROLLBACK SERVER TO WORKING VERSION
+Run these commands on the LIVE SERVER
+===============================================
+
+# Step 1: Go to the app directory
+cd app.pointwave.ng
+
+# Step 2: Rollback to the last known good commit (before test scripts)
+git reset --hard b769562
+
+# Step 3: Verify the rollback
+git log --oneline -3
+
+# You should see:
+# b769562 (HEAD) Fix webhook signature bug - handle serialized webhook secrets
+# abb97b1 Add script to get decrypted webhook secret for Amtpay
+# 5d0494d Add webhook secret verification script for Amtpay live server
+
+# Step 4: Try to access the site
+# Open browser: https://app.pointwave.ng/login
+
+===============================================
+EXPLANATION
+===============================================
+
+We're rolling back to commit b769562 which:
+✅ Has the webhook signature fix for Amtpay
+✅ Has all the working features
+❌ Does NOT have the test scripts that might be causing issues
+
+The test scripts we added (169de98, 915c6fd, 04b4472, c0ea7f9, ac25e6d)
+were just diagnostic tools and shouldn't affect the site, but let's
+remove them to be safe.
+
+===============================================
+IF SITE STILL SHOWS 500 ERROR
+===============================================
+
+Then the issue is NOT our code changes. It's likely:
+1. Database connection lost
+2. PHP/LiteSpeed crashed
+3. Permissions issue
+4. Server configuration problem
+
+In that case, you need to contact your hosting provider.

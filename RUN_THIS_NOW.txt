@@ -1,0 +1,83 @@
+===============================================
+SIMPLE INSTRUCTIONS - RUN ON LIVE SERVER
+===============================================
+
+Your PHP scripts aren't showing output (likely output buffering issue).
+Use this file-based test instead:
+
+STEP 1: Pull latest code
+-------------------------
+cd app.pointwave.ng
+git pull origin main
+
+
+STEP 2: Run test that writes to file
+-------------------------------------
+php test_to_file.php
+
+
+STEP 3: Read the output
+------------------------
+cat test_output.txt
+
+
+This will show:
+- Whether Laravel can bootstrap
+- Amtpay company details
+- Webhook secret status (serialized or plain text)
+- Test signature generation
+- Whether signatures match
+
+
+WHAT TO LOOK FOR:
+=================
+
+✅ GOOD OUTPUT:
+- "✅ Found Amtpay company"
+- "✅ SECRET IS PLAIN TEXT" or "⚠️ SECRET IS SERIALIZED"
+- "✅ SIGNATURES MATCH!"
+
+❌ BAD OUTPUT:
+- "❌ Bootstrap failed"
+- "❌ Company not found"
+- "❌ SIGNATURES DON'T MATCH"
+
+
+IF SIGNATURES MATCH:
+====================
+The webhook secret is correct! But PHP-FPM needs restart to load new code.
+
+Contact your hosting provider or use cPanel to restart PHP-FPM.
+
+
+IF SIGNATURES DON'T MATCH:
+===========================
+The webhook secret in database doesn't match Amtpay's secret.
+Need to update the secret in database.
+
+
+ALTERNATIVE: Use Laravel Tinker
+================================
+If test_to_file.php also fails, try:
+
+php artisan tinker
+
+Then paste this:
+$c = App\Models\Company::find(10);
+echo "Name: " . $c->name . "\n";
+echo "URL: " . $c->webhook_url . "\n";
+$s = $c->webhook_secret;
+echo "Secret length: " . strlen($s) . "\n";
+if (strpos($s, 's:') === 0) {
+    echo "SERIALIZED\n";
+    $s = unserialize($s);
+}
+echo "Secret: " . substr($s, 0, 40) . "...\n";
+$sig = hash_hmac('sha256', '{"test":"data"}', $s);
+echo "Signature: " . $sig . "\n";
+
+
+SEND OUTPUT TO ME:
+==================
+Once you run test_to_file.php, send me the contents of test_output.txt
+so I can see what's happening.

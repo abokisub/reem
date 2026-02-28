@@ -127,6 +127,7 @@ export default function WalletSummary() {
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [isNotFound, SetNotFound] = useState(false);
     const [activeTab, setActiveTab] = useState('all');
+    const [generatingWallet, setGeneratingWallet] = useState(false);
 
     const AccessToken = window.localStorage.getItem('accessToken');
 
@@ -194,6 +195,31 @@ export default function WalletSummary() {
             SetLoad(false);
             setTransactions([]);
             SetNotFound(true);
+        }
+    };
+
+    const handleGenerateMasterWallet = async () => {
+        setGeneratingWallet(true);
+        try {
+            const response = await axios.post('/api/sync-master-wallet', {}, {
+                headers: {
+                    Authorization: `Bearer ${AccessToken}`
+                }
+            });
+
+            if (response.data.status === 'success') {
+                enqueueSnackbar(response.data.message, { variant: 'success' });
+                // Reload the page to show the updated wallet info
+                window.location.reload();
+            } else {
+                enqueueSnackbar(response.data.message || 'Failed to generate master wallet', { variant: 'error' });
+            }
+        } catch (error) {
+            console.error('Error generating master wallet:', error);
+            const errorMessage = error.response?.data?.message || 'Failed to generate master wallet. Please try again.';
+            enqueueSnackbar(errorMessage, { variant: 'error' });
+        } finally {
+            setGeneratingWallet(false);
         }
     };
 
@@ -285,9 +311,21 @@ export default function WalletSummary() {
                                         </CopyToClipboard>
                                     </Stack>
                                 ) : (
-                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                        PalmPay account will be generated when your business is activated by admin
-                                    </Typography>
+                                    <Box>
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2 }}>
+                                            Master wallet not found. Click below to generate or sync your wallet.
+                                        </Typography>
+                                        <Button
+                                            variant="contained"
+                                            color="primary"
+                                            size="small"
+                                            onClick={handleGenerateMasterWallet}
+                                            disabled={generatingWallet}
+                                            startIcon={<Iconify icon={generatingWallet ? "eos-icons:loading" : "eva:refresh-fill"} />}
+                                        >
+                                            {generatingWallet ? 'Generating...' : 'Generate Master Wallet'}
+                                        </Button>
+                                    </Box>
                                 )}
                             </DetailBox>
                         </Grid>

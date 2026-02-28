@@ -1,0 +1,14 @@
+===============================================
+RUN THIS ONE COMMAND - COPY AND PASTE
+===============================================
+
+cat test_output.txt
+
+(If that shows "No such file", then run this first:)
+
+php test_to_file.php && cat test_output.txt
+
+
+===============================================
+THAT'S IT - JUST SEND ME THE OUTPUT
+===============================================

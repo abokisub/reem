@@ -66,5 +66,5 @@ Route::get('/api/health', function () {
 // It serves the React app for all routes that don't match above
 // Explicitly exclude /docs and /api routes
 Route::get('/{any}', function () {
-    return file_get_contents(public_path('index.html'));
+    return file_get_contents(base_path('frontend/index.html'));
 })->where('any', '^(?!docs|api).*');

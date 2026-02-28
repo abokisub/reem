@@ -36,10 +36,10 @@ TO THIS:
 
 3. Remove the line that says "BYPASSING signature check"
 
-COMPLETE CORRECT CODE:
-----------------------
+COMPLETE CORRECT CODE (Use after we confirm secret):
+----------------------------------------------------
 
-// Get webhook secret
+// Get webhook secret (MUST be the correct one from PointWave)
 $webhookSecret = env('POINTWAVE_WEBHOOK_SECRET');
 
 // Get RAW body (THIS IS THE KEY FIX)
@@ -62,9 +62,9 @@ $data = json_decode($payload, true);
 // Process webhook...
 
 
-WHY THIS MATTERS:
------------------
-- json_encode($request->all()) creates DIFFERENT JSON than what PointWave sent
+WHY THE BYPASS IS DANGEROUS:
+-----------------------------
+With signatue($request->all()) creates DIFFERENT JSON than what PointWave sent
 - $request->getContent() gets the EXACT bytes PointWave sent
 - That's why signatures match with getContent() but not with json_encode()
 

@@ -3,12 +3,6 @@ import { motion } from 'framer-motion';
 import './HeroSection.css';
 
 const HeroSection = () => {
-  const customerAvatars = [
-    'https://i.pravatar.cc/150?img=1',
-    'https://i.pravatar.cc/150?img=2',
-    'https://i.pravatar.cc/150?img=3',
-  ];
-
   return (
     <section className="hero-section">
       <div className="hero-background">
@@ -26,8 +20,8 @@ const HeroSection = () => {
             transition={{ duration: 0.8 }}
           >
             <h1 className="hero-title">
-              Effortless Payments and Secure Transactions— Built on{' '}
-              <span className="gradient-text">trust</span>
+              Effortless Payments and <span className="hero-title-break">Secure Transactions</span>
+              <span className="hero-title-subtitle">Built on <span className="gradient-text">trust</span></span>
             </h1>
 
             <p className="hero-description">

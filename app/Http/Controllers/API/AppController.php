@@ -1193,7 +1193,7 @@ class AppController extends Controller
             return response()->json([
                 'status' => 'success',
                 'system' => [
-                    'name' => $general->app_name ?? 'Kobopoint',
+                    'name' => $general->app_name ?? 'Pointwave',
                     'email' => $general->app_email,
                     'phone' => $general->app_phone,
                     'address' => $general->app_address,
@@ -1276,6 +1276,127 @@ class AppController extends Controller
         } catch (\Exception $e) {
             \Log::error('Email Receipt Error: ' . $e->getMessage());
             return response()->json(['status' => 'error', 'message' => 'An internal error occurred.'], 500);
+        }
+    }
+
+    /**
+     * Sync/Generate Master Wallet for Company
+     * Checks if master virtual account exists in DB and syncs it to company record
+     */
+    public function syncMasterWallet(Request $request)
+    {
+        try {
+            $user = $request->user();
+            
+            if (!$user || !$user->active_company_id) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No active company found'
+                ], 400);
+            }
+
+            $company = DB::table('companies')->where('id', $user->active_company_id)->first();
+
+            if (!$company) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Company not found'
+                ], 404);
+            }
+
+            // Check if master virtual account exists in virtual_accounts table
+            $masterAccount = DB::table('virtual_accounts')
+                ->where('company_id', $company->id)
+                ->where('is_master', 1)
+                ->where('provider', 'pointwave')
+                ->first();
+
+            if ($masterAccount) {
+                // Master account exists, sync it to company record
+                DB::table('companies')
+                    ->where('id', $company->id)
+                    ->update([
+                        'palmpay_account_number' => $masterAccount->account_number,
+                        'palmpay_account_name' => $masterAccount->account_name,
+                        'palmpay_bank_name' => $masterAccount->bank_name,
+                        'updated_at' => now()
+                    ]);
+
+                \Log::info('Master wallet synced to company', [
+                    'company_id' => $company->id,
+                    'account_number' => $masterAccount->account_number
+                ]);
+
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'Master wallet synced successfully',
+                    'data' => [
+                        'account_number' => $masterAccount->account_number,
+                        'account_name' => $masterAccount->account_name,
+                        'bank_name' => $masterAccount->bank_name
+                    ]
+                ]);
+            }
+
+            // Master account doesn't exist, create it
+            if (!$company->director_bvn) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Cannot generate master wallet. Director BVN is required. Please update your KYC information.'
+                ], 400);
+            }
+
+            $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
+            
+            $virtualAccount = $virtualAccountService->createVirtualAccount(
+                $company->id,
+                'company_master_' . $company->id,
+                [
+                    'name' => $company->name,
+                    'email' => $company->email,
+                    'phone' => $company->phone,
+                    'bvn' => $company->director_bvn,
+                ],
+                '100033',
+                null
+            );
+
+            // Update company with master wallet details
+            DB::table('companies')
+                ->where('id', $company->id)
+                ->update([
+                    'palmpay_account_number' => $virtualAccount->account_number,
+                    'palmpay_account_name' => $virtualAccount->account_name,
+                    'palmpay_bank_name' => $virtualAccount->bank_name,
+                    'updated_at' => now()
+                ]);
+
+            \Log::info('Master wallet created and synced', [
+                'company_id' => $company->id,
+                'account_number' => $virtualAccount->account_number
+            ]);
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Master wallet generated successfully',
+                'data' => [
+                    'account_number' => $virtualAccount->account_number,
+                    'account_name' => $virtualAccount->account_name,
+                    'bank_name' => $virtualAccount->bank_name
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Sync Master Wallet Error', [
+                'user_id' => $request->user()->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to sync/generate master wallet: ' . $e->getMessage()
+            ], 500);
         }
     }
 }

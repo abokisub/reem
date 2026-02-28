@@ -1,0 +1,39 @@
+CRITICAL: Server is on WRONG commit!
+
+Current commit: abb97b1 (BEFORE webhook fix)
+Required commit: 169de98 (latest with webhook fix)
+
+The webhook signature validation is failing for Kobopoint because you rolled back
+to a commit BEFORE the fix for serialized webhook secrets.
+
+RUN THIS IMMEDIATELY:
+===================
+
+cd ~/app.pointwave.ng
+git reset --hard 169de98
+php artisan config:clear
+php artisan cache:clear
+php artisan route:clear
+php artisan view:clear
+
+# Clear OPcache
+curl https://app.pointwave.ng/clear-opcache.php
+
+# Verify it's working
+curl -I https://app.pointwave.ng/api/health
+
+EXPLANATION:
+============
+Commit b769562 fixed the webhook signature bug where webhook_secret was being
+stored as a serialized PHP string in the database. The fix properly handles
+both serialized and plain webhook secrets.
+
+When you rolled back to abb97b1, you removed this fix, causing ALL webhook
+signature validations to fail (both Kobopoint and Amtpay).
+
+The latest commit (169de98) includes:
+- The webhook signature fix (b769562)
+- All testing scripts
+- All other fixes
+
+You MUST be on commit 169de98 or later for webhooks to work properly.

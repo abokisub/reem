@@ -793,32 +793,57 @@ class AuthController extends Controller
                             ->first();
                         
                         if ($company) {
-                            \Log::info('Auto-creating master wallet for company on login', ['company_id' => $company->id]);
+                            \Log::info('Company missing master wallet on login', ['company_id' => $company->id]);
                             
-                            $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
-                            $virtualAccount = $virtualAccountService->createVirtualAccount(
-                                $company->id,
-                                'company_master_' . $company->id,
-                                [
-                                    'name' => $company->name,
-                                    'email' => $company->email,
-                                    'phone' => $company->phone,
-                                ],
-                                '100033',
-                                null
-                            );
+                            // First check if master wallet already exists in virtual_accounts table
+                            $existingMasterAccount = DB::table('virtual_accounts')
+                                ->where('company_id', $company->id)
+                                ->where('is_master', 1)
+                                ->where('provider', 'pointwave')
+                                ->first();
+                            
+                            if ($existingMasterAccount) {
+                                // Master wallet exists, just sync it to company record
+                                DB::table('companies')->where('id', $company->id)->update([
+                                    'palmpay_account_number' => $existingMasterAccount->account_number,
+                                    'palmpay_account_name' => $existingMasterAccount->account_name,
+                                    'palmpay_bank_name' => $existingMasterAccount->bank_name,
+                                    'palmpay_bank_code' => '100033',
+                                ]);
+                                
+                                \Log::info('Master wallet synced from virtual_accounts on login', [
+                                    'company_id' => $company->id,
+                                    'account_number' => $existingMasterAccount->account_number
+                                ]);
+                            } else {
+                                // Create new master wallet
+                                \Log::info('Creating new master wallet for company on login', ['company_id' => $company->id]);
+                                
+                                $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
+                                $virtualAccount = $virtualAccountService->createVirtualAccount(
+                                    $company->id,
+                                    'company_master_' . $company->id,
+                                    [
+                                        'name' => $company->name,
+                                        'email' => $company->email,
+                                        'phone' => $company->phone,
+                                    ],
+                                    '100033',
+                                    null
+                                );
 
-                            DB::table('companies')->where('id', $company->id)->update([
-                                'palmpay_account_number' => $virtualAccount->account_number,
-                                'palmpay_account_name' => $virtualAccount->account_name,
-                                'palmpay_bank_name' => 'PalmPay',
-                                'palmpay_bank_code' => '100033',
-                            ]);
+                                DB::table('companies')->where('id', $company->id)->update([
+                                    'palmpay_account_number' => $virtualAccount->account_number,
+                                    'palmpay_account_name' => $virtualAccount->account_name,
+                                    'palmpay_bank_name' => 'PalmPay',
+                                    'palmpay_bank_code' => '100033',
+                                ]);
 
-                            \Log::info('Master wallet auto-created on login', [
-                                'company_id' => $company->id,
-                                'account_number' => $virtualAccount->account_number
-                            ]);
+                                \Log::info('Master wallet auto-created on login', [
+                                    'company_id' => $company->id,
+                                    'account_number' => $virtualAccount->account_number
+                                ]);
+                            }
                         }
                     } catch (\Exception $e) {
                         \Log::error('Failed to auto-create master wallet on login', [
