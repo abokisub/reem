@@ -1,0 +1,14 @@
+## Commands to run on server to pull latest changes
+
+# Step 1: Remove the conflicting vendor.zip file
+rm vendor.zip
+
+# Step 2: Pull the latest changes
+git pull origin main
+
+# Step 3: Clear Laravel cache (optional but recommended)
+php artisan config:clear
+php artisan cache:clear
+php artisan route:clear
+
+# Done! The master wallet auto-sync feature is now live.

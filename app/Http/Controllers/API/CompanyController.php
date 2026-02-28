@@ -123,81 +123,11 @@ class CompanyController extends Controller
         if (!$rawCompany->business_id) {
             $updates['business_id'] = bin2hex(random_bytes(20));
         }
-        
-        if (!$rawCompany->webhook_secret) {
-            $updates['webhook_secret'] = 'whsec_' . bin2hex(random_bytes(32));
-        }
-        
-        if (!$rawCompany->test_webhook_secret) {
-            $updates['test_webhook_secret'] = 'whsec_test_' . bin2hex(random_bytes(32));
-        }
 
         if (!empty($updates)) {
             DB::table('companies')->where('id', $company->id)->update($updates);
             // Reload only the updated fields without triggering full model refresh
             $rawCompany = DB::table('companies')->where('id', $company->id)->first();
-        }
-
-        // Try to decrypt webhook secrets, regenerate if fails
-        $webhookSecret = null;
-        $testWebhookSecret = null;
-        
-        try {
-            // Manually decrypt to avoid serialization issues
-            $encryptedWebhookSecret = DB::table('companies')
-                ->where('id', $company->id)
-                ->value('webhook_secret');
-            
-            $encryptedTestWebhookSecret = DB::table('companies')
-                ->where('id', $company->id)
-                ->value('test_webhook_secret');
-            
-            if ($encryptedWebhookSecret) {
-                $webhookSecret = decrypt($encryptedWebhookSecret);
-                
-                // Laravel's encrypted cast serializes values, so we need to unserialize
-                if (is_string($webhookSecret) && (strpos($webhookSecret, 's:') === 0 || strpos($webhookSecret, 'a:') === 0)) {
-                    $webhookSecret = unserialize($webhookSecret);
-                }
-            }
-            
-            if ($encryptedTestWebhookSecret) {
-                $testWebhookSecret = decrypt($encryptedTestWebhookSecret);
-                
-                // Laravel's encrypted cast serializes values, so we need to unserialize
-                if (is_string($testWebhookSecret) && (strpos($testWebhookSecret, 's:') === 0 || strpos($testWebhookSecret, 'a:') === 0)) {
-                    $testWebhookSecret = unserialize($testWebhookSecret);
-                }
-            }
-        } catch (\Exception $e) {
-            // If decryption fails, regenerate the secrets
-            \Log::error('Webhook secret decryption failed, regenerating', [
-                'company_id' => $company->id,
-                'error' => $e->getMessage()
-            ]);
-            
-            $webhookSecret = 'whsec_' . bin2hex(random_bytes(32));
-            $testWebhookSecret = 'whsec_test_' . bin2hex(random_bytes(32));
-            
-            DB::table('companies')->where('id', $company->id)->update([
-                'webhook_secret' => encrypt($webhookSecret),
-                'test_webhook_secret' => encrypt($testWebhookSecret),
-            ]);
-        }
-        
-        // If still null, generate new ones
-        if (!$webhookSecret) {
-            $webhookSecret = 'whsec_' . bin2hex(random_bytes(32));
-            DB::table('companies')->where('id', $company->id)->update([
-                'webhook_secret' => encrypt($webhookSecret),
-            ]);
-        }
-        
-        if (!$testWebhookSecret) {
-            $testWebhookSecret = 'whsec_test_' . bin2hex(random_bytes(32));
-            DB::table('companies')->where('id', $company->id)->update([
-                'test_webhook_secret' => encrypt($testWebhookSecret),
-            ]);
         }
 
         // Return credentials (secret keys are hidden by model)
@@ -211,9 +141,7 @@ class CompanyController extends Controller
                 'test_secret_key' => !empty($updates) ? $rawCompany->test_secret_key : $company->test_secret_key,
                 'public_key' => !empty($updates) ? $rawCompany->api_public_key : $company->api_public_key,
                 'webhook_url' => $company->webhook_url,
-                'webhook_secret' => $webhookSecret,
                 'test_webhook_url' => $company->test_webhook_url,
-                'test_webhook_secret' => $testWebhookSecret,
                 'is_active' => $company->is_active,
                 'status' => $company->status,
                 'api_access_enabled' => $company->isActive(), // TRUE if both status='active' AND is_active=true
