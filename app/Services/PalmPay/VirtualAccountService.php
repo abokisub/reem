@@ -76,10 +76,32 @@ class VirtualAccountService
             }
 
             if ($existing) {
+                // Auto-update customer name if it has changed
+                $newCustomerName = $customerData['name'] ?? 'Customer';
+                if ($existing->customer_name !== $newCustomerName) {
+                    Log::info('Auto-updating customer name for existing virtual account', [
+                        'account_number' => $existing->palmpay_account_number,
+                        'old_name' => $existing->customer_name,
+                        'new_name' => $newCustomerName,
+                        'phone' => $customerData['phone'] ?? null,
+                        'email' => $customerData['email'] ?? null
+                    ]);
+                    
+                    // Update the customer name in our database
+                    $existing->update([
+                        'customer_name' => $newCustomerName,
+                        'updated_at' => now()
+                    ]);
+                    
+                    // Note: PalmPay doesn't allow updating virtual account names via API
+                    // The bank will still show the original name, but our records are updated
+                }
+                
                 Log::info('Returning existing virtual account (resolved by identity)', [
                     'identity' => $customerData['email'] ?? $customerData['phone'] ?? $userId,
                     'bank_code' => $bankCode,
-                    'account_number' => $existing->palmpay_account_number
+                    'account_number' => $existing->palmpay_account_number,
+                    'customer_name' => $existing->customer_name
                 ]);
                 return $existing;
             }
