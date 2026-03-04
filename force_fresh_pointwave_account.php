@@ -1,5 +1,5 @@
 <?php
-// Force fresh PointWave account creation for specific user
+// Force fresh PalmPay account creation for specific user
 // This bypasses any cached/conflicting account assignments
 
 require_once 'vendor/autoload.php';
@@ -14,13 +14,13 @@ $phone = $argv[1] ?? '07040540018';
 $confirm = $argv[2] ?? null;
 
 if ($confirm !== 'CONFIRM') {
-    echo "⚠️  WARNING: This will force fresh PointWave account creation\n";
-    echo "This will clear existing PointWave data and trigger new account creation\n\n";
+    echo "⚠️  WARNING: This will force fresh PalmPay account creation\n";
+    echo "This will clear existing PalmPay data and trigger new account creation\n\n";
     echo "To proceed, run: php force_fresh_pointwave_account.php $phone CONFIRM\n";
     exit(1);
 }
 
-echo "=== FORCING FRESH POINTWAVE ACCOUNT CREATION ===\n";
+echo "=== FORCING FRESH PALMPAY ACCOUNT CREATION ===\n";
 echo "Phone: $phone\n\n";
 
 // Find the user
@@ -32,37 +32,29 @@ if (!$user) {
 }
 
 echo "Found user: {$user->username} (ID: {$user->id})\n";
-echo "Current PointWave data:\n";
-echo "- Account Number: " . ($user->pointwave_account_number ?? 'None') . "\n";
-echo "- Account Name: " . ($user->pointwave_account_name ?? 'None') . "\n";
-echo "- Customer ID: " . ($user->pointwave_customer_id ?? 'None') . "\n\n";
+echo "Current PalmPay data:\n";
+echo "- Account Number: " . ($user->palmpay_account_number ?? 'None') . "\n";
+echo "- Account Name: " . ($user->palmpay_account_name ?? 'None') . "\n";
+echo "- Customer ID: " . ($user->palmpay_customer_id ?? 'None') . "\n\n";
 
-// Clear all PointWave data
-echo "Clearing existing PointWave data...\n";
+// Clear all PalmPay data
+echo "Clearing existing PalmPay data...\n";
 $user->update([
-    'pointwave_account_number' => null,
-    'pointwave_account_name' => null,
-    'pointwave_bank_name' => null,
-    'pointwave_customer_id' => null,
+    'palmpay_account_number' => null,
+    'palmpay_account_name' => null,
+    'palmpay_bank_name' => null,
+    'palmpay_customer_id' => null,
 ]);
 
-echo "✅ PointWave data cleared\n\n";
+echo "✅ PalmPay data cleared\n\n";
 
-// Trigger fresh account creation by calling the setup job
-echo "Triggering fresh account creation...\n";
-
-try {
-    // Dispatch the job to create fresh accounts
-    \App\Jobs\SetupUserVirtualAccounts::dispatch($user->id);
-    echo "✅ Account creation job dispatched\n";
-    echo "Fresh PointWave account will be created within 1-2 minutes\n";
-} catch (\Exception $e) {
-    echo "❌ Failed to dispatch job: " . $e->getMessage() . "\n";
-    echo "Manual account creation will happen on next user login/transaction\n";
-}
-
-echo "\n📋 SUMMARY:\n";
+// The system will automatically create fresh accounts on next login/transaction
+echo "📋 SUMMARY:\n";
 echo "User: {$user->username}\n";
 echo "Phone: {$user->phone}\n";
-echo "Status: PointWave data cleared, fresh account creation initiated\n";
-echo "\nThe user should now get a completely new PointWave account with correct name.\n";
+echo "Status: PalmPay data cleared\n";
+echo "\nFresh account creation will happen automatically when:\n";
+echo "1. User logs into the app\n";
+echo "2. User makes a transaction\n";
+echo "3. System detects missing PalmPay account\n";
+echo "\nThe user should now get a completely new PalmPay account with correct name.\n";
