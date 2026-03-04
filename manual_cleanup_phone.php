@@ -10,6 +10,7 @@ $kernel->bootstrap();
 
 use App\Models\VirtualAccount;
 use App\Models\CompanyUser;
+use App\Services\PalmPay\VirtualAccountService;
 
 $phone = $argv[1] ?? null;
 $confirm = $argv[2] ?? null;
@@ -27,13 +28,29 @@ if ($confirm !== 'CONFIRM') {
 
 echo "=== MANUAL CLEANUP FOR PHONE: $phone ===\n\n";
 
-// 1. Find and soft delete virtual accounts
+$palmPayService = new VirtualAccountService();
+
+// 1. Find and delete virtual accounts (both our DB and PalmPay)
 $virtualAccounts = VirtualAccount::where('customer_phone', $phone)->get();
 echo "Found " . $virtualAccounts->count() . " virtual accounts:\n";
 
 foreach ($virtualAccounts as $account) {
     echo "- Deleting account: {$account->account_number} ({$account->customer_name}) - Company: {$account->company_id}\n";
-    $account->delete(); // Soft delete
+    
+    // Delete on PalmPay side first
+    if ($account->palmpay_account_number) {
+        echo "  Deleting on PalmPay side...\n";
+        $result = $palmPayService->deleteVirtualAccount($account->palmpay_account_number);
+        if ($result['success']) {
+            echo "  ✅ Deleted on PalmPay\n";
+        } else {
+            echo "  ⚠️  PalmPay deletion failed: " . $result['message'] . "\n";
+        }
+    }
+    
+    // Then soft delete in our database
+    $account->delete();
+    echo "  ✅ Deleted in our database\n";
 }
 
 // 2. Delete company users
