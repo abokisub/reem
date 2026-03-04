@@ -42,8 +42,7 @@ echo "Clearing existing PalmPay data...\n";
 $user->update([
     'palmpay_account_number' => null,
     'palmpay_account_name' => null,
-    'palmpay_bank_name' => null,
-    'palmpay_customer_id' => null,
+    // Don't set palmpay_bank_name to null if it has a NOT NULL constraint
 ]);
 
 echo "✅ PalmPay data cleared\n\n";
