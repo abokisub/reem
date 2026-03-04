@@ -45,64 +45,93 @@ class VirtualAccountService
                 })
                 ->first();
 
-            // Deduplication Tier 2: Check by Email or Phone (Identity Guarding)
+            // Deduplication Tier 2: Strict Identity Matching
+            // Only match if customer data is EXACTLY the same (email AND phone)
             if (!$existing) {
                 $email = $customerData['email'] ?? null;
                 $phone = $customerData['phone'] ?? null;
 
-                if ($email || $phone) {
-                    // This is more complex because email/phone aren't in virtual_accounts table directly.
-                    // We check if any existing account for this company/bank belongs to someone with this email/phone.
+                if ($email && $phone) {
+                    // Strict matching: Both email AND phone must match exactly
                     $existing = VirtualAccount::where('company_id', $companyId)
                         ->where('bank_code', $bankCode)
                         ->where('status', 'active')
                         ->whereNull('deleted_at')
-                        ->where(function ($query) use ($email, $phone, $companyId) {
-                            // Check platform users
-                            $query->whereIn('user_id', function ($q) use ($email, $phone) {
-                                $q->select('id')->from('users')->where('email', $email);
-                                if ($phone)
-                                    $q->orWhere('phone', $phone);
-                            })
-                                // OR check merchant customers (CompanyUser)
-                                ->orWhereIn('user_id', function ($q) use ($email, $phone, $companyId) {
-                                $q->select('uuid')->from('company_users')->where('company_id', $companyId)->where('email', $email);
-                                if ($phone)
-                                    $q->orWhere('phone', $phone);
-                            });
-                        })
+                        ->where('customer_email', $email)
+                        ->where('customer_phone', $phone)
                         ->first();
+                        
+                    if ($existing) {
+                        Log::info('VirtualAccount: Found existing account by exact identity match', [
+                            'account_number' => $existing->account_number,
+                            'customer_name' => $existing->customer_name,
+                            'email' => $email,
+                            'phone' => $phone,
+                            'company_id' => $companyId
+                        ]);
+                    }
                 }
             }
 
             if ($existing) {
-                // Auto-update customer name if it has changed
+                // Strict Customer Verification: Ensure this is the exact same customer
                 $newCustomerName = $customerData['name'] ?? 'Customer';
+                $newEmail = $customerData['email'] ?? null;
+                $newPhone = $customerData['phone'] ?? null;
+                
+                // Security Check: Verify customer identity before any updates
+                $isExactMatch = ($existing->customer_email === $newEmail) && 
+                               ($existing->customer_phone === $newPhone);
+                
+                if (!$isExactMatch) {
+                    // CRITICAL SECURITY VIOLATION: Different customer trying to access existing account
+                    Log::critical('VirtualAccount: SECURITY VIOLATION - Identity mismatch detected', [
+                        'account_number' => $existing->account_number,
+                        'existing_customer' => [
+                            'name' => $existing->customer_name,
+                            'email' => $existing->customer_email,
+                            'phone' => $existing->customer_phone
+                        ],
+                        'attempted_customer' => [
+                            'name' => $newCustomerName,
+                            'email' => $newEmail,
+                            'phone' => $newPhone
+                        ],
+                        'company_id' => $companyId,
+                        'user_id' => $userId,
+                        'timestamp' => now()->toISOString()
+                    ]);
+                    
+                    throw new \Exception(
+                        "Security violation: Customer identity mismatch for account {$existing->account_number}. " .
+                        "This indicates a critical deduplication bug that must be investigated immediately."
+                    );
+                }
+                
+                // Safe Name Update: Only if same customer with different name spelling
                 if ($existing->customer_name !== $newCustomerName) {
-                    Log::info('Auto-updating customer name for existing virtual account', [
+                    Log::info('VirtualAccount: Updating customer name for verified identity', [
                         'account_number' => $existing->palmpay_account_number,
                         'old_name' => $existing->customer_name,
                         'new_name' => $newCustomerName,
-                        'phone' => $customerData['phone'] ?? null,
-                        'email' => $customerData['email'] ?? null
+                        'verified_phone' => $newPhone,
+                        'verified_email' => $newEmail,
+                        'company_id' => $companyId
                     ]);
                     
-                    // Update the customer name in our database
                     $existing->update([
                         'customer_name' => $newCustomerName,
                         'updated_at' => now()
                     ]);
-                    
-                    // Note: PalmPay doesn't allow updating virtual account names via API
-                    // The bank will still show the original name, but our records are updated
                 }
                 
-                Log::info('Returning existing virtual account (resolved by identity)', [
-                    'identity' => $customerData['email'] ?? $customerData['phone'] ?? $userId,
-                    'bank_code' => $bankCode,
+                Log::info('VirtualAccount: Returning existing account for verified customer', [
                     'account_number' => $existing->palmpay_account_number,
-                    'customer_name' => $existing->customer_name
+                    'customer_name' => $existing->customer_name,
+                    'company_id' => $companyId,
+                    'bank_code' => $bankCode
                 ]);
+                
                 return $existing;
             }
 
