@@ -150,7 +150,7 @@ class VirtualAccountService
             $customerNin = $customerData['nin'] ?? null;
             $customerBvn = $customerData['bvn'] ?? null;
             
-            // Determine KYC source and identity type
+            // Determine KYC source and identity type with smart conflict resolution
             $kycSource = 'director_bvn'; // Default: use director BVN
             $licenseNumber = null;
             $identityType = 'personal';
@@ -168,19 +168,60 @@ class VirtualAccountService
                 $identityType = 'personal_nin'; // PalmPay requires "personal_nin" for NIN
                 $kycSource = 'customer_nin';
             }
-            // Priority 3: Use company director's BVN (aggregator model)
-            elseif ($company->director_bvn) {
+            // Priority 3: Smart Director KYC Selection (avoid BVN/NIN conflicts)
+            elseif ($company->director_bvn && !$company->director_nin) {
+                // Only BVN available - use it
                 $licenseNumber = $company->director_bvn;
                 $identityType = 'personal';
                 $kycSource = 'director_bvn';
                 $directorBvnUsed = $company->director_bvn;
             }
-            // Priority 4: Use company director's NIN
-            elseif ($company->director_nin) {
+            elseif ($company->director_nin && !$company->director_bvn) {
+                // Only NIN available - use it
                 $licenseNumber = $company->director_nin;
                 $identityType = 'personal_nin';
                 $kycSource = 'director_nin';
                 $directorBvnUsed = $company->director_nin;
+            }
+            elseif ($company->director_bvn && $company->director_nin) {
+                // Both available - check which one has been used successfully before
+                $bvnUsageCount = VirtualAccount::where('company_id', $companyId)
+                    ->where('kyc_source', 'director_bvn')
+                    ->where('status', 'active')
+                    ->whereNull('deleted_at')
+                    ->count();
+                    
+                $ninUsageCount = VirtualAccount::where('company_id', $companyId)
+                    ->where('kyc_source', 'director_nin')
+                    ->where('status', 'active')
+                    ->whereNull('deleted_at')
+                    ->count();
+                
+                if ($bvnUsageCount > $ninUsageCount) {
+                    // BVN has been used more - prefer it
+                    $licenseNumber = $company->director_bvn;
+                    $identityType = 'personal';
+                    $kycSource = 'director_bvn';
+                    $directorBvnUsed = $company->director_bvn;
+                    
+                    Log::info('VirtualAccount: Using director BVN (more usage history)', [
+                        'bvn_usage' => $bvnUsageCount,
+                        'nin_usage' => $ninUsageCount,
+                        'company_id' => $companyId
+                    ]);
+                } else {
+                    // NIN has been used more or equal - prefer NIN to avoid BVN conflicts
+                    $licenseNumber = $company->director_nin;
+                    $identityType = 'personal_nin';
+                    $kycSource = 'director_nin';
+                    $directorBvnUsed = $company->director_nin;
+                    
+                    Log::info('VirtualAccount: Using director NIN (avoiding BVN conflicts)', [
+                        'bvn_usage' => $bvnUsageCount,
+                        'nin_usage' => $ninUsageCount,
+                        'company_id' => $companyId
+                    ]);
+                }
             }
             // Fallback: Use company RC number (corporate mode)
             else {
