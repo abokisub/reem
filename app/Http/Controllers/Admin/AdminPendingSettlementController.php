@@ -263,7 +263,7 @@ class AdminPendingSettlementController extends Controller
                         'net_amount' => $companyNetAmount,
                         'old_balance' => $wallet->balance,
                         'new_balance' => $newBalance,
-                        'admin_user' => auth()->user()->email ?? 'unknown'
+                        'admin_user' => $request->user()->email ?? $request->user()->username ?? 'unknown'
                     ]);
                     
                 } catch (\Exception $e) {

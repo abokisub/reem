@@ -150,85 +150,13 @@ class VirtualAccountService
             $customerNin = $customerData['nin'] ?? null;
             $customerBvn = $customerData['bvn'] ?? null;
             
-            // Determine KYC source and identity type with smart conflict resolution
-            $kycSource = 'director_bvn'; // Default: use director BVN
-            $licenseNumber = null;
-            $identityType = 'personal';
-            $directorBvnUsed = null;
+            // Enhanced KYC Selection with Multi-Director Backup Support
+            $kycResult = $this->selectOptimalKycMethod($company, $customerBvn, $customerNin, $companyId);
             
-            // Priority 1: Customer provides their own BVN
-            if ($customerBvn) {
-                $licenseNumber = $customerBvn;
-                $identityType = 'personal';
-                $kycSource = 'customer_bvn';
-            }
-            // Priority 2: Customer provides their own NIN
-            elseif ($customerNin) {
-                $licenseNumber = $customerNin;
-                $identityType = 'personal_nin'; // PalmPay requires "personal_nin" for NIN
-                $kycSource = 'customer_nin';
-            }
-            // Priority 3: Smart Director KYC Selection (avoid BVN/NIN conflicts)
-            elseif ($company->director_bvn && !$company->director_nin) {
-                // Only BVN available - use it
-                $licenseNumber = $company->director_bvn;
-                $identityType = 'personal';
-                $kycSource = 'director_bvn';
-                $directorBvnUsed = $company->director_bvn;
-            }
-            elseif ($company->director_nin && !$company->director_bvn) {
-                // Only NIN available - use it
-                $licenseNumber = $company->director_nin;
-                $identityType = 'personal_nin';
-                $kycSource = 'director_nin';
-                $directorBvnUsed = $company->director_nin;
-            }
-            elseif ($company->director_bvn && $company->director_nin) {
-                // Both available - check which one has been used successfully before
-                $bvnUsageCount = VirtualAccount::where('company_id', $companyId)
-                    ->where('kyc_source', 'director_bvn')
-                    ->where('status', 'active')
-                    ->whereNull('deleted_at')
-                    ->count();
-                    
-                $ninUsageCount = VirtualAccount::where('company_id', $companyId)
-                    ->where('kyc_source', 'director_nin')
-                    ->where('status', 'active')
-                    ->whereNull('deleted_at')
-                    ->count();
-                
-                if ($bvnUsageCount > $ninUsageCount) {
-                    // BVN has been used more - prefer it
-                    $licenseNumber = $company->director_bvn;
-                    $identityType = 'personal';
-                    $kycSource = 'director_bvn';
-                    $directorBvnUsed = $company->director_bvn;
-                    
-                    Log::info('VirtualAccount: Using director BVN (more usage history)', [
-                        'bvn_usage' => $bvnUsageCount,
-                        'nin_usage' => $ninUsageCount,
-                        'company_id' => $companyId
-                    ]);
-                } else {
-                    // NIN has been used more or equal - prefer NIN to avoid BVN conflicts
-                    $licenseNumber = $company->director_nin;
-                    $identityType = 'personal_nin';
-                    $kycSource = 'director_nin';
-                    $directorBvnUsed = $company->director_nin;
-                    
-                    Log::info('VirtualAccount: Using director NIN (avoiding BVN conflicts)', [
-                        'bvn_usage' => $bvnUsageCount,
-                        'nin_usage' => $ninUsageCount,
-                        'company_id' => $companyId
-                    ]);
-                }
-            }
-            // Fallback: Use company RC number (corporate mode)
-            else {
-                $licenseNumber = $company->business_registration_number;
-                $identityType = 'company';
-                $kycSource = 'company_rc';
-            }
+            $licenseNumber = $kycResult['license_number'];
+            $identityType = $kycResult['identity_type'];
+            $kycSource = $kycResult['kyc_source'];
+            $directorBvnUsed = $kycResult['director_used'] ?? null;
             
             $email = $customerData['email'] ?? null;
             $phone = $customerData['phone'] ?? null;
@@ -292,9 +220,8 @@ class VirtualAccountService
                 'data' => $requestData
             ]);
 
-            // Call PalmPay API
-            // Path: /api/v2/virtual/account/label/create
-            $response = $this->client->post('/api/v2/virtual/account/label/create', $requestData);
+            // Call PalmPay API with automatic retry on KYC failures
+            $response = $this->callPalmPayWithKycFallback($requestData, $company, $companyId);
 
             // Extract account details from response
             $accountNumber = $response['data']['virtualAccountNo'] ?? null;
@@ -733,5 +660,377 @@ class VirtualAccountService
                 'message' => $e->getMessage(),
             ];
         }
+    }
+
+    /**
+     * Enhanced KYC Selection with Multi-Director Backup Support
+     * Automatically selects the best available KYC method with fallback
+     */
+    private function selectOptimalKycMethod($company, $customerBvn, $customerNin, $companyId)
+    {
+        // Priority 1: Customer-provided KYC (highest success rate, unlimited capacity)
+        if ($customerBvn) {
+            Log::info('VirtualAccount: Using customer BVN', ['company_id' => $companyId]);
+            return [
+                'license_number' => $customerBvn,
+                'identity_type' => 'personal',
+                'kyc_source' => 'customer_bvn',
+                'director_used' => null
+            ];
+        }
+        
+        if ($customerNin) {
+            Log::info('VirtualAccount: Using customer NIN', ['company_id' => $companyId]);
+            return [
+                'license_number' => $customerNin,
+                'identity_type' => 'personal_nin',
+                'kyc_source' => 'customer_nin',
+                'director_used' => null
+            ];
+        }
+        
+        // Priority 2: Director KYC with intelligent selection and backup support
+        $availableKycMethods = $this->getAllAvailableKycMethods($company, $companyId);
+        
+        // Get blacklisted methods (methods that have failed recently)
+        $blacklistedMethods = $this->getBlacklistedKycMethods($company);
+        
+        // Filter out blacklisted methods
+        $viableKycMethods = array_filter($availableKycMethods, function($method) use ($blacklistedMethods) {
+            return !in_array($method['method_key'], $blacklistedMethods);
+        });
+        
+        // If no viable methods (all blacklisted), use all methods (reset blacklist)
+        if (empty($viableKycMethods)) {
+            Log::warning('VirtualAccount: All KYC methods blacklisted, resetting blacklist', [
+                'company_id' => $companyId,
+                'blacklisted_methods' => $blacklistedMethods
+            ]);
+            $viableKycMethods = $availableKycMethods;
+            $this->resetKycBlacklist($company);
+        }
+        
+        // Sort by success rate and preference
+        usort($viableKycMethods, function($a, $b) {
+            // Prefer NIN over BVN (more stable)
+            if ($a['type'] === 'nin' && $b['type'] === 'bvn') return -1;
+            if ($a['type'] === 'bvn' && $b['type'] === 'nin') return 1;
+            
+            // Then by success rate
+            return $b['success_rate'] <=> $a['success_rate'];
+        });
+        
+        // Select the best method
+        $selectedMethod = $viableKycMethods[0];
+        
+        Log::info('VirtualAccount: Selected KYC method', [
+            'company_id' => $companyId,
+            'method' => $selectedMethod['method_key'],
+            'type' => $selectedMethod['type'],
+            'success_rate' => $selectedMethod['success_rate'],
+            'total_available' => count($availableKycMethods),
+            'viable_methods' => count($viableKycMethods)
+        ]);
+        
+        return [
+            'license_number' => $selectedMethod['license_number'],
+            'identity_type' => $selectedMethod['identity_type'],
+            'kyc_source' => $selectedMethod['kyc_source'],
+            'director_used' => $selectedMethod['license_number']
+        ];
+    }
+    
+    /**
+     * Get all available KYC methods for a company (including backup directors)
+     */
+    private function getAllAvailableKycMethods($company, $companyId)
+    {
+        $methods = [];
+        
+        // Primary Director Methods
+        if ($company->director_bvn) {
+            $methods[] = [
+                'method_key' => 'director_bvn',
+                'license_number' => $company->director_bvn,
+                'identity_type' => 'personal',
+                'kyc_source' => 'director_bvn',
+                'type' => 'bvn',
+                'success_rate' => $this->getKycSuccessRate('director_bvn', $companyId),
+                'director_number' => 1
+            ];
+        }
+        
+        if ($company->director_nin) {
+            $methods[] = [
+                'method_key' => 'director_nin',
+                'license_number' => $company->director_nin,
+                'identity_type' => 'personal_nin',
+                'kyc_source' => 'director_nin',
+                'type' => 'nin',
+                'success_rate' => $this->getKycSuccessRate('director_nin', $companyId),
+                'director_number' => 1
+            ];
+        }
+        
+        // Backup Directors (2-10)
+        for ($i = 2; $i <= 10; $i++) {
+            $bvnField = "backup_director_{$i}_bvn";
+            $ninField = "backup_director_{$i}_nin";
+            
+            if ($company->$bvnField) {
+                $methodKey = "backup_director_{$i}_bvn";
+                $methods[] = [
+                    'method_key' => $methodKey,
+                    'license_number' => $company->$bvnField,
+                    'identity_type' => 'personal',
+                    'kyc_source' => $methodKey,
+                    'type' => 'bvn',
+                    'success_rate' => $this->getKycSuccessRate($methodKey, $companyId),
+                    'director_number' => $i
+                ];
+            }
+            
+            if ($company->$ninField) {
+                $methodKey = "backup_director_{$i}_nin";
+                $methods[] = [
+                    'method_key' => $methodKey,
+                    'license_number' => $company->$ninField,
+                    'identity_type' => 'personal_nin',
+                    'kyc_source' => $methodKey,
+                    'type' => 'nin',
+                    'success_rate' => $this->getKycSuccessRate($methodKey, $companyId),
+                    'director_number' => $i
+                ];
+            }
+        }
+        
+        // Business RC (Corporate fallback)
+        if ($company->business_registration_number) {
+            $rcNumber = $company->business_registration_number;
+            
+            // Add RC prefix if needed
+            if (!str_starts_with(strtoupper($rcNumber), 'RC') && !str_starts_with(strtoupper($rcNumber), 'BN')) {
+                $rcNumber = 'RC' . $rcNumber;
+            }
+            
+            $methods[] = [
+                'method_key' => 'company_rc',
+                'license_number' => $rcNumber,
+                'identity_type' => 'company',
+                'kyc_source' => 'company_rc',
+                'type' => 'corporate',
+                'success_rate' => $this->getKycSuccessRate('company_rc', $companyId),
+                'director_number' => 0
+            ];
+        }
+        
+        return $methods;
+    }
+    
+    /**
+     * Get success rate for a specific KYC method (enhanced version)
+     */
+    private function getKycSuccessRate($kycSource, $companyId)
+    {
+        $total = VirtualAccount::where('company_id', $companyId)
+            ->where('kyc_source', $kycSource)
+            ->count();
+            
+        if ($total === 0) {
+            return 50; // Default success rate for untested methods
+        }
+        
+        $successful = VirtualAccount::where('company_id', $companyId)
+            ->where('kyc_source', $kycSource)
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->count();
+            
+        return ($successful / $total) * 100;
+    }
+    
+    /**
+     * Get blacklisted KYC methods for a company
+     */
+    private function getBlacklistedKycMethods($company)
+    {
+        if (!$company->kyc_method_blacklist) {
+            return [];
+        }
+        
+        $blacklist = json_decode($company->kyc_method_blacklist, true) ?? [];
+        
+        // Remove methods that were blacklisted more than 24 hours ago (auto-recovery)
+        $cutoffTime = now()->subHours(24);
+        $activeBlacklist = [];
+        
+        foreach ($blacklist as $method => $timestamp) {
+            if (strtotime($timestamp) > $cutoffTime->timestamp) {
+                $activeBlacklist[] = $method;
+            }
+        }
+        
+        return $activeBlacklist;
+    }
+    
+    /**
+     * Add a KYC method to blacklist (when it fails)
+     */
+    private function blacklistKycMethod($company, $methodKey, $errorMessage)
+    {
+        $blacklist = json_decode($company->kyc_method_blacklist, true) ?? [];
+        $blacklist[$methodKey] = now()->toISOString();
+        
+        $company->update([
+            'kyc_method_blacklist' => json_encode($blacklist),
+            'kyc_last_updated' => now()
+        ]);
+        
+        Log::warning('VirtualAccount: KYC method blacklisted', [
+            'company_id' => $company->id,
+            'method' => $methodKey,
+            'error' => $errorMessage,
+            'blacklist_until' => now()->addHours(24)->toISOString()
+        ]);
+    }
+    
+    /**
+     * Reset KYC blacklist (when all methods are blacklisted)
+     */
+    private function resetKycBlacklist($company)
+    {
+        $company->update([
+            'kyc_method_blacklist' => null,
+            'kyc_last_updated' => now()
+        ]);
+        
+        Log::info('VirtualAccount: KYC blacklist reset', [
+            'company_id' => $company->id,
+            'reason' => 'All methods were blacklisted'
+        ]);
+    }
+    
+    /**
+     * Call PalmPay API with automatic KYC fallback on failures
+     */
+    private function callPalmPayWithKycFallback($requestData, $company, $companyId, $attempt = 1)
+    {
+        $maxAttempts = 5;
+        
+        try {
+            Log::info('PalmPay API Call', [
+                'attempt' => $attempt,
+                'company_id' => $companyId,
+                'kyc_method' => $requestData['identityType'] ?? 'unknown',
+                'license_number' => substr($requestData['licenseNumber'] ?? '', 0, 5) . '***'
+            ]);
+            
+            // Call PalmPay API
+            $response = $this->client->post('/api/v2/virtual/account/label/create', $requestData);
+            
+            Log::info('PalmPay API Success', [
+                'attempt' => $attempt,
+                'company_id' => $companyId,
+                'account_number' => $response['data']['virtualAccountNo'] ?? 'unknown'
+            ]);
+            
+            return $response;
+            
+        } catch (\Exception $e) {
+            $errorMessage = $e->getMessage();
+            
+            Log::warning('PalmPay API Failed', [
+                'attempt' => $attempt,
+                'company_id' => $companyId,
+                'error' => $errorMessage,
+                'kyc_method' => $requestData['identityType'] ?? 'unknown'
+            ]);
+            
+            // Check if this is a KYC-related error that we can retry with different method
+            if ($this->isKycRelatedError($errorMessage) && $attempt < $maxAttempts) {
+                
+                // Blacklist the current KYC method
+                $currentKycSource = $this->determineKycSourceFromRequest($requestData);
+                if ($currentKycSource) {
+                    $this->blacklistKycMethod($company, $currentKycSource, $errorMessage);
+                }
+                
+                Log::info('Retrying with different KYC method', [
+                    'attempt' => $attempt + 1,
+                    'blacklisted_method' => $currentKycSource,
+                    'company_id' => $companyId
+                ]);
+                
+                // Get new KYC method (excluding blacklisted ones)
+                $company->refresh(); // Refresh to get updated blacklist
+                $kycResult = $this->selectOptimalKycMethod($company, null, null, $companyId);
+                
+                // Update request data with new KYC method
+                $requestData['identityType'] = $kycResult['identity_type'];
+                $requestData['licenseNumber'] = $kycResult['license_number'];
+                
+                // CAC Prefix Enforcement for Companies
+                if ($kycResult['identity_type'] === 'company') {
+                    $licenseNumber = strtoupper(trim($kycResult['license_number']));
+                    if (!str_starts_with($licenseNumber, 'RC') && !str_starts_with($licenseNumber, 'BN')) {
+                        $licenseNumber = 'RC' . $licenseNumber;
+                    }
+                    $requestData['licenseNumber'] = $licenseNumber;
+                }
+                
+                // Retry with new KYC method
+                return $this->callPalmPayWithKycFallback($requestData, $company, $companyId, $attempt + 1);
+            }
+            
+            // Non-retryable error or max attempts reached
+            throw $e;
+        }
+    }
+    
+    /**
+     * Check if error is KYC-related and retryable
+     */
+    private function isKycRelatedError($errorMessage)
+    {
+        $kycErrors = [
+            'licenseNumber duplicate',
+            'BVN already exists',
+            'NIN already exists',
+            'Invalid license number',
+            'KYC verification failed',
+            'License number not found',
+            'Identity verification failed'
+        ];
+        
+        foreach ($kycErrors as $error) {
+            if (stripos($errorMessage, $error) !== false) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Determine KYC source from request data
+     */
+    private function determineKycSourceFromRequest($requestData)
+    {
+        $identityType = $requestData['identityType'] ?? '';
+        $licenseNumber = $requestData['licenseNumber'] ?? '';
+        
+        if ($identityType === 'company') {
+            return 'company_rc';
+        }
+        
+        if ($identityType === 'personal_nin') {
+            return 'director_nin'; // This could be more specific with backup director detection
+        }
+        
+        if ($identityType === 'personal') {
+            return 'director_bvn'; // This could be more specific with backup director detection
+        }
+        
+        return null;
     }
 }
