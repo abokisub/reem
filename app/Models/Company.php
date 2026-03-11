@@ -31,13 +31,17 @@ class Company extends Model
         'secret_key',
         'api_key',
         'webhook_url',
+        'webhook_url_backup',
         'webhook_secret',
         'webhook_enabled',
         'test_public_key',
         'test_secret_key',
         'test_api_key',
         'test_webhook_url',
+        'test_webhook_url_backup',
         'test_webhook_secret',
+        'dns_resolution_issues',
+        'dns_last_checked_at',
         'status',
         'transaction_fee_percentage',
         'minimum_balance',
@@ -88,6 +92,8 @@ class Company extends Model
         'identity_details' => 'array',
         'directors' => 'array',
         'shareholders' => 'array',
+        'dns_resolution_issues' => 'array',
+        'dns_last_checked_at' => 'datetime',
     ];
 
     protected $hidden = [

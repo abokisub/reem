@@ -4,12 +4,19 @@ namespace App\Services\Webhook;
 
 use App\Models\WebhookEvent;
 use App\Models\Transaction;
+use App\Services\Webhook\DnsResolverService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class OutgoingWebhookService
 {
+    private DnsResolverService $dnsResolver;
+    
+    public function __construct(DnsResolverService $dnsResolver = null)
+    {
+        $this->dnsResolver = $dnsResolver ?? new DnsResolverService();
+    }
     /**
      * Send webhook to company endpoint
      */
@@ -67,8 +74,26 @@ class OutgoingWebhookService
         $webhookEvent->update(['last_attempt_at' => now()]);
 
         try {
-            // Get company for signature
+            // Get company for signature and DNS resolution
             $company = $webhookEvent->company;
+            
+            // Resolve webhook URL with DNS fallback handling
+            $resolvedUrl = $this->dnsResolver->resolveWebhookUrl($company, false);
+            
+            if (!$resolvedUrl) {
+                throw new \Exception('Webhook URL cannot be resolved (DNS resolution failed)');
+            }
+            
+            // Update webhook event with resolved URL if different
+            if ($resolvedUrl !== $webhookEvent->endpoint_url) {
+                $webhookEvent->update(['endpoint_url' => $resolvedUrl]);
+                
+                Log::info('Webhook URL resolved with DNS fallback', [
+                    'event_id' => $webhookEvent->event_id,
+                    'original_url' => $webhookEvent->endpoint_url,
+                    'resolved_url' => $resolvedUrl
+                ]);
+            }
             
             // Use Secret Key (API key) for webhook signature - simpler and more professional
             // This matches industry standard (Xixapay, Paystack, etc.)
@@ -90,16 +115,31 @@ class OutgoingWebhookService
             
             // Send HTTP POST request with signature
             // Use withBody() to send the exact JSON we signed
-            $response = Http::timeout(10)
+            // Add SSL verification bypass for IP-based URLs
+            $isIpBasedUrl = filter_var(parse_url($resolvedUrl, PHP_URL_HOST), FILTER_VALIDATE_IP);
+            
+            $httpClient = Http::timeout(10)
                 ->withHeaders([
                     'Content-Type' => 'application/json',
                     'X-PointWave-Signature' => $signature,
                     'X-PointWave-Event-ID' => $webhookEvent->event_id,
                     'X-PointWave-Event-Type' => $webhookEvent->event_type,
                     'X-PointWave-Timestamp' => now()->timestamp,
-                ])
+                ]);
+            
+            // Disable SSL verification for IP-based URLs (common for DNS fallback)
+            if ($isIpBasedUrl) {
+                $httpClient = $httpClient->withOptions(['verify' => false]);
+                
+                Log::debug('Using IP-based webhook URL with SSL verification disabled', [
+                    'event_id' => $webhookEvent->event_id,
+                    'url' => $resolvedUrl
+                ]);
+            }
+            
+            $response = $httpClient
                 ->withBody($jsonPayload, 'application/json')
-                ->post($webhookEvent->endpoint_url);
+                ->post($resolvedUrl);
 
             $statusCode = $response->status();
             $responseBody = $response->body();
