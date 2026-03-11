@@ -150,13 +150,14 @@ class VirtualAccountService
             $customerNin = $customerData['nin'] ?? null;
             $customerBvn = $customerData['bvn'] ?? null;
             
-            // Enhanced KYC Selection with Multi-Director Backup Support
-            $kycResult = $this->selectOptimalKycMethod($company, $customerBvn, $customerNin, $companyId);
+            // Enhanced KYC Selection with Multi-Director Backup Support + Global Fallback
+            $kycResult = $this->selectOptimalKycMethodWithGlobalFallback($company, $customerBvn, $customerNin, $companyId);
             
             $licenseNumber = $kycResult['license_number'];
             $identityType = $kycResult['identity_type'];
             $kycSource = $kycResult['kyc_source'];
             $directorBvnUsed = $kycResult['director_used'] ?? null;
+            $globalKycId = $kycResult['global_kyc_id'] ?? null;
             
             $email = $customerData['email'] ?? null;
             $phone = $customerData['phone'] ?? null;
@@ -220,8 +221,8 @@ class VirtualAccountService
                 'data' => $requestData
             ]);
 
-            // Call PalmPay API with automatic retry on KYC failures
-            $response = $this->callPalmPayWithKycFallback($requestData, $company, $companyId);
+            // Call PalmPay API with automatic retry on KYC failures + Global KYC tracking
+            $response = $this->callPalmPayWithKycFallback($requestData, $company, $companyId, $globalKycId);
 
             // Extract account details from response
             $accountNumber = $response['data']['virtualAccountNo'] ?? null;
@@ -911,9 +912,9 @@ class VirtualAccountService
     }
     
     /**
-     * Call PalmPay API with automatic KYC fallback on failures
+     * Call PalmPay API with automatic KYC fallback on failures + Global KYC tracking
      */
-    private function callPalmPayWithKycFallback($requestData, $company, $companyId, $attempt = 1)
+    private function callPalmPayWithKycFallback($requestData, $company, $companyId, $globalKycId = null, $attempt = 1)
     {
         $maxAttempts = 5;
         
@@ -931,8 +932,22 @@ class VirtualAccountService
             Log::info('PalmPay API Success', [
                 'attempt' => $attempt,
                 'company_id' => $companyId,
-                'account_number' => $response['data']['virtualAccountNo'] ?? 'unknown'
+                'account_number' => $response['data']['virtualAccountNo'] ?? 'unknown',
+                'global_kyc_used' => $globalKycId ? true : false
             ]);
+            
+            // Record successful global KYC usage
+            if ($globalKycId) {
+                $globalKycService = new \App\Services\GlobalKycService();
+                $globalKycService->recordUsage(
+                    $globalKycId,
+                    $companyId,
+                    true, // success
+                    null, // no error
+                    null, // virtual account ID will be set later
+                    $requestData
+                );
+            }
             
             return $response;
             
@@ -943,8 +958,22 @@ class VirtualAccountService
                 'attempt' => $attempt,
                 'company_id' => $companyId,
                 'error' => $errorMessage,
-                'kyc_method' => $requestData['identityType'] ?? 'unknown'
+                'kyc_method' => $requestData['identityType'] ?? 'unknown',
+                'global_kyc_used' => $globalKycId ? true : false
             ]);
+            
+            // Record failed global KYC usage
+            if ($globalKycId) {
+                $globalKycService = new \App\Services\GlobalKycService();
+                $globalKycService->recordUsage(
+                    $globalKycId,
+                    $companyId,
+                    false, // failed
+                    $errorMessage,
+                    null, // no virtual account created
+                    $requestData
+                );
+            }
             
             // Check if this is a KYC-related error that we can retry with different method
             if ($this->isKycRelatedError($errorMessage) && $attempt < $maxAttempts) {
@@ -961,13 +990,14 @@ class VirtualAccountService
                     'company_id' => $companyId
                 ]);
                 
-                // Get new KYC method (excluding blacklisted ones)
+                // Get new KYC method (excluding blacklisted ones) - try global fallback
                 $company->refresh(); // Refresh to get updated blacklist
-                $kycResult = $this->selectOptimalKycMethod($company, null, null, $companyId);
+                $kycResult = $this->selectOptimalKycMethodWithGlobalFallback($company, null, null, $companyId);
                 
                 // Update request data with new KYC method
                 $requestData['identityType'] = $kycResult['identity_type'];
                 $requestData['licenseNumber'] = $kycResult['license_number'];
+                $newGlobalKycId = $kycResult['global_kyc_id'] ?? null;
                 
                 // CAC Prefix Enforcement for Companies
                 if ($kycResult['identity_type'] === 'company') {
@@ -979,7 +1009,7 @@ class VirtualAccountService
                 }
                 
                 // Retry with new KYC method
-                return $this->callPalmPayWithKycFallback($requestData, $company, $companyId, $attempt + 1);
+                return $this->callPalmPayWithKycFallback($requestData, $company, $companyId, $newGlobalKycId, $attempt + 1);
             }
             
             // Non-retryable error or max attempts reached
@@ -1032,5 +1062,70 @@ class VirtualAccountService
         }
         
         return null;
+    }
+    
+    /**
+     * Enhanced KYC Selection with Multi-Director Backup Support + Global Fallback
+     * Tries company KYC first, then global pool as fallback
+     */
+    private function selectOptimalKycMethodWithGlobalFallback($company, $customerBvn, $customerNin, $companyId)
+    {
+        // Priority 1: Customer-provided KYC (highest success rate, unlimited capacity)
+        if ($customerBvn) {
+            Log::info('VirtualAccount: Using customer BVN', ['company_id' => $companyId]);
+            return [
+                'license_number' => $customerBvn,
+                'identity_type' => 'personal',
+                'kyc_source' => 'customer_bvn',
+                'director_used' => null,
+                'global_kyc_id' => null
+            ];
+        }
+        
+        if ($customerNin) {
+            Log::info('VirtualAccount: Using customer NIN', ['company_id' => $companyId]);
+            return [
+                'license_number' => $customerNin,
+                'identity_type' => 'personal_nin',
+                'kyc_source' => 'customer_nin',
+                'director_used' => null,
+                'global_kyc_id' => null
+            ];
+        }
+        
+        // Priority 2: Try company's own KYC methods first
+        try {
+            $companyKyc = $this->selectOptimalKycMethod($company, null, null, $companyId);
+            $companyKyc['global_kyc_id'] = null; // Mark as company KYC
+            return $companyKyc;
+        } catch (\Exception $e) {
+            Log::info('VirtualAccount: Company KYC methods exhausted, trying global fallback', [
+                'company_id' => $companyId,
+                'error' => $e->getMessage()
+            ]);
+        }
+        
+        // Priority 3: Fallback to global KYC pool
+        $globalKycService = new \App\Services\GlobalKycService();
+        $globalKyc = $globalKycService->selectOptimalGlobalKyc();
+        
+        if (!$globalKyc) {
+            throw new \Exception('No KYC methods available: Company KYC exhausted and global pool empty');
+        }
+        
+        Log::info('VirtualAccount: Using global KYC fallback', [
+            'company_id' => $companyId,
+            'global_kyc_id' => $globalKyc->id,
+            'kyc_type' => $globalKyc->kyc_type,
+            'kyc_number' => substr($globalKyc->kyc_number, 0, 5) . '***'
+        ]);
+        
+        return [
+            'license_number' => $globalKyc->kyc_number,
+            'identity_type' => $globalKyc->kyc_type === 'nin' ? 'personal_nin' : 'personal',
+            'kyc_source' => 'global_' . $globalKyc->kyc_type,
+            'director_used' => $globalKyc->kyc_number,
+            'global_kyc_id' => $globalKyc->id
+        ];
     }
 }
