@@ -30,13 +30,15 @@ class NewStock extends Controller
                         'awuf' => 'required|numeric',
                         'agent' => 'required|numeric',
                         'api' => 'required|numeric',
-                        'special' => 'required|numeric'
+                        'special' => 'required|numeric',
+                        'kobopoint_plan_id' => 'required'
                     ], [
                         'smart.required' => 'Smart Price Required',
                         'awuf.required' => 'Awuf Price Required',
                         'agent.required' => 'Agent Price Required',
                         'api.required' => 'Api Price Required',
                         'special.required' => 'Special Price Required',
+                        'kobopoint_plan_id.required' => 'KoboPoint Plan ID Required',
 
                         'smart.numeric' => 'Smart Price Must Be Numeric',
                         'awuf.numeric' => 'Awuf Price Must Be Numeric',
@@ -73,14 +75,7 @@ class NewStock extends Controller
                             'awuf' => $request->awuf,
                             'special' => $request->special,
                             'api' => $request->api,
-                            'habukhan1' => $request->habukhan1,
-                            'habukhan2' => $request->habukhan2,
-                            'habukhan3' => $request->habukhan3,
-                            'habukhan4' => $request->habukhan4,
-                            'habukhan5' => $request->habukhan5,
-                            'free1' => $request->free1,
-                            'free2' => $request->free2,
-                            'free3' => $request->free3,
+                            'kobopoint_plan_id' => $request->kobopoint_plan_id,
                             'name' => $request->name,
                             'plan_name' => $request->name,
                             'plan_id' => $plan_id,
@@ -147,13 +142,15 @@ class NewStock extends Controller
                         'agent' => 'required|numeric',
                         'api' => 'required|numeric',
                         'special' => 'required|numeric',
-                        'check_balance' => 'required'
+                        'check_balance' => 'required',
+                        'kobopoint_plan_id' => 'required'
                     ], [
                         'smart.required' => 'Smart Price Required',
                         'awuf.required' => 'Awuf Price Required',
                         'agent.required' => 'Agent Price Required',
                         'api.required' => 'Api Price Required',
                         'special.required' => 'Special Price Required',
+                        'kobopoint_plan_id.required' => 'KoboPoint Plan ID Required',
 
                         'smart.numeric' => 'Smart Price Must Be Numeric',
                         'awuf.numeric' => 'Awuf Price Must Be Numeric',
@@ -190,14 +187,7 @@ class NewStock extends Controller
                             'awuf' => $request->awuf,
                             'special' => $request->special,
                             'api' => $request->api,
-                            'habukhan1' => $request->habukhan1,
-                            'habukhan2' => $request->habukhan2,
-                            'habukhan3' => $request->habukhan3,
-                            'habukhan4' => $request->habukhan4,
-                            'habukhan5' => $request->habukhan5,
-                            'free1' => $request->free1,
-                            'free2' => $request->free2,
-                            'free3' => $request->free3,
+                            'kobopoint_plan_id' => $request->kobopoint_plan_id,
                             'name' => $request->name,
                             'plan_id' => $plan_id,
                             'check_balance' => $request->check_balance

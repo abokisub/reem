@@ -13,7 +13,7 @@ use App\Http\Controllers\API\PlanController;
 use App\Http\Controllers\API\SecureController;
 use App\Http\Controllers\API\Selection;
 use App\Http\Controllers\API\Trans;
-use App\Http\Controllers\API\TransactionCalculator;
+use App\Http\Controllers\API\SimpleTransactionCalculator;
 use App\Http\Controllers\API\WebhookController;
 use App\Http\Controllers\API\UserDashboardController;
 use App\Http\Controllers\Purchase\AccessUser;
@@ -492,8 +492,8 @@ Route::post('admin/notifications/update/{notificationId}/{id}/secure', [Notifica
 Route::delete('admin/notifications/delete/{notificationId}/{id}/secure', [NotificationHistoryController::class, 'deleteNotification']);
 
 //calculator
-Route::post('transaction/calculator/{id}/habukhan/secure', [TransactionCalculator::class, 'Admin']);
-Route::post('user/calculator/{id}/habukhan/secure', [TransactionCalculator::class, 'User']);
+Route::post('transaction/calculator/{id}/habukhan/secure', [SimpleTransactionCalculator::class, 'Admin']);
+Route::post('user/calculator/{id}/habukhan/secure', [SimpleTransactionCalculator::class, 'Admin']); // Using same method for now
 
 // User Dashboard
 Route::get('user/dashboard-stats', [UserDashboardController::class, 'index'])->middleware('auth.token');

@@ -803,12 +803,14 @@ class SecureController extends Controller
                         'api' => 'required|numeric',
                         'special' => 'required|numeric',
                         'plan_day' => 'required',
+                        'kobopoint_plan_id' => 'required',
                     ], [
                         'smart.required' => 'Smart Price Required',
                         'awuf.required' => 'Awuf Price Required',
                         'agent.required' => 'Agent Price Required',
                         'api.required' => 'Api Price Required',
                         'special.required' => 'Special Price Required',
+                        'kobopoint_plan_id.required' => 'KoboPoint Plan ID Required',
 
                         'smart.numeric' => 'Smart Price Must Be Numeric',
                         'awuf.numeric' => 'Awuf Price Must Be Numeric',
@@ -853,44 +855,8 @@ class SecureController extends Controller
                             'special' => $request->special,
                             'plan_day' => $request->plan_day,
                             'api' => $request->api,
-                            'habukhan1' => $request->habukhan1,
-                            'habukhan2' => $request->habukhan2,
-                            'habukhan3' => $request->habukhan3,
-                            'habukhan4' => $request->habukhan4,
-                            'habukhan5' => $request->habukhan5,
-                            'msorg1' => $request->msorg1,
-                            'msorg2' => $request->msorg2,
-                            'msorg3' => $request->msorg3,
-                            'msorg4' => $request->msorg4,
-                            'msorg5' => $request->msorg5,
-                            'virus1' => $request->virus1,
-                            'virus2' => $request->virus2,
-                            'virus3' => $request->virus3,
-                            'virus4' => $request->virus4,
-                            'virus5' => $request->virus5,
-                            'free1' => $request->free1,
-                            'free2' => $request->free2,
-                            'free3' => $request->free3,
-                            'free4' => $request->free4,
-                            'free5' => $request->free5,
-                            'simserver' => $request->simserver,
-                            'simhosting' => $request->simhosting,
-                            'msplug' => $request->msplug,
-                            'smeplug' => $request->smeplug,
-                            'ogdamns' => $request->ogdamns,
+                            'kobopoint_plan_id' => $request->kobopoint_plan_id,
                             'added_by' => $added_by,
-                            'easyaccess' => $request->easyaccess,
-                            'megasub' => $request->megasub,
-                            'megasubcloud' => $request->megasubcloud,
-                            'adex1' => $request->adex1,
-                            'adex2' => $request->adex2,
-                            'adex3' => $request->adex3,
-                            'adex4' => $request->adex4,
-                            'adex5' => $request->adex5,
-                            'boltnet' => $request->boltnet,
-                            'zimrax' => $request->zimrax,
-                            'hamdala' => $request->hamdala,
-                            'autopilot' => $request->autopilot,
                             'company_id' => $cid
                         ];
                         if (DB::table('data_plan')->where('plan_id', $plan_id)->count() == 0) {
@@ -1211,7 +1177,8 @@ class SecureController extends Controller
                     $main_validator = validator::make($request->all(), [
                         'plan_name' => 'required',
                         'cable_name' => 'required',
-                        'plan_price' => 'required|numeric'
+                        'plan_price' => 'required|numeric',
+                        'kobopoint_plan_id' => 'required'
                     ]);
 
                     // plan status
@@ -1243,13 +1210,7 @@ class SecureController extends Controller
                             'plan_status' => $plan_status,
                             'plan_name' => $request->plan_name,
                             'plan_id' => $plan_id,
-                            'habukhan1' => $request->habukhan1,
-                            'habukhan2' => $request->habukhan2,
-                            'habukhan3' => $request->habukhan3,
-                            'habukhan4' => $request->habukhan4,
-                            'habukhan5' => $request->habukhan5,
-                            'vtpass' => $request->vtpass,
-                            'autopilot' => $request->autopilot,
+                            'kobopoint_plan_id' => $request->kobopoint_plan_id,
                             'added_by' => $added_by,
                             'company_id' => $cid
                         ];
@@ -1498,6 +1459,7 @@ class SecureController extends Controller
                     // validate form
                     $main_validator = validator::make($request->all(), [
                         'disco_name' => 'required',
+                        'kobopoint_plan_id' => 'required'
                     ]);
 
                     // plan status
@@ -1527,13 +1489,9 @@ class SecureController extends Controller
                             'disco_name' => $request->disco_name,
                             'plan_status' => $plan_status,
                             'plan_id' => $plan_id,
-                            'habukhan1' => $request->habukhan1,
-                            'habukhan2' => $request->habukhan2,
-                            'habukhan3' => $request->habukhan3,
-                            'habukhan4' => $request->habukhan4,
-                            'habukhan5' => $request->habukhan5,
-                            'vtpass' => $request->vtpass,
-                            'added_by' => $added_by
+                            'kobopoint_plan_id' => $request->kobopoint_plan_id,
+                            'added_by' => $added_by,
+                            'company_id' => $cid
                         ];
                         if (DB::table('bill_plan')->where('plan_id', $plan_id)->count() == 0) {
                             if ($this->inserting_data('bill_plan', $data)) {
@@ -1784,28 +1742,38 @@ class SecureController extends Controller
                     $query->whereIn('type', ['admin', 'ADMIN']);
                 });
                 if ($check_user->count() == 1) {
-                    $data = [
-                        'habukhan1_username' => $request->habukhan1_username,
-                        'habukhan1_password' => $request->habukhan1_password,
-                        'habukhan2_username' => $request->habukhan2_username,
-                        'habukhan2_password' => $request->habukhan2_password,
-                        'habukhan3_username' => $request->habukhan3_username,
-                        'habukhan3_password' => $request->habukhan3_password,
-                        'habukhan4_username' => $request->habukhan4_username,
-                        'habukhan4_password' => $request->habukhan4_password,
-                        'habukhan5_username' => $request->habukhan5_username,
-                        'habukhan5_password' => $request->habukhan5_password
-                    ];
-                    $updated = DB::table('other_api')->update($data);
-                    if ($updated || $updated === 0) {
-                        return response()->json([
-                            'status' => 'success',
-                            'message' => 'updated'
-                        ]);
+                    // Build update data array with only KoboPoint fields
+                    $data = [];
+                    
+                    // Handle KoboPoint credentials only
+                    if ($request->has('kobopoint_username')) {
+                        $data['kobopoint_username'] = $request->kobopoint_username;
+                    }
+                    if ($request->has('kobopoint_password')) {
+                        $data['kobopoint_password'] = $request->kobopoint_password;
+                    }
+                    if ($request->has('kobopoint_url')) {
+                        $data['kobopoint_url'] = $request->kobopoint_url;
+                    }
+                    
+                    // Only update if we have data to update
+                    if (!empty($data)) {
+                        $updated = DB::table('other_api')->update($data);
+                        if ($updated !== false) {
+                            return response()->json([
+                                'status' => 'success',
+                                'message' => 'KoboPoint credentials updated successfully'
+                            ]);
+                        } else {
+                            return response()->json([
+                                'status' => 403,
+                                'message' => 'Update Failed'
+                            ])->setStatusCode(403);
+                        }
                     } else {
                         return response()->json([
                             'status' => 403,
-                            'message' => 'No Changes Made'
+                            'message' => 'No KoboPoint credentials provided'
                         ])->setStatusCode(403);
                     }
                 } else {

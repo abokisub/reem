@@ -602,4 +602,87 @@ class AirtimeSend extends Controller
             return 'fail';
         }
     }
+
+    /**
+     * KoboPoint Airtime Purchase Integration
+     * Complete implementation for KoboPoint API
+     */
+    public static function Kobopoint($data)
+    {
+        if (DB::table('airtime')->where(['username' => $data['username'], 'transid' => $data['transid']])->count() == 1) {
+            $sendRequest = DB::table('airtime')->where(['username' => $data['username'], 'transid' => $data['transid']])->first();
+            $network_d = DB::table('network')->where(['network' => $sendRequest->network])->first();
+            
+            try {
+                // Use KoboPoint Service
+                $kobopointService = new \App\Services\KobopointService();
+                
+                // Map network names to KoboPoint network IDs
+                $networkMap = [
+                    'MTN' => '1',
+                    'GLO' => '2', 
+                    'AIRTEL' => '3',
+                    '9MOBILE' => '4'
+                ];
+                
+                $networkId = $networkMap[$network_d->network] ?? '1';
+                
+                \Log::info('KoboPoint Airtime REQUEST:', [
+                    'transid' => $data['transid'],
+                    'network' => $network_d->network,
+                    'network_id' => $networkId,
+                    'phone' => $sendRequest->plan_phone,
+                    'amount' => $sendRequest->amount
+                ]);
+                
+                // Call KoboPoint API
+                $response = $kobopointService->purchaseAirtime(
+                    $networkId,
+                    $sendRequest->plan_phone,
+                    $sendRequest->amount
+                );
+                
+                \Log::info('KoboPoint Airtime RESPONSE:', [
+                    'transid' => $data['transid'],
+                    'response' => $response
+                ]);
+                
+                if (!empty($response)) {
+                    $status = $response['status'] ?? '';
+                    
+                    if ($status === 'success') {
+                        // Store KoboPoint reference if available
+                        if (isset($response['reference'])) {
+                            DB::table('airtime')->where('transid', $data['transid'])
+                                ->update(['api_reference' => $response['reference']]);
+                        }
+                        
+                        \Log::info('KoboPoint Airtime: Returning SUCCESS', ['transid' => $data['transid']]);
+                        return 'success';
+                    } else if ($status === 'fail') {
+                        \Log::info('KoboPoint Airtime: Returning FAIL', [
+                            'transid' => $data['transid'],
+                            'message' => $response['message'] ?? 'Unknown error'
+                        ]);
+                        return 'fail';
+                    } else {
+                        \Log::info('KoboPoint Airtime: Returning PROCESS', ['transid' => $data['transid']]);
+                        return 'process';
+                    }
+                } else {
+                    \Log::warning('KoboPoint Airtime: Empty response', ['transid' => $data['transid']]);
+                    return 'fail';
+                }
+                
+            } catch (\Exception $e) {
+                \Log::error('KoboPoint Airtime Error:', [
+                    'transid' => $data['transid'],
+                    'error' => $e->getMessage()
+                ]);
+                return 'fail';
+            }
+        } else {
+            return 'fail';
+        }
+    }
 }

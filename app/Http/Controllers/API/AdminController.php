@@ -111,23 +111,27 @@ class AdminController extends Controller
                 });
                 if ($check_user->count() > 0) {
 
-                    // Calculate total revenue from successful customer deposits (virtual account credits)
+                    // Calculate TODAY's revenue from successful customer deposits (resets daily)
                     $total_revenue = DB::table('transactions')
                         ->where('category', 'virtual_account_credit')
                         ->where('status', 'success')
+                        ->whereDate('created_at', Carbon::today())
                         ->sum('amount');
 
-                    // Get transaction statistics (filtered to customer deposits)
+                    // Get TODAY's transaction statistics (resets daily)
                     $total_transactions = DB::table('transactions')
                         ->where('category', 'virtual_account_credit')
+                        ->whereDate('created_at', Carbon::today())
                         ->count();
                     $successful_transactions = DB::table('transactions')
                         ->where('category', 'virtual_account_credit')
                         ->where('status', 'success')
+                        ->whereDate('created_at', Carbon::today())
                         ->count();
                     $failed_transactions = DB::table('transactions')
                         ->where('category', 'virtual_account_credit')
                         ->where('status', 'failed')
+                        ->whereDate('created_at', Carbon::today())
                         ->count();
                     $pending_settlement = 0;
                     if (Schema::hasTable('settlement_queue')) {
@@ -140,9 +144,44 @@ class AdminController extends Controller
                     $pending_activations = DB::table('companies')->where('status', 'pending')->count();
                     $total_virtual_accounts = DB::table('virtual_accounts')->count();
 
+                    // Calculate additional TODAY's payment gateway metrics (resets daily)
+                    $total_data_sold = 0;
+                    $total_transfer_amount = 0;
+                    $total_successful_charges = 0;
+                    $pending_transactions_count = 0;
+
+                    // TODAY's data sold metrics (from data table)
+                    if (Schema::hasTable('data')) {
+                        $total_data_sold = DB::table('data')
+                            ->where('plan_status', 1)
+                            ->whereDate('plan_date', Carbon::today())
+                            ->sum('amount');
+                    }
+
+                    // TODAY's transfer metrics (from transactions table)
+                    if (Schema::hasTable('transactions')) {
+                        $total_transfer_amount = DB::table('transactions')
+                            ->whereIn('category', ['transfer', 'bank_transfer', 'wallet_transfer'])
+                            ->where('status', 'success')
+                            ->whereDate('created_at', Carbon::today())
+                            ->sum('amount');
+                        
+                        // Calculate TODAY's charges from successful transactions
+                        $total_successful_charges = DB::table('transactions')
+                            ->where('status', 'success')
+                            ->whereDate('created_at', Carbon::today())
+                            ->sum('charge');
+                        
+                        // Count TODAY's pending transactions
+                        $pending_transactions_count = DB::table('transactions')
+                            ->where('status', 'pending')
+                            ->whereDate('created_at', Carbon::today())
+                            ->count();
+                    }
+
                     try {
                         $users_info = [
-                            // New payment gateway metrics
+                            // TODAY's payment gateway metrics (resets every 24 hours)
                             'total_revenue' => $total_revenue,
                             'total_transactions' => $total_transactions,
                             'successful_transactions' => $successful_transactions,
@@ -152,6 +191,12 @@ class AdminController extends Controller
                             'registered_businesses' => $registered_businesses,
                             'pending_activations' => $pending_activations,
                             'total_virtual_accounts' => $total_virtual_accounts,
+
+                            // TODAY's additional payment gateway metrics (resets every 24 hours)
+                            'total_data_sold' => $total_data_sold,
+                            'total_transfer_amount' => $total_transfer_amount,
+                            'total_successful_charges' => $total_successful_charges,
+                            'pending_transactions_count' => $pending_transactions_count,
 
                             // Existing user wallet metrics (for backward compatibility)
                             'wallet_balance' => DB::table('users')->sum('balance'),
@@ -214,7 +259,7 @@ class AdminController extends Controller
                                 DB::table('campaigns')->where('payout_status', 'pending')->where('status', 'closed')->count(),
                         ];
                     } catch (\Exception $e) {
-                        // If legacy tables don't exist, return payment gateway metrics only
+                        // If legacy tables don't exist, return TODAY's payment gateway metrics only
                         $users_info = [
                             'total_revenue' => $total_revenue,
                             'total_transactions' => $total_transactions,
@@ -225,6 +270,10 @@ class AdminController extends Controller
                             'registered_businesses' => $registered_businesses,
                             'pending_activations' => $pending_activations,
                             'total_virtual_accounts' => $total_virtual_accounts,
+                            'total_data_sold' => $total_data_sold,
+                            'total_transfer_amount' => $total_transfer_amount,
+                            'total_successful_charges' => $total_successful_charges,
+                            'pending_transactions_count' => $pending_transactions_count,
                             'wallet_balance' => 0,
                             'ref_balance' => 0,
                             'all_user' => DB::table('users')->count(),
@@ -903,7 +952,7 @@ class AdminController extends Controller
                                         'company_id' => $user_details->active_company_id,
                                         'type' => 'credit',
                                         'category' => 'other',
-                                        'transaction_type' => 'manual_funding',
+                                        'transaction_type' => 'manual_adjustment',
                                         'settlement_status' => 'settled',
                                         'amount' => $request->amount,
                                         'total_amount' => $request->amount,
@@ -943,7 +992,8 @@ class AdminController extends Controller
                                         $notif_data = [
                                             'username' => $user_details->username,
                                             'message' => 'Your Account has been credited ₦' . $request->amount . ' by admin',
-                                            'date' => $this->system_date(),
+                                            'type' => 'success',
+                                            'adex' => 0,
                                             'habukhan' => 0
                                         ];
                                         $this->inserting_data('notif', $notif_data);
@@ -953,7 +1003,7 @@ class AdminController extends Controller
                                             'company_id' => $user_details->active_company_id,
                                             'type' => 'credit',
                                             'category' => 'other',
-                                            'transaction_type' => 'manual_funding',
+                                            'transaction_type' => 'manual_adjustment',
                                             'settlement_status' => 'settled',
                                             'amount' => $request->amount,
                                             'total_amount' => $request->amount,
@@ -1063,7 +1113,8 @@ class AdminController extends Controller
                                             $notif_data = [
                                                 'username' => $user_details->username,
                                                 'message' => 'Your Account has been credited ₦' . $request->amount . ' by admin',
-                                                'date' => $this->system_date(),
+                                                'type' => 'success',
+                                                'adex' => 0,
                                                 'habukhan' => 0
                                             ];
                                             $this->inserting_data('notif', $notif_data);
@@ -1073,7 +1124,7 @@ class AdminController extends Controller
                                                 'company_id' => $user_details->active_company_id,
                                                 'type' => 'credit',
                                                 'category' => 'other',
-                                                'transaction_type' => 'manual_funding',
+                                                'transaction_type' => 'manual_adjustment',
                                                 'settlement_status' => 'settled',
                                                 'amount' => $request->amount,
                                                 'total_amount' => $request->amount,
@@ -1144,7 +1195,7 @@ class AdminController extends Controller
                             $deposit_ref = $this->generate_ref('Debit');
                             // debiting user over here
                             if ($request->wallet == 'wallet') {
-                                // debiting ain wallet
+                                // debiting main wallet
                                 $update_data = [
                                     'balance' => $user_details->balance - $request->amount
                                 ];
@@ -1166,7 +1217,8 @@ class AdminController extends Controller
                                     $notif_data = [
                                         'username' => $user_details->username,
                                         'message' => 'Your Account has been debited ₦' . $request->amount . ' by admin',
-                                        'date' => $this->system_date(),
+                                        'type' => 'warning',
+                                        'adex' => 0,
                                         'habukhan' => 0
                                     ];
                                     $this->inserting_data('notif', $notif_data);
@@ -1177,7 +1229,7 @@ class AdminController extends Controller
                                         'company_id' => $user_details->active_company_id,
                                         'type' => 'debit',
                                         'category' => 'other',
-                                        'transaction_type' => 'manual_debit',
+                                        'transaction_type' => 'manual_adjustment',
                                         'settlement_status' => 'not_applicable',
                                         'amount' => $request->amount,
                                         'total_amount' => $request->amount,
@@ -1236,6 +1288,82 @@ class AdminController extends Controller
                                         'status' => 403
                                     ])->setStatusCode(403);
                                 }
+                            } else if ($request->wallet == 'business_wallet') {
+                                // debiting business wallet
+                                $company = DB::table('companies')->where('user_id', $user_details->id)->first();
+                                if ($company) {
+                                    $company_wallet = DB::table('company_wallets')->where('company_id', $company->id)->first();
+                                    if ($company_wallet) {
+                                        $update_data = [
+                                            'balance' => $company_wallet->balance - $request->amount
+                                        ];
+                                        if ($this->updateData($update_data, 'company_wallets', ['company_id' => $company->id])) {
+                                            // insert into message
+                                            $message_data = [
+                                                'username' => $user_details->username,
+                                                'amount' => $request->amount,
+                                                'message' => $request->reason,
+                                                'oldbal' => $company_wallet->balance,
+                                                'newbal' => $company_wallet->balance - $request->amount,
+                                                'habukhan_date' => $this->system_date(),
+                                                'plan_status' => 1,
+                                                'transid' => $deposit_ref,
+                                                'role' => 'debit'
+                                            ];
+                                            $this->inserting_data('message', $message_data);
+                                            
+                                            // inserting notif
+                                            $notif_data = [
+                                                'username' => $user_details->username,
+                                                'message' => 'Your Business Wallet has been debited ₦' . $request->amount . ' by admin',
+                                                'type' => 'info',
+                                                'adex' => 0,
+                                                'habukhan' => 0
+                                            ];
+                                            $this->inserting_data('notif', $notif_data);
+
+                                            // inserting into transactions table
+                                            $tx = \App\Models\Transaction::create([
+                                                'user_id' => $user_details->id,
+                                                'company_id' => $company->id,
+                                                'type' => 'debit',
+                                                'category' => 'other',
+                                                'transaction_type' => 'manual_adjustment',
+                                                'settlement_status' => 'not_applicable',
+                                                'amount' => $request->amount,
+                                                'total_amount' => $request->amount,
+                                                'status' => 'success',
+                                                'reference' => $deposit_ref,
+                                                'description' => $wallet . ' Manual Debit - ' . $request->reason,
+                                                'balance_before' => $company_wallet->balance,
+                                                'balance_after' => $company_wallet->balance - $request->amount,
+                                                'metadata' => ['debit_by' => 'admin', 'wallet_type' => $wallet],
+                                                'processed_at' => now(),
+                                            ]);
+
+                                            return response()->json([
+                                                'status' => 'success',
+                                                'account_type' => $wallet,
+                                                'message' => 'Business Wallet Debited Successfully'
+                                            ]);
+                                        } else {
+                                            return response()->json([
+                                                'message' => 'Unable to Debit Business Wallet',
+                                                'status' => false
+                                            ], 403);
+                                        }
+                                    } else {
+                                        return response()->json([
+                                            'message' => 'Company wallet not found',
+                                            'status' => false
+                                        ], 403);
+                                    }
+                                } else {
+                                    return response()->json([
+                                        'message' => 'Company not found for this user',
+                                        'status' => false
+                                    ], 403);
+                                }
                             } else {
                                 // debiting stock wallet
                                 $stock_user_wallet = DB::table('wallet_funding')->where('username', $request->user_username);
@@ -1263,7 +1391,8 @@ class AdminController extends Controller
                                         $notif_data = [
                                             'username' => $user_details->username,
                                             'message' => 'Your Account has been debited ₦' . $request->amount . ' by admin',
-                                            'date' => $this->system_date(),
+                                            'type' => 'warning',
+                                            'adex' => 0,
                                             'habukhan' => 0
                                         ];
                                         $this->inserting_data('notif', $notif_data);
@@ -1274,7 +1403,7 @@ class AdminController extends Controller
                                             'company_id' => $user_details->active_company_id,
                                             'type' => 'debit',
                                             'category' => 'other',
-                                            'transaction_type' => 'manual_debit',
+                                            'transaction_type' => 'manual_adjustment',
                                             'settlement_status' => 'not_applicable',
                                             'amount' => $request->amount,
                                             'total_amount' => $request->amount,
@@ -1437,7 +1566,8 @@ class AdminController extends Controller
                             $notif_data = [
                                 'username' => $details->username,
                                 'message' => 'Your Acount Has Been Upgrade to ' . $request->role . ' Package',
-                                'date' => $this->system_date(),
+                                'type' => 'success',
+                                'adex' => 0,
                                 'habukhan' => 0
                             ];
                             $this->inserting_data('notif', $notif_data);
@@ -1825,11 +1955,19 @@ class AdminController extends Controller
                         $cid = $habukhan->active_company_id;
 
                         return response()->json([
-                            'airtime_discount' => DB::table('airtime_discount')->where('company_id', $cid)->first(),
-                            'cable_charges' => Schema::hasTable('cable_charge') ? DB::table('cable_charge')->where('company_id', $cid)->first() : (object) [],
-                            'bill_charges' => Schema::hasTable('bill_charge') ? DB::table('bill_charge')->where('company_id', $cid)->first() : (object) [],
-                            'cash_discount' => DB::table('cash_discount')->where('company_id', $cid)->first(),
-                            'result_charges' => Schema::hasTable('result_charge') ? DB::table('result_charge')->where('company_id', $cid)->first() : (object) [],
+                            'airtime_discount' => DB::table('airtime_discount')->where('company_id', $cid)->first() 
+                                ?: DB::table('airtime_discount')->whereNull('company_id')->orWhere('company_id', 1)->first(),
+                            'cable_charges' => Schema::hasTable('cable_charge') ? 
+                                (DB::table('cable_charge')->where('company_id', $cid)->first() 
+                                ?: DB::table('cable_charge')->where('company_id', 1)->first()) : (object) [],
+                            'bill_charges' => Schema::hasTable('bill_charge') ? 
+                                (DB::table('bill_charge')->where('company_id', $cid)->first() 
+                                ?: DB::table('bill_charge')->where('company_id', 1)->first()) : (object) [],
+                            'cash_discount' => DB::table('cash_discount')->where('company_id', $cid)->first() 
+                                ?: DB::table('cash_discount')->whereNull('company_id')->orWhere('company_id', 1)->first(),
+                            'result_charges' => Schema::hasTable('result_charge') ? 
+                                (DB::table('result_charge')->where('company_id', $cid)->first() 
+                                ?: DB::table('result_charge')->where('company_id', 1)->first()) : (object) [],
                             'all_network' => DB::table('network')->get(),
                             'cable_result_lock' => Schema::hasTable('cable_result_lock') ? DB::table('cable_result_lock')->first() : (object) [],
 
@@ -2495,8 +2633,6 @@ class AdminController extends Controller
                         ])->setStatusCode(403);
                     }
 
-                    $habukhan = $check_user->first();
-                    $cid = $habukhan->active_company_id;
                     $data = [
                         'mtn' => $request->mtn,
                         'airtel' => $request->airtel,
@@ -2504,11 +2640,11 @@ class AdminController extends Controller
                         'mobile' => $request->mobile,
                     ];
 
-                    $existing = DB::table('recharge_card_sel')->where('company_id', $cid)->first();
+                    // Check if any record exists (global configuration)
+                    $existing = DB::table('recharge_card_sel')->first();
                     if ($existing) {
                         DB::table('recharge_card_sel')->where('id', $existing->id)->update($data);
                     } else {
-                        $data['company_id'] = $cid;
                         DB::table('recharge_card_sel')->insert($data);
                     }
 
@@ -2559,8 +2695,6 @@ class AdminController extends Controller
                         ])->setStatusCode(403);
                     }
 
-                    $habukhan = $check_user->first();
-                    $cid = $habukhan->active_company_id;
                     $data = [
                         'mtn' => $request->mtn,
                         'airtel' => $request->airtel,
@@ -2568,11 +2702,11 @@ class AdminController extends Controller
                         'mobile' => $request->mobile,
                     ];
 
-                    $existing = DB::table('data_card_sel')->where('company_id', $cid)->first();
+                    // Check if any record exists (global configuration)
+                    $existing = DB::table('data_card_sel')->first();
                     if ($existing) {
                         DB::table('data_card_sel')->where('id', $existing->id)->update($data);
                     } else {
-                        $data['company_id'] = $cid;
                         DB::table('data_card_sel')->insert($data);
                     }
 

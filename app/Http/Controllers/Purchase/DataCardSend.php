@@ -398,4 +398,128 @@ class DataCardSend extends Controller
     {
         return null;
     }
+
+    /**
+     * KoboPoint Data Card Printing Integration
+     * Complete implementation for KoboPoint API
+     */
+    public static function Kobopoint($data)
+    {
+        if (DB::table('data_card')->where(['username' => $data['username'], 'transid' => $data['transid']])->count() == 1) {
+            $sendRequest = DB::table('data_card')->where(['username' => $data['username'], 'transid' => $data['transid']])->first();
+            $card_plan = DB::table('data_card_plan')->where('plan_id', $data['plan_id'])->first();
+            
+            try {
+                // Use KoboPoint Service
+                $kobopointService = new \App\Services\KobopointService();
+                
+                // Get data card plans first
+                $plansResponse = $kobopointService->getDataCardPlans();
+                
+                if (empty($plansResponse) || $plansResponse['status'] !== 'success') {
+                    \Log::error('KoboPoint Data Card: Failed to get plans', [
+                        'transid' => $data['transid'],
+                        'response' => $plansResponse
+                    ]);
+                    return 'fail';
+                }
+                
+                // Find matching plan by network and plan details
+                $kobopointPlanId = null;
+                $plans = $plansResponse['data'] ?? [];
+                
+                foreach ($plans as $plan) {
+                    if ($plan['network'] === $card_plan->network && 
+                        stripos($plan['plan'], $card_plan->plan_name) !== false) {
+                        $kobopointPlanId = $plan['id'];
+                        break;
+                    }
+                }
+                
+                if (!$kobopointPlanId) {
+                    \Log::error('KoboPoint Data Card: No matching plan found', [
+                        'transid' => $data['transid'],
+                        'network' => $card_plan->network,
+                        'plan_name' => $card_plan->plan_name
+                    ]);
+                    return 'fail';
+                }
+                
+                // Map network names to KoboPoint network IDs
+                $networkMap = [
+                    'MTN' => '1',
+                    'GLO' => '2', 
+                    'AIRTEL' => '3',
+                    '9MOBILE' => '4'
+                ];
+                
+                $networkId = $networkMap[$card_plan->network] ?? '1';
+                
+                \Log::info('KoboPoint Data Card REQUEST:', [
+                    'transid' => $data['transid'],
+                    'network_id' => $networkId,
+                    'plan_id' => $kobopointPlanId,
+                    'quantity' => $sendRequest->quantity ?? 1
+                ]);
+                
+                // Call KoboPoint API
+                $response = $kobopointService->printDataCards(
+                    $networkId,
+                    $kobopointPlanId,
+                    $sendRequest->quantity ?? 1
+                );
+                
+                \Log::info('KoboPoint Data Card RESPONSE:', [
+                    'transid' => $data['transid'],
+                    'response' => $response
+                ]);
+                
+                if (!empty($response)) {
+                    $status = $response['status'] ?? '';
+                    
+                    if ($status === 'success') {
+                        // Store KoboPoint reference if available
+                        if (isset($response['reference'])) {
+                            DB::table('data_card')->where('transid', $data['transid'])
+                                ->update(['api_reference' => $response['reference']]);
+                        }
+                        
+                        // Store card details
+                        if (isset($response['cards']) && is_array($response['cards'])) {
+                            $cardDetails = '';
+                            foreach ($response['cards'] as $card) {
+                                $cardDetails .= "Serial: " . ($card['serial'] ?? '') . " PIN: " . ($card['pin'] ?? '') . " Plan: " . ($card['plan'] ?? '') . "\n";
+                            }
+                            DB::table('data_card')->where('transid', $data['transid'])
+                                ->update(['token' => $cardDetails]);
+                        }
+                        
+                        \Log::info('KoboPoint Data Card: Returning SUCCESS', ['transid' => $data['transid']]);
+                        return 'success';
+                    } else if ($status === 'fail') {
+                        \Log::info('KoboPoint Data Card: Returning FAIL', [
+                            'transid' => $data['transid'],
+                            'message' => $response['message'] ?? 'Unknown error'
+                        ]);
+                        return 'fail';
+                    } else {
+                        \Log::info('KoboPoint Data Card: Returning PROCESS', ['transid' => $data['transid']]);
+                        return 'process';
+                    }
+                } else {
+                    \Log::warning('KoboPoint Data Card: Empty response', ['transid' => $data['transid']]);
+                    return 'fail';
+                }
+                
+            } catch (\Exception $e) {
+                \Log::error('KoboPoint Data Card Error:', [
+                    'transid' => $data['transid'],
+                    'error' => $e->getMessage()
+                ]);
+                return 'fail';
+            }
+        } else {
+            return 'fail';
+        }
+    }
 }

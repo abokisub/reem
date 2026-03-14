@@ -172,6 +172,15 @@ class UserDashboardController extends Controller
             }
         }
 
+        // 5. Network Balance Analytics (Data Sales by Network and Plan Type)
+        $networkBalances = $this->getNetworkBalances($user->active_company_id, $startDate, $endDate);
+
+        // 6. Service Analytics
+        $serviceAnalytics = $this->getServiceAnalytics($user->active_company_id, $startDate, $endDate);
+
+        // 7. Customer Analytics
+        $customerStats = $this->getCustomerStats($user->active_company_id, $startDate, $endDate);
+
         return response()->json([
             'status' => 'success',
             'filter' => $filter,
@@ -187,7 +196,298 @@ class UserDashboardController extends Controller
                     ['label' => 'Failed', 'value' => (int) ($statusStats['failed'] ?? 0)],
                 ],
                 'revenue_growth' => round($revenueGrowth, 2),
+                'network_balances' => $networkBalances,
+                'service_analytics' => $serviceAnalytics,
+                'customer_stats' => $customerStats,
+                'kyc_analytics' => $this->getKycAnalytics($user->active_company_id, $startDate, $endDate),
+                'profit_loss' => $this->getProfitLossAnalytics($user->active_company_id, $startDate, $endDate),
             ]
         ]);
+    }
+
+    private function getNetworkBalances($companyId, $startDate, $endDate)
+    {
+        $query = DB::table('transactions')
+            ->where('company_id', $companyId)
+            ->where('category', 'data')
+            ->where('status', 'success');
+
+        if ($startDate && $endDate) {
+            $query->whereBetween('created_at', [$startDate, $endDate]);
+        }
+
+        $dataTransactions = $query->get();
+
+        $balances = [
+            // MTN Plans
+            'mtn_sme' => ['amount' => 0, 'volume' => 0],
+            'mtn_sme2' => ['amount' => 0, 'volume' => 0],
+            'mtn_datashare' => ['amount' => 0, 'volume' => 0],
+            'mtn_cg' => ['amount' => 0, 'volume' => 0],
+            'mtn_gifting' => ['amount' => 0, 'volume' => 0],
+            
+            // Airtel Plans
+            'airtel_sme' => ['amount' => 0, 'volume' => 0],
+            'airtel_sme2' => ['amount' => 0, 'volume' => 0],
+            'airtel_datashare' => ['amount' => 0, 'volume' => 0],
+            'airtel_cg' => ['amount' => 0, 'volume' => 0],
+            'airtel_gifting' => ['amount' => 0, 'volume' => 0],
+            
+            // GLO Plans
+            'glo_sme' => ['amount' => 0, 'volume' => 0],
+            'glo_sme2' => ['amount' => 0, 'volume' => 0],
+            'glo_datashare' => ['amount' => 0, 'volume' => 0],
+            'glo_cg' => ['amount' => 0, 'volume' => 0],
+            'glo_gifting' => ['amount' => 0, 'volume' => 0],
+            
+            // 9Mobile Plans
+            'mobile_sme' => ['amount' => 0, 'volume' => 0],
+            'mobile_sme2' => ['amount' => 0, 'volume' => 0],
+            'mobile_datashare' => ['amount' => 0, 'volume' => 0],
+            'mobile_cg' => ['amount' => 0, 'volume' => 0],
+            'mobile_gifting' => ['amount' => 0, 'volume' => 0],
+        ];
+
+        foreach ($dataTransactions as $transaction) {
+            $description = strtolower($transaction->description ?? '');
+            $amount = $transaction->amount ?? 0;
+            
+            // Extract data volume from description
+            preg_match('/(\d+(?:\.\d+)?)\s*(gb|mb)/i', $description, $matches);
+            $volume = 0;
+            if (!empty($matches)) {
+                $size = floatval($matches[1]);
+                $unit = strtolower($matches[2]);
+                $volume = ($unit === 'gb') ? $size : ($size / 1024);
+            }
+            
+            // Categorize by network and plan type
+            if (strpos($description, 'mtn') !== false) {
+                if (strpos($description, 'sme2') !== false || strpos($description, 'sme 2') !== false) {
+                    $balances['mtn_sme2']['amount'] += $amount;
+                    $balances['mtn_sme2']['volume'] += $volume;
+                } elseif (strpos($description, 'sme') !== false) {
+                    $balances['mtn_sme']['amount'] += $amount;
+                    $balances['mtn_sme']['volume'] += $volume;
+                } elseif (strpos($description, 'datashare') !== false || strpos($description, 'data share') !== false) {
+                    $balances['mtn_datashare']['amount'] += $amount;
+                    $balances['mtn_datashare']['volume'] += $volume;
+                } elseif (strpos($description, 'corporate') !== false || strpos($description, 'cg') !== false) {
+                    $balances['mtn_cg']['amount'] += $amount;
+                    $balances['mtn_cg']['volume'] += $volume;
+                } elseif (strpos($description, 'gift') !== false) {
+                    $balances['mtn_gifting']['amount'] += $amount;
+                    $balances['mtn_gifting']['volume'] += $volume;
+                }
+            } elseif (strpos($description, 'airtel') !== false) {
+                if (strpos($description, 'sme2') !== false || strpos($description, 'sme 2') !== false) {
+                    $balances['airtel_sme2']['amount'] += $amount;
+                    $balances['airtel_sme2']['volume'] += $volume;
+                } elseif (strpos($description, 'sme') !== false) {
+                    $balances['airtel_sme']['amount'] += $amount;
+                    $balances['airtel_sme']['volume'] += $volume;
+                } elseif (strpos($description, 'datashare') !== false || strpos($description, 'data share') !== false) {
+                    $balances['airtel_datashare']['amount'] += $amount;
+                    $balances['airtel_datashare']['volume'] += $volume;
+                } elseif (strpos($description, 'corporate') !== false || strpos($description, 'cg') !== false) {
+                    $balances['airtel_cg']['amount'] += $amount;
+                    $balances['airtel_cg']['volume'] += $volume;
+                } elseif (strpos($description, 'gift') !== false) {
+                    $balances['airtel_gifting']['amount'] += $amount;
+                    $balances['airtel_gifting']['volume'] += $volume;
+                }
+            } elseif (strpos($description, 'glo') !== false) {
+                if (strpos($description, 'sme2') !== false || strpos($description, 'sme 2') !== false) {
+                    $balances['glo_sme2']['amount'] += $amount;
+                    $balances['glo_sme2']['volume'] += $volume;
+                } elseif (strpos($description, 'sme') !== false) {
+                    $balances['glo_sme']['amount'] += $amount;
+                    $balances['glo_sme']['volume'] += $volume;
+                } elseif (strpos($description, 'datashare') !== false || strpos($description, 'data share') !== false) {
+                    $balances['glo_datashare']['amount'] += $amount;
+                    $balances['glo_datashare']['volume'] += $volume;
+                } elseif (strpos($description, 'corporate') !== false || strpos($description, 'cg') !== false) {
+                    $balances['glo_cg']['amount'] += $amount;
+                    $balances['glo_cg']['volume'] += $volume;
+                } elseif (strpos($description, 'gift') !== false) {
+                    $balances['glo_gifting']['amount'] += $amount;
+                    $balances['glo_gifting']['volume'] += $volume;
+                }
+            } elseif (strpos($description, '9mobile') !== false || strpos($description, 'etisalat') !== false) {
+                if (strpos($description, 'sme2') !== false || strpos($description, 'sme 2') !== false) {
+                    $balances['mobile_sme2']['amount'] += $amount;
+                    $balances['mobile_sme2']['volume'] += $volume;
+                } elseif (strpos($description, 'sme') !== false) {
+                    $balances['mobile_sme']['amount'] += $amount;
+                    $balances['mobile_sme']['volume'] += $volume;
+                } elseif (strpos($description, 'datashare') !== false || strpos($description, 'data share') !== false) {
+                    $balances['mobile_datashare']['amount'] += $amount;
+                    $balances['mobile_datashare']['volume'] += $volume;
+                } elseif (strpos($description, 'corporate') !== false || strpos($description, 'cg') !== false) {
+                    $balances['mobile_cg']['amount'] += $amount;
+                    $balances['mobile_cg']['volume'] += $volume;
+                } elseif (strpos($description, 'gift') !== false) {
+                    $balances['mobile_gifting']['amount'] += $amount;
+                    $balances['mobile_gifting']['volume'] += $volume;
+                }
+            }
+        }
+
+        return $balances;
+    }
+
+    private function getServiceAnalytics($companyId, $startDate, $endDate)
+    {
+        $query = DB::table('transactions')
+            ->where('company_id', $companyId)
+            ->where('status', 'success');
+
+        if ($startDate && $endDate) {
+            $query->whereBetween('created_at', [$startDate, $endDate]);
+        }
+
+        $services = $query->select('category', DB::raw('COUNT(*) as count'), DB::raw('SUM(amount) as total'))
+            ->groupBy('category')
+            ->get();
+
+        $analytics = [];
+        foreach ($services as $service) {
+            $analytics[$service->category] = [
+                'count' => $service->count,
+                'amount' => $service->total
+            ];
+        }
+
+        return $analytics;
+    }
+
+    private function getCustomerStats($companyId, $startDate, $endDate)
+    {
+        // Total customers
+        $totalCustomers = DB::table('virtual_accounts')
+            ->where('company_id', $companyId)
+            ->count();
+
+        // Active customers (made transactions in period)
+        $activeCustomersQuery = DB::table('transactions')
+            ->where('company_id', $companyId)
+            ->where('status', 'success');
+
+        if ($startDate && $endDate) {
+            $activeCustomersQuery->whereBetween('created_at', [$startDate, $endDate]);
+        }
+
+        $activeCustomers = $activeCustomersQuery->distinct('user_id')->count();
+
+        // Customer balance (company's wallet balance)
+        $customerBalance = DB::table('company_wallets')
+            ->where('company_id', $companyId)
+            ->where('currency', 'NGN')
+            ->value('balance') ?? 0;
+
+        return [
+            'total_customers' => $totalCustomers,
+            'active_customers' => $activeCustomers,
+            'customer_balance' => $customerBalance
+        ];
+    }
+
+    private function getKycAnalytics($companyId, $startDate, $endDate)
+    {
+        $kycQuery = DB::table('transactions')
+            ->where('company_id', $companyId)
+            ->where('status', 'success');
+
+        if ($startDate && $endDate) {
+            $kycQuery->whereBetween('created_at', [$startDate, $endDate]);
+        }
+
+        // BVN Verification Analytics
+        $bvnTransactions = $kycQuery->clone()
+            ->where(function($query) {
+                $query->where('category', 'kyc_charge')
+                      ->where('description', 'LIKE', '%BVN%')
+                      ->orWhere('transaction_type', 'kyc_charge')
+                      ->where('description', 'LIKE', '%BVN%');
+            });
+
+        $bvnTotal = $bvnTransactions->sum('amount');
+        $bvnCharges = $bvnTransactions->sum('fee');
+        $bvnCount = $bvnTransactions->count();
+
+        // NIN Verification Analytics
+        $ninTransactions = $kycQuery->clone()
+            ->where(function($query) {
+                $query->where('category', 'kyc_charge')
+                      ->where('description', 'LIKE', '%NIN%')
+                      ->orWhere('transaction_type', 'kyc_charge')
+                      ->where('description', 'LIKE', '%NIN%');
+            });
+
+        $ninTotal = $ninTransactions->sum('amount');
+        $ninCharges = $ninTransactions->sum('fee');
+        $ninCount = $ninTransactions->count();
+
+        return [
+            'bvn_total' => $bvnTotal,
+            'bvn_charges' => $bvnCharges,
+            'bvn_count' => $bvnCount,
+            'nin_total' => $ninTotal,
+            'nin_charges' => $ninCharges,
+            'nin_count' => $ninCount,
+            'total_kyc_amount' => $bvnTotal + $ninTotal,
+            'total_kyc_charges' => $bvnCharges + $ninCharges,
+            'total_kyc_count' => $bvnCount + $ninCount,
+        ];
+    }
+
+    private function getProfitLossAnalytics($companyId, $startDate, $endDate)
+    {
+        $transactionQuery = DB::table('transactions')
+            ->where('company_id', $companyId)
+            ->where('status', 'success');
+
+        if ($startDate && $endDate) {
+            $transactionQuery->whereBetween('created_at', [$startDate, $endDate]);
+        }
+
+        // Total Revenue (Credits - money coming in)
+        $totalRevenue = $transactionQuery->clone()
+            ->where('type', 'credit')
+            ->sum('amount');
+
+        // Total Costs (Debits - money going out + fees)
+        $totalDebits = $transactionQuery->clone()
+            ->where('type', 'debit')
+            ->sum('amount');
+
+        $totalFees = $transactionQuery->clone()
+            ->sum('fee');
+
+        $totalCosts = $totalDebits + $totalFees;
+
+        // Net Profit/Loss
+        $netProfit = $totalRevenue - $totalCosts;
+
+        // Profit Margin
+        $profitMargin = $totalRevenue > 0 ? (($netProfit / $totalRevenue) * 100) : 0;
+
+        // Transaction counts
+        $totalTransactions = $transactionQuery->clone()->count();
+        $creditTransactions = $transactionQuery->clone()->where('type', 'credit')->count();
+        $debitTransactions = $transactionQuery->clone()->where('type', 'debit')->count();
+
+        return [
+            'total_revenue' => $totalRevenue,
+            'total_costs' => $totalCosts,
+            'total_debits' => $totalDebits,
+            'total_fees' => $totalFees,
+            'net_profit' => $netProfit,
+            'profit_margin' => round($profitMargin, 2),
+            'total_transactions' => $totalTransactions,
+            'credit_transactions' => $creditTransactions,
+            'debit_transactions' => $debitTransactions,
+            'is_profitable' => $netProfit >= 0,
+        ];
     }
 }

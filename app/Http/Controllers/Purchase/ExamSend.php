@@ -347,4 +347,115 @@ class ExamSend extends Controller
     {
         return null;
     }
+
+    /**
+     * KoboPoint Education PIN Purchase Integration
+     * Complete implementation for KoboPoint API
+     */
+    public static function Kobopoint($data)
+    {
+        if (DB::table('exam')->where(['username' => $data['username'], 'transid' => $data['transid']])->count() == 1) {
+            $sendRequest = DB::table('exam')->where(['username' => $data['username'], 'transid' => $data['transid']])->first();
+            $exam_plan = DB::table('exam_plan')->where('plan_id', $data['plan_id'])->first();
+            
+            try {
+                // Use KoboPoint Service
+                $kobopointService = new \App\Services\KobopointService();
+                
+                // Get education providers first
+                $providersResponse = $kobopointService->getEducationProviders();
+                
+                if (empty($providersResponse) || $providersResponse['status'] !== 'success') {
+                    \Log::error('KoboPoint Exam: Failed to get education providers', [
+                        'transid' => $data['transid'],
+                        'response' => $providersResponse
+                    ]);
+                    return 'fail';
+                }
+                
+                // Find matching exam provider
+                $kobopointExamId = null;
+                $providers = $providersResponse['data'] ?? [];
+                
+                foreach ($providers as $provider) {
+                    if (stripos($provider['name'], $exam_plan->exam_name) !== false ||
+                        stripos($exam_plan->exam_name, $provider['name']) !== false) {
+                        $kobopointExamId = $provider['id'];
+                        break;
+                    }
+                }
+                
+                if (!$kobopointExamId) {
+                    \Log::error('KoboPoint Exam: No matching exam provider found', [
+                        'transid' => $data['transid'],
+                        'exam_name' => $exam_plan->exam_name
+                    ]);
+                    return 'fail';
+                }
+                
+                \Log::info('KoboPoint Exam REQUEST:', [
+                    'transid' => $data['transid'],
+                    'exam_id' => $kobopointExamId,
+                    'quantity' => $sendRequest->quantity ?? 1
+                ]);
+                
+                // Call KoboPoint API
+                $response = $kobopointService->purchaseEducationPin(
+                    $kobopointExamId,
+                    $sendRequest->quantity ?? 1
+                );
+                
+                \Log::info('KoboPoint Exam RESPONSE:', [
+                    'transid' => $data['transid'],
+                    'response' => $response
+                ]);
+                
+                if (!empty($response)) {
+                    $status = $response['status'] ?? '';
+                    
+                    if ($status === 'success') {
+                        // Store KoboPoint reference if available
+                        if (isset($response['reference'])) {
+                            DB::table('exam')->where('transid', $data['transid'])
+                                ->update(['api_reference' => $response['reference']]);
+                        }
+                        
+                        // Store PIN details
+                        if (isset($response['pins']) && is_array($response['pins'])) {
+                            $pinDetails = '';
+                            foreach ($response['pins'] as $pin) {
+                                $pinDetails .= "Serial: " . ($pin['serial'] ?? '') . " PIN: " . ($pin['pin'] ?? '') . "\n";
+                            }
+                            DB::table('exam')->where('transid', $data['transid'])
+                                ->update(['token' => $pinDetails]);
+                        }
+                        
+                        \Log::info('KoboPoint Exam: Returning SUCCESS', ['transid' => $data['transid']]);
+                        return 'success';
+                    } else if ($status === 'fail') {
+                        \Log::info('KoboPoint Exam: Returning FAIL', [
+                            'transid' => $data['transid'],
+                            'message' => $response['message'] ?? 'Unknown error'
+                        ]);
+                        return 'fail';
+                    } else {
+                        \Log::info('KoboPoint Exam: Returning PROCESS', ['transid' => $data['transid']]);
+                        return 'process';
+                    }
+                } else {
+                    \Log::warning('KoboPoint Exam: Empty response', ['transid' => $data['transid']]);
+                    return 'fail';
+                }
+                
+            } catch (\Exception $e) {
+                \Log::error('KoboPoint Exam Error:', [
+                    'transid' => $data['transid'],
+                    'error' => $e->getMessage()
+                ]);
+                return 'fail';
+            }
+        } else {
+            return 'fail';
+        }
+    }
 }

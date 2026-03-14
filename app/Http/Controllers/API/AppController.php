@@ -963,12 +963,12 @@ class AppController extends Controller
                             if ($select_user->count() > 0) {
                                 $users = $select_user->first();
                                 if ($users->profile_image !== null) {
-                                    $profile_image[] = ['username' => $habukhan->username, 'id' => $habukhan->id, 'message' => $habukhan->message, 'date' => $habukhan->date, 'profile_image' => $users->profile_image, 'status' => $habukhan->habukhan];
+                                    $profile_image[] = ['username' => $habukhan->username, 'id' => $habukhan->id, 'message' => $habukhan->message, 'date' => $habukhan->created_at, 'profile_image' => $users->profile_image, 'status' => $habukhan->habukhan];
                                 } else {
-                                    $profile_image[] = ['username' => $habukhan->username, 'id' => $habukhan->id, 'message' => $habukhan->message, 'date' => $habukhan->date, 'profile_image' => $users->username, 'status' => $habukhan->habukhan];
+                                    $profile_image[] = ['username' => $habukhan->username, 'id' => $habukhan->id, 'message' => $habukhan->message, 'date' => $habukhan->created_at, 'profile_image' => $users->username, 'status' => $habukhan->habukhan];
                                 }
                             } else {
-                                $profile_image[] = ['username' => $habukhan->username, 'id' => $habukhan->id, 'message' => $habukhan->message, 'date' => $habukhan->date, 'profile_image' => $habukhan->username, 'status' => $habukhan->habukhan];
+                                $profile_image[] = ['username' => $habukhan->username, 'id' => $habukhan->id, 'message' => $habukhan->message, 'date' => $habukhan->created_at, 'profile_image' => $habukhan->username, 'status' => $habukhan->habukhan];
                             }
                         }
                         return response()->json([

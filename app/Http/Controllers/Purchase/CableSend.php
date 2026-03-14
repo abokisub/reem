@@ -394,4 +394,123 @@ class CableSend extends Controller
     {
         return null;
     }
+
+    /**
+     * KoboPoint Cable TV Purchase Integration
+     * Complete implementation for KoboPoint API
+     */
+    public static function Kobopoint($data)
+    {
+        if (DB::table('cable')->where(['username' => $data['username'], 'transid' => $data['transid']])->count() == 1) {
+            $sendRequest = DB::table('cable')->where(['username' => $data['username'], 'transid' => $data['transid']])->first();
+            $cable_plan = DB::table('cable_plan')->where('plan_id', $data['plan_id'])->first();
+            
+            try {
+                // Use KoboPoint Service
+                $kobopointService = new \App\Services\KobopointService();
+                
+                // Get cable providers and plans first
+                $plansResponse = $kobopointService->getCablePlans();
+                
+                if (empty($plansResponse) || $plansResponse['status'] !== 'success') {
+                    \Log::error('KoboPoint Cable: Failed to get cable plans', [
+                        'transid' => $data['transid'],
+                        'response' => $plansResponse
+                    ]);
+                    return 'fail';
+                }
+                
+                // Find matching cable provider and plan
+                $kobopointCableId = null;
+                $kobopointPlanId = null;
+                $providers = $plansResponse['data'] ?? [];
+                
+                foreach ($providers as $provider) {
+                    if (stripos($provider['name'], $cable_plan->cable_name) !== false ||
+                        stripos($cable_plan->cable_name, $provider['name']) !== false) {
+                        $kobopointCableId = $provider['id'];
+                        
+                        // Find matching plan within this provider
+                        foreach ($provider['plans'] as $plan) {
+                            if ((int)$plan['amount'] === (int)$cable_plan->plan_amount) {
+                                $kobopointPlanId = $plan['id'];
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                }
+                
+                if (!$kobopointCableId || !$kobopointPlanId) {
+                    \Log::error('KoboPoint Cable: No matching cable/plan found', [
+                        'transid' => $data['transid'],
+                        'cable_name' => $cable_plan->cable_name,
+                        'plan_amount' => $cable_plan->plan_amount
+                    ]);
+                    return 'fail';
+                }
+                
+                \Log::info('KoboPoint Cable REQUEST:', [
+                    'transid' => $data['transid'],
+                    'cable_id' => $kobopointCableId,
+                    'smart_card' => $sendRequest->smart_card_number,
+                    'plan_id' => $kobopointPlanId
+                ]);
+                
+                // Call KoboPoint API
+                $response = $kobopointService->purchaseCable(
+                    $kobopointCableId,
+                    $sendRequest->smart_card_number,
+                    $kobopointPlanId
+                );
+                
+                \Log::info('KoboPoint Cable RESPONSE:', [
+                    'transid' => $data['transid'],
+                    'response' => $response
+                ]);
+                
+                if (!empty($response)) {
+                    $status = $response['status'] ?? '';
+                    
+                    if ($status === 'success') {
+                        // Store KoboPoint reference if available
+                        if (isset($response['reference'])) {
+                            DB::table('cable')->where('transid', $data['transid'])
+                                ->update(['api_reference' => $response['reference']]);
+                        }
+                        
+                        // Store plan details
+                        if (isset($response['plan'])) {
+                            DB::table('cable')->where('transid', $data['transid'])
+                                ->update(['api_response' => $response['plan']]);
+                        }
+                        
+                        \Log::info('KoboPoint Cable: Returning SUCCESS', ['transid' => $data['transid']]);
+                        return 'success';
+                    } else if ($status === 'fail') {
+                        \Log::info('KoboPoint Cable: Returning FAIL', [
+                            'transid' => $data['transid'],
+                            'message' => $response['message'] ?? 'Unknown error'
+                        ]);
+                        return 'fail';
+                    } else {
+                        \Log::info('KoboPoint Cable: Returning PROCESS', ['transid' => $data['transid']]);
+                        return 'process';
+                    }
+                } else {
+                    \Log::warning('KoboPoint Cable: Empty response', ['transid' => $data['transid']]);
+                    return 'fail';
+                }
+                
+            } catch (\Exception $e) {
+                \Log::error('KoboPoint Cable Error:', [
+                    'transid' => $data['transid'],
+                    'error' => $e->getMessage()
+                ]);
+                return 'fail';
+            }
+        } else {
+            return 'fail';
+        }
+    }
 }

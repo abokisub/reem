@@ -1009,4 +1009,127 @@ class DataSend extends Controller
         // 4. If all fail
         return 'fail';
     }
+
+    /**
+     * KoboPoint Data Purchase Integration
+     * Complete implementation for KoboPoint API
+     */
+    public static function Kobopoint($data)
+    {
+        if (DB::table('data')->where(['username' => $data['username'], 'transid' => $data['transid']])->count() == 1) {
+            $sendRequest = DB::table('data')->where(['username' => $data['username'], 'transid' => $data['transid']])->first();
+            $network_d = DB::table('network')->where(['network' => $sendRequest->network])->first();
+            $dataplan = DB::table('data_plan')->where(['plan_id' => $data['purchase_plan']])->first();
+            
+            try {
+                // Use KoboPoint Service
+                $kobopointService = new \App\Services\KobopointService();
+                
+                // Map network names to KoboPoint network IDs
+                $networkMap = [
+                    'MTN' => '1',
+                    'GLO' => '2', 
+                    'AIRTEL' => '3',
+                    '9MOBILE' => '4'
+                ];
+                
+                $networkId = $networkMap[$network_d->network] ?? '1';
+                
+                // Get KoboPoint data plans first
+                $plansResponse = $kobopointService->getDataPlans();
+                
+                if (empty($plansResponse) || $plansResponse['status'] !== 'success') {
+                    \Log::error('KoboPoint Data: Failed to get data plans', [
+                        'transid' => $data['transid'],
+                        'response' => $plansResponse
+                    ]);
+                    return 'fail';
+                }
+                
+                // Find matching plan by amount and network
+                $kobopointPlanId = null;
+                $plans = $plansResponse['data'] ?? [];
+                
+                foreach ($plans as $plan) {
+                    if ($plan['network'] === $network_d->network && 
+                        (int)$plan['amount'] === (int)$dataplan->plan_amount) {
+                        $kobopointPlanId = $plan['id'];
+                        break;
+                    }
+                }
+                
+                if (!$kobopointPlanId) {
+                    \Log::error('KoboPoint Data: No matching plan found', [
+                        'transid' => $data['transid'],
+                        'network' => $network_d->network,
+                        'amount' => $dataplan->plan_amount
+                    ]);
+                    return 'fail';
+                }
+                
+                \Log::info('KoboPoint Data REQUEST:', [
+                    'transid' => $data['transid'],
+                    'network' => $network_d->network,
+                    'network_id' => $networkId,
+                    'phone' => $sendRequest->plan_phone,
+                    'plan_id' => $kobopointPlanId,
+                    'plan_name' => $dataplan->plan_name
+                ]);
+                
+                // Call KoboPoint API
+                $response = $kobopointService->purchaseData(
+                    $networkId,
+                    $sendRequest->plan_phone,
+                    $kobopointPlanId
+                );
+                
+                \Log::info('KoboPoint Data RESPONSE:', [
+                    'transid' => $data['transid'],
+                    'response' => $response
+                ]);
+                
+                if (!empty($response)) {
+                    $status = $response['status'] ?? '';
+                    
+                    if ($status === 'success') {
+                        // Store KoboPoint reference if available
+                        if (isset($response['reference'])) {
+                            DB::table('data')->where('transid', $data['transid'])
+                                ->update(['api_reference' => $response['reference']]);
+                        }
+                        
+                        // Store API response
+                        if (isset($response['plan_details'])) {
+                            DB::table('data')->where('transid', $data['transid'])
+                                ->update(['api_response' => $response['plan_details']]);
+                        }
+                        
+                        \Log::info('KoboPoint Data: Returning SUCCESS', ['transid' => $data['transid']]);
+                        return 'success';
+                    } else if ($status === 'fail') {
+                        \Log::info('KoboPoint Data: Returning FAIL', [
+                            'transid' => $data['transid'],
+                            'message' => $response['message'] ?? 'Unknown error'
+                        ]);
+                        return 'fail';
+                    } else {
+                        \Log::info('KoboPoint Data: Returning PROCESS', ['transid' => $data['transid']]);
+                        return 'process';
+                    }
+                } else {
+                    \Log::warning('KoboPoint Data: Empty response', ['transid' => $data['transid']]);
+                    return 'fail';
+                }
+                
+            } catch (\Exception $e) {
+                \Log::error('KoboPoint Data Error:', [
+                    'transid' => $data['transid'],
+                    'error' => $e->getMessage()
+                ]);
+                return 'fail';
+            }
+        } else {
+            return 'fail';
+        }
+    }
 }

@@ -352,3 +352,52 @@ Step 3: Network Found: 4
 Step 4: Limits Passed
 Step 5: Balance Sufficient
 Step 6: Debit Success
+Step 3: Network Found: 1
+Step 4: Limits Passed
+Step 3: Network Found: 1
+Step 4: Limits Passed
+Step 5: Balance Sufficient
+Step 3: Network Found: 1
+Step 4: Limits Passed
+Step 5: Balance Sufficient
+Step 3: Network Found: 1
+Step 4: Limits Passed
+Step 5: Balance Sufficient
+Step 3: Network Found: 1
+Step 4: Limits Passed
+Step 5: Balance Sufficient
+Step 3: Network Found: 1
+Step 4: Limits Passed
+Step 5: Balance Sufficient
+Step 3: Network Found: 1
+Step 4: Limits Passed
+Step 5: Balance Sufficient
+Step 3: Network Found: 1
+Step 4: Limits Passed
+Step 5: Balance Sufficient
+Step 5.1: Attempting to debit user ID: 2, current balance: 10000.00, new balance: 10000
+Step 5.2: Update result: FAILED
+Step 3: Network Found: 1
+Step 5: Balance Sufficient
+Step 5.1: Attempting to debit user ID: 2, current balance: 10000.00, new balance: 9997.5
+Step 5.2: Update result: SUCCESS
+Step 6: Debit Success
+Step 3: Network Found: 1
+Step 5: Balance Sufficient
+Step 5.1: Attempting to debit user ID: 2, current balance: 10000.00, new balance: 9997.5
+Step 5.2: Update result: SUCCESS
+Step 6: Debit Success
+Step 3: Network Found: 1
+Step 5: Balance Sufficient
+Step 5.1: Attempting to debit user ID: 2, current balance: 10000.00, new balance: 9997.5
+Step 5.2: Update result: SUCCESS
+Step 6: Debit Success
+Step 3: Network Found: 1
+Step 5: Balance Sufficient
+Step 5.1: Attempting to debit user ID: 1, current balance: 10000.00, new balance: 10000
+Step 5.2: Update result: FAILED
+Step 3: Network Found: 1
+Step 5: Balance Sufficient
+Step 5.1: Attempting to debit user ID: 1, current balance: 10000.00, new balance: 9997
+Step 5.2: Update result: SUCCESS
+Step 6: Debit Success

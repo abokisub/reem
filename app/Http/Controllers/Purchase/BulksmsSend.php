@@ -226,4 +226,81 @@ class BulksmsSend extends Controller
             return 'fail';
         }
     }
+
+    /**
+     * KoboPoint Bulk SMS Integration
+     * Complete implementation for KoboPoint API
+     */
+    public static function Kobopoint($data)
+    {
+        if (DB::table('bulksms')->where(['username' => $data['username'], 'transid' => $data['transid']])->count() == 1) {
+            $sendRequest = DB::table('bulksms')->where(['username' => $data['username'], 'transid' => $data['transid']])->first();
+            
+            try {
+                // Use KoboPoint Service
+                $kobopointService = new \App\Services\KobopointService();
+                
+                \Log::info('KoboPoint Bulk SMS REQUEST:', [
+                    'transid' => $data['transid'],
+                    'sender' => $sendRequest->sender_name ?? 'PointWave',
+                    'message' => substr($sendRequest->message, 0, 50) . '...',
+                    'recipients_count' => substr_count($sendRequest->phone_number, ',') + 1
+                ]);
+                
+                // Call KoboPoint API
+                $response = $kobopointService->sendBulkSms(
+                    $sendRequest->sender_name ?? 'PointWave',
+                    $sendRequest->message,
+                    $sendRequest->phone_number
+                );
+                
+                \Log::info('KoboPoint Bulk SMS RESPONSE:', [
+                    'transid' => $data['transid'],
+                    'response' => $response
+                ]);
+                
+                if (!empty($response)) {
+                    $status = $response['status'] ?? '';
+                    
+                    if ($status === 'success') {
+                        // Store KoboPoint reference if available
+                        if (isset($response['reference'])) {
+                            DB::table('bulksms')->where('transid', $data['transid'])
+                                ->update(['api_reference' => $response['reference']]);
+                        }
+                        
+                        // Store SMS details
+                        if (isset($response['total_recipients'])) {
+                            DB::table('bulksms')->where('transid', $data['transid'])
+                                ->update(['api_response' => 'Recipients: ' . $response['total_recipients'] . ', Cost: ₦' . ($response['cost'] ?? '0')]);
+                        }
+                        
+                        \Log::info('KoboPoint Bulk SMS: Returning SUCCESS', ['transid' => $data['transid']]);
+                        return 'success';
+                    } else if ($status === 'fail') {
+                        \Log::info('KoboPoint Bulk SMS: Returning FAIL', [
+                            'transid' => $data['transid'],
+                            'message' => $response['message'] ?? 'Unknown error'
+                        ]);
+                        return 'fail';
+                    } else {
+                        \Log::info('KoboPoint Bulk SMS: Returning PROCESS', ['transid' => $data['transid']]);
+                        return 'process';
+                    }
+                } else {
+                    \Log::warning('KoboPoint Bulk SMS: Empty response', ['transid' => $data['transid']]);
+                    return 'fail';
+                }
+                
+            } catch (\Exception $e) {
+                \Log::error('KoboPoint Bulk SMS Error:', [
+                    'transid' => $data['transid'],
+                    'error' => $e->getMessage()
+                ]);
+                return 'fail';
+            }
+        } else {
+            return 'fail';
+        }
+    }
 }

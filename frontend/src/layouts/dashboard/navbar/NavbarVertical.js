@@ -87,15 +87,55 @@ export default function NavbarVertical({ isOpenSidebar, onCloseSidebar }) {
       ],
     },
 
+    // {
+    //   subheader: 'BILL PAYMENTS',
+    //   items: [
+    //     {
+    //       title: 'Purchase Services',
+    //       icon: ICONS.fund,
+    //       path: PATH_DASHBOARD.general.buydata,
+    //       children: [
+    //         { title: 'Buy Data', path: PATH_DASHBOARD.general.buydata, icon: ICONS.buy_data },
+    //         { title: 'Buy Airtime', path: PATH_DASHBOARD.general.buyairtime, icon: ICONS.buy_airtime },
+    //         { title: 'Buy Cable TV', path: PATH_DASHBOARD.general.buycable, icon: ICONS.buy_cable },
+    //         { title: 'Electricity Bill', path: PATH_DASHBOARD.general.buybill, icon: ICONS.fund },
+    //         { title: 'Airtime to Cash', path: PATH_DASHBOARD.general.cash, icon: ICONS.wallet },
+    //         { title: 'Education PIN', path: PATH_DASHBOARD.general.exam, icon: ICONS.calendar },
+    //         { title: 'Bulk SMS', path: PATH_DASHBOARD.general.bulksms, icon: ICONS.phone },
+    //       ],
+    //     },
+    //   ],
+    // },
+
     {
       subheader: 'COLLECTIONS',
       items: [
         { title: 'R.A Transactions', path: PATH_DASHBOARD.general.ra_transactions, icon: ICONS.transaction },
         { title: 'Customers', path: PATH_DASHBOARD.general.customers, icon: ICONS.user },
         { title: 'Reserved Account', path: PATH_DASHBOARD.general.reserved_account, icon: getIcon('ic_banking') },
-        { title: 'Cards', path: PATH_DASHBOARD.general.cards, icon: getIcon('card') },
+        // { title: 'Cards', path: PATH_DASHBOARD.general.cards, icon: getIcon('card') },
       ],
     },
+    // {
+    //   subheader: 'TRANSACTION HISTORY',
+    //   items: [
+    //     {
+    //       title: 'Purchase Transactions',
+    //       icon: ICONS.transaction,
+    //       path: PATH_DASHBOARD.trans.root,
+    //       children: [
+    //         { title: 'Data Purchase', path: PATH_DASHBOARD.trans.data },
+    //         { title: 'Airtime Purchase', path: PATH_DASHBOARD.trans.airtime },
+    //         { title: 'TV Subscriptions', path: PATH_DASHBOARD.trans.cable },
+    //         { title: 'Electricity Bills', path: PATH_DASHBOARD.trans.bill },
+    //         { title: 'Exam PIN', path: PATH_DASHBOARD.trans.exam },
+    //         { title: 'Bulk SMS', path: PATH_DASHBOARD.trans.bulksms },
+    //         { title: 'Airtime to Cash', path: PATH_DASHBOARD.trans.airtimecash },
+    //       ],
+    //     },
+    //     { title: 'Complaints', path: PATH_DASHBOARD.trans.complaints, icon: ICONS.message },
+    //   ],
+    // },
     {
       subheader: 'DISBURSEMENTS',
       items: [
@@ -105,6 +145,8 @@ export default function NavbarVertical({ isOpenSidebar, onCloseSidebar }) {
     {
       subheader: 'MERCHANT',
       items: [
+        // { title: 'Calculator', path: PATH_DASHBOARD.general.calculator, icon: ICONS.cal },
+        // { title: 'Pricing', path: PATH_DASHBOARD.general.pricing, icon: ICONS.price },
         { title: 'Settings', path: PATH_DASHBOARD.general.settings, icon: ICONS.setting },
         { title: 'Webhook Event', path: PATH_DASHBOARD.general.webhook, icon: getIcon('ic_chat'), info: <Label color="info">New</Label> },
         { title: 'Developer API', path: PATH_DASHBOARD.general.developer, icon: getIcon('api') },
@@ -203,9 +245,9 @@ export default function NavbarVertical({ isOpenSidebar, onCloseSidebar }) {
           children: [
             { title: 'Data Plans', path: PATH_ADMIN.plan.data },
             { title: 'Network Config', path: PATH_ADMIN.plan.network },
-            { title: 'Bill / Utility', path: PATH_ADMIN.plan.bill },
-            { title: 'Cable TV', path: PATH_ADMIN.plan.cable },
-            { title: 'Education', path: PATH_ADMIN.plan.exam },
+            // { title: 'Bill / Utility', path: PATH_ADMIN.plan.bill },
+            // { title: 'Cable TV', path: PATH_ADMIN.plan.cable },
+            // { title: 'Education', path: PATH_ADMIN.plan.exam },
           ],
         },
         {

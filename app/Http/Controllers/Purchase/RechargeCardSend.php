@@ -398,4 +398,128 @@ class RechargeCardSend extends Controller
     {
         return null;
     }
+
+    /**
+     * KoboPoint Recharge Card Printing Integration
+     * Complete implementation for KoboPoint API
+     */
+    public static function Kobopoint($data)
+    {
+        if (DB::table('recharge_card')->where(['username' => $data['username'], 'transid' => $data['transid']])->count() == 1) {
+            $sendRequest = DB::table('recharge_card')->where(['username' => $data['username'], 'transid' => $data['transid']])->first();
+            $card_plan = DB::table('recharge_card_plan')->where('plan_id', $data['plan_id'])->first();
+            
+            try {
+                // Use KoboPoint Service
+                $kobopointService = new \App\Services\KobopointService();
+                
+                // Get recharge card plans first
+                $plansResponse = $kobopointService->getRechargeCardPlans();
+                
+                if (empty($plansResponse) || $plansResponse['status'] !== 'success') {
+                    \Log::error('KoboPoint Recharge Card: Failed to get plans', [
+                        'transid' => $data['transid'],
+                        'response' => $plansResponse
+                    ]);
+                    return 'fail';
+                }
+                
+                // Find matching plan by network and denomination
+                $kobopointPlanId = null;
+                $plans = $plansResponse['data'] ?? [];
+                
+                foreach ($plans as $plan) {
+                    if ($plan['network'] === $card_plan->network && 
+                        (int)$plan['denomination'] === (int)$card_plan->plan_amount) {
+                        $kobopointPlanId = $plan['id'];
+                        break;
+                    }
+                }
+                
+                if (!$kobopointPlanId) {
+                    \Log::error('KoboPoint Recharge Card: No matching plan found', [
+                        'transid' => $data['transid'],
+                        'network' => $card_plan->network,
+                        'denomination' => $card_plan->plan_amount
+                    ]);
+                    return 'fail';
+                }
+                
+                // Map network names to KoboPoint network IDs
+                $networkMap = [
+                    'MTN' => '1',
+                    'GLO' => '2', 
+                    'AIRTEL' => '3',
+                    '9MOBILE' => '4'
+                ];
+                
+                $networkId = $networkMap[$card_plan->network] ?? '1';
+                
+                \Log::info('KoboPoint Recharge Card REQUEST:', [
+                    'transid' => $data['transid'],
+                    'network_id' => $networkId,
+                    'plan_id' => $kobopointPlanId,
+                    'quantity' => $sendRequest->quantity ?? 1
+                ]);
+                
+                // Call KoboPoint API
+                $response = $kobopointService->printRechargeCards(
+                    $networkId,
+                    $kobopointPlanId,
+                    $sendRequest->quantity ?? 1
+                );
+                
+                \Log::info('KoboPoint Recharge Card RESPONSE:', [
+                    'transid' => $data['transid'],
+                    'response' => $response
+                ]);
+                
+                if (!empty($response)) {
+                    $status = $response['status'] ?? '';
+                    
+                    if ($status === 'success') {
+                        // Store KoboPoint reference if available
+                        if (isset($response['reference'])) {
+                            DB::table('recharge_card')->where('transid', $data['transid'])
+                                ->update(['api_reference' => $response['reference']]);
+                        }
+                        
+                        // Store card details
+                        if (isset($response['cards']) && is_array($response['cards'])) {
+                            $cardDetails = '';
+                            foreach ($response['cards'] as $card) {
+                                $cardDetails .= "Serial: " . ($card['serial'] ?? '') . " PIN: " . ($card['pin'] ?? '') . " Amount: ₦" . ($card['amount'] ?? '') . "\n";
+                            }
+                            DB::table('recharge_card')->where('transid', $data['transid'])
+                                ->update(['token' => $cardDetails]);
+                        }
+                        
+                        \Log::info('KoboPoint Recharge Card: Returning SUCCESS', ['transid' => $data['transid']]);
+                        return 'success';
+                    } else if ($status === 'fail') {
+                        \Log::info('KoboPoint Recharge Card: Returning FAIL', [
+                            'transid' => $data['transid'],
+                            'message' => $response['message'] ?? 'Unknown error'
+                        ]);
+                        return 'fail';
+                    } else {
+                        \Log::info('KoboPoint Recharge Card: Returning PROCESS', ['transid' => $data['transid']]);
+                        return 'process';
+                    }
+                } else {
+                    \Log::warning('KoboPoint Recharge Card: Empty response', ['transid' => $data['transid']]);
+                    return 'fail';
+                }
+                
+            } catch (\Exception $e) {
+                \Log::error('KoboPoint Recharge Card Error:', [
+                    'transid' => $data['transid'],
+                    'error' => $e->getMessage()
+                ]);
+                return 'fail';
+            }
+        } else {
+            return 'fail';
+        }
+    }
 }

@@ -382,4 +382,119 @@ class BillSend extends Controller
     {
         return null;
     }
+
+    /**
+     * KoboPoint Electricity Bill Purchase Integration
+     * Complete implementation for KoboPoint API
+     */
+    public static function Kobopoint($data)
+    {
+        if (DB::table('bill')->where(['username' => $data['username'], 'transid' => $data['transid']])->count() == 1) {
+            $sendRequest = DB::table('bill')->where(['username' => $data['username'], 'transid' => $data['transid']])->first();
+            $bill_plan = DB::table('bill_plan')->where('plan_id', $data['plan_id'])->first();
+            
+            try {
+                // Use KoboPoint Service
+                $kobopointService = new \App\Services\KobopointService();
+                
+                // Get electricity providers first
+                $providersResponse = $kobopointService->getElectricityProviders();
+                
+                if (empty($providersResponse) || $providersResponse['status'] !== 'success') {
+                    \Log::error('KoboPoint Bill: Failed to get electricity providers', [
+                        'transid' => $data['transid'],
+                        'response' => $providersResponse
+                    ]);
+                    return 'fail';
+                }
+                
+                // Find matching DISCO by name
+                $kobopointDiscoId = null;
+                $providers = $providersResponse['data'] ?? [];
+                
+                foreach ($providers as $provider) {
+                    if (stripos($provider['name'], $bill_plan->plan_name) !== false ||
+                        stripos($bill_plan->plan_name, $provider['name']) !== false) {
+                        $kobopointDiscoId = $provider['id'];
+                        break;
+                    }
+                }
+                
+                if (!$kobopointDiscoId) {
+                    \Log::error('KoboPoint Bill: No matching DISCO found', [
+                        'transid' => $data['transid'],
+                        'plan_name' => $bill_plan->plan_name
+                    ]);
+                    return 'fail';
+                }
+                
+                \Log::info('KoboPoint Bill REQUEST:', [
+                    'transid' => $data['transid'],
+                    'disco_id' => $kobopointDiscoId,
+                    'meter_number' => $sendRequest->meter_number,
+                    'amount' => $sendRequest->amount
+                ]);
+                
+                // Call KoboPoint API
+                $response = $kobopointService->purchaseElectricity(
+                    $kobopointDiscoId,
+                    $sendRequest->meter_number,
+                    $sendRequest->amount
+                );
+                
+                \Log::info('KoboPoint Bill RESPONSE:', [
+                    'transid' => $data['transid'],
+                    'response' => $response
+                ]);
+                
+                if (!empty($response)) {
+                    $status = $response['status'] ?? '';
+                    
+                    if ($status === 'success') {
+                        // Store KoboPoint reference if available
+                        if (isset($response['reference'])) {
+                            DB::table('bill')->where('transid', $data['transid'])
+                                ->update(['api_reference' => $response['reference']]);
+                        }
+                        
+                        // Store electricity token
+                        if (isset($response['token'])) {
+                            DB::table('bill')->where('transid', $data['transid'])
+                                ->update(['token' => $response['token']]);
+                        }
+                        
+                        // Store units information
+                        if (isset($response['units'])) {
+                            DB::table('bill')->where('transid', $data['transid'])
+                                ->update(['api_response' => 'Units: ' . $response['units']]);
+                        }
+                        
+                        \Log::info('KoboPoint Bill: Returning SUCCESS', ['transid' => $data['transid']]);
+                        return 'success';
+                    } else if ($status === 'fail') {
+                        \Log::info('KoboPoint Bill: Returning FAIL', [
+                            'transid' => $data['transid'],
+                            'message' => $response['message'] ?? 'Unknown error'
+                        ]);
+                        return 'fail';
+                    } else {
+                        \Log::info('KoboPoint Bill: Returning PROCESS', ['transid' => $data['transid']]);
+                        return 'process';
+                    }
+                } else {
+                    \Log::warning('KoboPoint Bill: Empty response', ['transid' => $data['transid']]);
+                    return 'fail';
+                }
+                
+            } catch (\Exception $e) {
+                \Log::error('KoboPoint Bill Error:', [
+                    'transid' => $data['transid'],
+                    'error' => $e->getMessage()
+                ]);
+                return 'fail';
+            }
+        } else {
+            return 'fail';
+        }
+    }
 }

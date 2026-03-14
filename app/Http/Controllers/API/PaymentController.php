@@ -100,7 +100,8 @@ class PaymentController extends Controller
         DB::table('notif')->insert([
             'username' => $user->username,
             'message' => 'Account Credited By Automated Bank Transfer ₦' . number_format($credit, 2),
-            'date' => $this->system_date(),
+            'type' => 'success',
+            'adex' => 0,
             'habukhan' => 0
         ]);
 
@@ -422,7 +423,8 @@ class PaymentController extends Controller
                         DB::table('notif')->insert([
                             'username' => $user->username,
                             'message' => 'Account Credited By Monnify ATM ₦' . number_format($credit, 2),
-                            'date' => $this->system_date(),
+                            'type' => 'success',
+                            'adex' => 0,
                             'habukhan' => 0
                         ]);
                         DB::table('message')->insert([

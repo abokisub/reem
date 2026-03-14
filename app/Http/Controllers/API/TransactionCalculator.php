@@ -23,78 +23,78 @@ class TransactionCalculator extends Controller
                     $ngn_rate = $card_settings->ngn_rate ?? 1600;
                     // all here
                     if ($request->status == 'TODAY') {
-                        $data_trans = DB::table('data')->whereDate('plan_date', Carbon::now("Africa/Lagos"))->where(['plan_status' => 1])->get();
-                        $airtime_trans = DB::table('airtime')->whereDate('plan_date', Carbon::now("Africa/Lagos"))->where(['plan_status' => 1])->get();
-                        $cable_trans = DB::table('cable')->whereDate('date', Carbon::now("Africa/Lagos"))->where(['status' => 1])->get();
-                        $exam_trans = DB::table('exam')->whereDate('plan_date', Carbon::now("Africa/Lagos"))->where(['plan_status' => 1])->get();
-                        $bulksms_trans = DB::table('bulksms')->whereDate('plan_date', Carbon::now("Africa/Lagos"))->where(['plan_status' => 1])->get();
+                        $data_trans = DB::table('data_plan')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success'])->get();
+                        $airtime_trans = DB::table('transactions')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success', 'category' => 'airtime'])->get();
+                        $cable_trans = DB::table('cable')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success'])->get();
+                        $exam_trans = DB::table('transactions')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success', 'category' => 'education'])->get();
+                        $bulksms_trans = DB::table('transactions')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success', 'category' => 'bulksms'])->get();
                         $deposit_trans = DB::table('transactions')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success', 'type' => 'credit', 'category' => 'funding'])->get();
-                        $spend_trans = DB::table('message')->where(function ($query) {
-                            $query->where('role', '!=', 'credit');
-                            $query->where('role', '!=', 'transfer');
-                            $query->where('plan_status', '!=', 2);
-                        })->whereDate('habukhan_date', Carbon::now("Africa/Lagos"))->where(['plan_status' => 1])->get();
-                        $cash_trans = DB::table('cash')->whereDate('plan_date', Carbon::now("Africa/Lagos"))->where(['plan_status' => 1])->get();
-                        $bill_trans = DB::table('bill')->whereDate('date', Carbon::now("Africa/Lagos"))->where(['status' => 1])->get();
+                        $spend_trans = DB::table('transactions')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success', 'type' => 'debit'])->get();
+                        $cash_trans = DB::table('transactions')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success', 'category' => 'airtime_to_cash'])->get();
+                        $bill_trans = DB::table('bill')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success'])->get();
                         $transfer_trans = DB::table('transactions')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success', 'type' => 'debit', 'category' => 'transfer_out'])->get();
-                        $card_ext_trans = DB::table('card_transactions')->join('virtual_cards', 'card_transactions.card_id', '=', 'virtual_cards.card_id')->select('card_transactions.*', 'virtual_cards.card_type')->whereDate('card_transactions.created_at', Carbon::now("Africa/Lagos"))->get();
+                        $card_ext_trans = collect([]); // Virtual cards not implemented yet
+                        
+                        // Additional services for comprehensive calculation
+                        $recharge_card_trans = DB::table('recharge_card_plan')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success'])->get();
+                        $data_card_trans = DB::table('data_card')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where(['status' => 'success'])->get();
                         $charity_donations = DB::table('donations')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where('status', 'confirmed')->get();
                         $charity_withdrawals = DB::table('donations')->whereDate('created_at', Carbon::now("Africa/Lagos"))->where('status', 'withdrawn')->get();
 
                     } else if ($request->status == '7DAYS') {
-                        $data_trans = DB::table('data')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['plan_status' => 1])->get();
-                        $airtime_trans = DB::table('airtime')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['plan_status' => 1])->get();
-                        $cable_trans = DB::table('cable')->whereDate('date', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['plan_status' => 1])->get();
-                        $exam_trans = DB::table('exam')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['plan_status' => 1])->get();
-                        $bulksms_trans = DB::table('bulksms')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['plan_status' => 1])->get();
+                        $data_trans = DB::table('data_plan')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success'])->get();
+                        $airtime_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success', 'category' => 'airtime'])->get();
+                        $cable_trans = DB::table('cable')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success'])->get();
+                        $exam_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success', 'category' => 'education'])->get();
+                        $bulksms_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success', 'category' => 'bulksms'])->get();
                         $deposit_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success', 'type' => 'credit', 'category' => 'funding'])->get();
-                        $spend_trans = DB::table('message')->where(function ($query) {
-                            $query->where('role', '!=', 'credit');
-                            $query->where('role', '!=', 'transfer');
-                            $query->where('plan_status', '!=', 2);
-                        })->whereDate('habukhan_date', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['plan_status' => 1])->get();
-                        $cash_trans = DB::table('cash')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['plan_status' => 1])->get();
-                        $bill_trans = DB::table('bill')->whereDate('date', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['plan_status' => 1])->get();
+                        $spend_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success', 'type' => 'debit'])->get();
+                        $cash_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success', 'category' => 'airtime_to_cash'])->get();
+                        $bill_trans = DB::table('bill')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success'])->get();
                         $transfer_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success', 'type' => 'debit', 'category' => 'transfer_out'])->get();
-                        $card_ext_trans = DB::table('card_transactions')->join('virtual_cards', 'card_transactions.card_id', '=', 'virtual_cards.card_id')->select('card_transactions.*', 'virtual_cards.card_type')->whereDate('card_transactions.created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->get();
+                        $card_ext_trans = collect([]);
+                        
+                        // Additional services
+                        $recharge_card_trans = DB::table('recharge_card_plan')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success'])->get();
+                        $data_card_trans = DB::table('data_card')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where(['status' => 'success'])->get();
                         $charity_donations = DB::table('donations')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where('status', 'confirmed')->get();
                         $charity_withdrawals = DB::table('donations')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(7))->where('status', 'withdrawn')->get();
 
                     } else if ($request->status == '30DAYS') {
-                        $data_trans = DB::table('data')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['plan_status' => 1])->get();
-                        $airtime_trans = DB::table('airtime')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['plan_status' => 1])->get();
-                        $cable_trans = DB::table('cable')->whereDate('date', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['plan_status' => 1])->get();
-                        $exam_trans = DB::table('exam')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['plan_status' => 1])->get();
-                        $bulksms_trans = DB::table('bulksms')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['plan_status' => 1])->get();
+                        $data_trans = DB::table('data_plan')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success'])->get();
+                        $airtime_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success', 'category' => 'airtime'])->get();
+                        $cable_trans = DB::table('cable')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success'])->get();
+                        $exam_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success', 'category' => 'education'])->get();
+                        $bulksms_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success', 'category' => 'bulksms'])->get();
                         $deposit_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success', 'type' => 'credit', 'category' => 'funding'])->get();
-                        $spend_trans = DB::table('message')->where(function ($query) {
-                            $query->where('role', '!=', 'credit');
-                            $query->where('role', '!=', 'transfer');
-                            $query->where('plan_status', '!=', 2);
-                        })->whereDate('habukhan_date', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['plan_status' => 1])->get();
-                        $cash_trans = DB::table('cash')->whereDate('plan_date', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['plan_status' => 1])->get();
-                        $bill_trans = DB::table('bill')->whereDate('date', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['plan_status' => 1])->get();
+                        $spend_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success', 'type' => 'debit'])->get();
+                        $cash_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success', 'category' => 'airtime_to_cash'])->get();
+                        $bill_trans = DB::table('bill')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success'])->get();
                         $transfer_trans = DB::table('transactions')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success', 'type' => 'debit', 'category' => 'transfer_out'])->get();
-                        $card_ext_trans = DB::table('card_transactions')->join('virtual_cards', 'card_transactions.card_id', '=', 'virtual_cards.card_id')->select('card_transactions.*', 'virtual_cards.card_type')->whereDate('card_transactions.created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->get();
+                        $card_ext_trans = collect([]);
+                        
+                        // Additional services
+                        $recharge_card_trans = DB::table('recharge_card_plan')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success'])->get();
+                        $data_card_trans = DB::table('data_card')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where(['status' => 'success'])->get();
                         $charity_donations = DB::table('donations')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where('status', 'confirmed')->get();
                         $charity_withdrawals = DB::table('donations')->whereDate('created_at', '>', Carbon::now("Africa/Lagos")->subDays(30))->where('status', 'withdrawn')->get();
 
                     } else if ($request->status == 'ALL TIME') {
-                        $data_trans = DB::table('data')->where(['plan_status' => 1])->get();
-                        $airtime_trans = DB::table('airtime')->where(['plan_status' => 1])->get();
-                        $cable_trans = DB::table('cable')->where(['plan_status' => 1])->get();
-                        $exam_trans = DB::table('exam')->where(['plan_status' => 1])->get();
-                        $bulksms_trans = DB::table('bulksms')->where(['plan_status' => 1])->get();
+                        $data_trans = DB::table('data_plan')->where(['status' => 'success'])->get();
+                        $airtime_trans = DB::table('transactions')->where(['status' => 'success', 'category' => 'airtime'])->get();
+                        $cable_trans = DB::table('cable')->where(['status' => 'success'])->get();
+                        $exam_trans = DB::table('transactions')->where(['status' => 'success', 'category' => 'education'])->get();
+                        $bulksms_trans = DB::table('transactions')->where(['status' => 'success', 'category' => 'bulksms'])->get();
                         $deposit_trans = DB::table('transactions')->where(['status' => 'success', 'type' => 'credit', 'category' => 'funding'])->get();
-                        $spend_trans = DB::table('message')->where(function ($query) {
-                            $query->where('role', '!=', 'credit');
-                            $query->where('role', '!=', 'transfer');
-                            $query->where('plan_status', '!=', 2);
-                        })->where(['plan_status' => 1])->get();
-                        $cash_trans = DB::table('cash')->where(['plan_status' => 1])->get();
-                        $bill_trans = DB::table('bill')->where(['plan_status' => 1])->get();
+                        $spend_trans = DB::table('transactions')->where(['status' => 'success', 'type' => 'debit'])->get();
+                        $cash_trans = DB::table('transactions')->where(['status' => 'success', 'category' => 'airtime_to_cash'])->get();
+                        $bill_trans = DB::table('bill')->where(['status' => 'success'])->get();
                         $transfer_trans = DB::table('transactions')->where(['status' => 'success', 'type' => 'debit', 'category' => 'transfer_out'])->get();
-                        $card_ext_trans = DB::table('card_transactions')->join('virtual_cards', 'card_transactions.card_id', '=', 'virtual_cards.card_id')->select('card_transactions.*', 'virtual_cards.card_type')->get();
+                        $card_ext_trans = collect([]);
+                        
+                        // Additional services
+                        $recharge_card_trans = DB::table('recharge_card_plan')->where(['status' => 'success'])->get();
+                        $data_card_trans = DB::table('data_card')->where(['status' => 'success'])->get();
                         $charity_donations = DB::table('donations')->where('status', 'confirmed')->get();
                         $charity_withdrawals = DB::table('donations')->where('status', 'withdrawn')->get();
 
@@ -657,6 +657,12 @@ class TransactionCalculator extends Controller
                     $card_creation_count = 0;
                     $card_creation_amount = 0;
                     $card_funding_amount = 0;
+                    
+                    // Additional services calculations
+                    $recharge_card_total = 0;
+                    $recharge_card_charges = 0;
+                    $data_card_total = 0;
+                    $data_card_charges = 0;
 
                     foreach ($spend_trans as $spend) {
                         $money_spent += $spend->amount;
@@ -849,6 +855,12 @@ class TransactionCalculator extends Controller
                         $calculate_mobile_datashare = number_format($mobile_datashare, 3) . 'GB';
                     }
 
+                    // Profit/Loss Calculations
+                    $total_revenue = $deposit_amount;
+                    $total_costs = $money_spent + $transfer_total + $transfer_charges;
+                    $net_profit = $total_revenue - $total_costs;
+                    $profit_margin = $total_revenue > 0 ? (($net_profit / $total_revenue) * 100) : 0;
+
                     return response()->json([
                         'status' => 'success',
                         'charity_donations' => number_format($charity_donation_amount, 2),
@@ -962,7 +974,19 @@ class TransactionCalculator extends Controller
                         'spend_trans' => number_format($habukhan_out_trans, 1),
                         'spend_amount' => number_format($money_spent, 2),
                         'transfer_amount' => number_format($transfer_total, 2),
-                        'transfer_charges' => number_format($transfer_charges, 2)
+                        'transfer_charges' => number_format($transfer_charges, 2),
+                        
+                        // Additional services
+                        'recharge_card_total' => number_format($recharge_card_total, 2),
+                        'recharge_card_charges' => number_format($recharge_card_charges, 2),
+                        'data_card_total' => number_format($data_card_total, 2),
+                        'data_card_charges' => number_format($data_card_charges, 2),
+                        
+                        // Profit/Loss Analysis
+                        'total_revenue' => number_format($total_revenue, 2),
+                        'total_costs' => number_format($total_costs, 2),
+                        'net_profit' => number_format($net_profit, 2),
+                        'profit_margin' => number_format($profit_margin, 2)
                     ]);
                 } else {
                     return response()->json([
@@ -1701,6 +1725,12 @@ class TransactionCalculator extends Controller
                         $referral_total += $ref->amount;
                     }
 
+                    // Profit/Loss Calculations for User
+                    $user_total_revenue = $deposit_amount;
+                    $user_total_costs = $money_spent + $transfer_total + $transfer_charges;
+                    $user_net_profit = $user_total_revenue - $user_total_costs;
+                    $user_profit_margin = $user_total_revenue > 0 ? (($user_net_profit / $user_total_revenue) * 100) : 0;
+
                     return response()->json([
                         'status' => 'success',
                         'charity_donations' => number_format($charity_donation_amount, 2),
@@ -1796,7 +1826,13 @@ class TransactionCalculator extends Controller
                             ['name' => 'Education', 'amount' => round($education_total, 2), 'icon' => 'school', 'color' => '0xFF8B5CF6'],
                             ['name' => 'Referrals', 'amount' => round($referral_total, 2), 'icon' => 'people', 'color' => '0xFFEC4899'],
                             ['name' => 'Others', 'amount' => round($others_total, 2), 'icon' => 'more_horiz', 'color' => '0xFF6B7280'],
-                        ]
+                        ],
+                        
+                        // Profit/Loss Analysis for User
+                        'total_revenue' => number_format($user_total_revenue, 2),
+                        'total_costs' => number_format($user_total_costs, 2),
+                        'net_profit' => number_format($user_net_profit, 2),
+                        'profit_margin' => number_format($user_profit_margin, 2)
                     ]);
                 } else {
                     return response()->json([
