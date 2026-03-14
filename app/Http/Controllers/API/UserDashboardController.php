@@ -22,7 +22,7 @@ class UserDashboardController extends Controller
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        $filter = $request->query('filter', 'Today');
+        $filter = $request->query('filter', 'All Time');
         $now = \Carbon\Carbon::now("Africa/Lagos");
         $startDate = $now->copy()->startOfDay();
         $endDate = $now->copy()->endOfDay();
@@ -60,11 +60,38 @@ class UserDashboardController extends Controller
                 break;
         }
 
+        // Check if user is admin - if so, show system-wide data
+        $isAdmin = strtoupper($user->type) === 'ADMIN';
+        $companyId = $isAdmin ? null : $user->active_company_id;
+
+        // For admin: Get total system wallet balance from company_wallets table
+        if ($isAdmin) {
+            $totalSystemBalance = (float) DB::table('company_wallets')->sum('balance');
+            $totalCompanies = DB::table('companies')->where('status', 'active')->count();
+            $totalVirtualAccounts = DB::table('virtual_accounts')->where('status', 'active')->count();
+        } else {
+            // For regular companies: Get their wallet balance
+            $companyWallet = DB::table('company_wallets')
+                ->where('company_id', $user->active_company_id)
+                ->where('currency', 'NGN')
+                ->first();
+            $totalSystemBalance = $companyWallet ? (float) $companyWallet->balance : 0;
+            $totalCompanies = 1; // Just their company
+            $totalVirtualAccounts = DB::table('virtual_accounts')
+                ->where('company_id', $user->active_company_id)
+                ->where('status', 'active')
+                ->count();
+        }
+
         // 1. Total Revenue, Daily Revenue (for charts), and Status Distribution
         $revenueQuery = DB::table('transactions')
-            ->where('company_id', $user->active_company_id)
             ->where('category', 'virtual_account_credit')
             ->where('type', 'credit');
+
+        // Only filter by company if not admin
+        if (!$isAdmin) {
+            $revenueQuery->where('company_id', $user->active_company_id);
+        }
 
         if ($startDate && $endDate) {
             $revenueQuery->whereBetween('created_at', [$startDate, $endDate]);
@@ -74,9 +101,13 @@ class UserDashboardController extends Controller
 
         // Status Distribution (Deposits)
         $statusDistribution = DB::table('transactions')
-            ->where('company_id', $user->active_company_id)
             ->where('category', 'virtual_account_credit')
             ->where('type', 'credit');
+
+        // Only filter by company if not admin
+        if (!$isAdmin) {
+            $statusDistribution->where('company_id', $user->active_company_id);
+        }
 
         if ($startDate && $endDate) {
             $statusDistribution->whereBetween('created_at', [$startDate, $endDate]);
@@ -89,12 +120,18 @@ class UserDashboardController extends Controller
         // Revenue Chart (Daily)
         $revenueChart = [];
         if ($startDate && $endDate) {
-            $dailyRevenue = DB::table('transactions')
-                ->where('company_id', $user->active_company_id)
+            $dailyRevenueQuery = DB::table('transactions')
                 ->where('category', 'virtual_account_credit')
                 ->where('type', 'credit')
                 ->where('status', 'success')
-                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereBetween('created_at', [$startDate, $endDate]);
+
+            // Only filter by company if not admin
+            if (!$isAdmin) {
+                $dailyRevenueQuery->where('company_id', $user->active_company_id);
+            }
+
+            $dailyRevenue = $dailyRevenueQuery
                 ->select(DB::raw('DATE(created_at) as date'), DB::raw('SUM(amount) as total'))
                 ->groupBy('date')
                 ->pluck('total', 'date');
@@ -111,9 +148,13 @@ class UserDashboardController extends Controller
 
         // 2. Total Transactions and Transaction Analytics
         $transactionsQuery = DB::table('transactions')
-            ->where('company_id', $user->active_company_id)
             ->where('category', 'virtual_account_credit')
             ->where('type', 'credit');
+
+        // Only filter by company if not admin
+        if (!$isAdmin) {
+            $transactionsQuery->where('company_id', $user->active_company_id);
+        }
 
         if ($startDate && $endDate) {
             $transactionsQuery->whereBetween('created_at', [$startDate, $endDate]);
@@ -123,11 +164,17 @@ class UserDashboardController extends Controller
         // Transaction Chart (Daily)
         $transactionChart = [];
         if ($startDate && $endDate) {
-            $dailyTransactions = DB::table('transactions')
-                ->where('company_id', $user->active_company_id)
+            $dailyTransactionsQuery = DB::table('transactions')
                 ->where('category', 'virtual_account_credit')
                 ->where('type', 'credit')
-                ->whereBetween('created_at', [$startDate, $endDate])
+                ->whereBetween('created_at', [$startDate, $endDate]);
+
+            // Only filter by company if not admin
+            if (!$isAdmin) {
+                $dailyTransactionsQuery->where('company_id', $user->active_company_id);
+            }
+
+            $dailyTransactions = $dailyTransactionsQuery
                 ->select(DB::raw('DATE(created_at) as date'), DB::raw('count(*) as count'))
                 ->groupBy('date')
                 ->pluck('count', 'date');
@@ -144,10 +191,15 @@ class UserDashboardController extends Controller
         // 3. Pending Settlement (from settlement_queue table)
         $pendingSettlement = 0;
         if (\Schema::hasTable('settlement_queue')) {
-            $pendingSettlement = (float) DB::table('settlement_queue')
-                ->where('company_id', $user->active_company_id)
-                ->where('status', 'pending')
-                ->sum('amount');
+            $settlementQuery = DB::table('settlement_queue')
+                ->where('status', 'pending');
+
+            // Only filter by company if not admin
+            if (!$isAdmin) {
+                $settlementQuery->where('company_id', $user->active_company_id);
+            }
+
+            $pendingSettlement = (float) $settlementQuery->sum('amount');
         }
 
         // 4. Growth Stats (Compare with previous period)
@@ -157,13 +209,18 @@ class UserDashboardController extends Controller
             $prevStartDate = $startDate->copy()->subDays($daysDiff);
             $prevEndDate = $startDate->copy()->subSecond();
 
-            $prevRevenue = DB::table('transactions')
-                ->where('company_id', $user->active_company_id)
+            $prevRevenueQuery = DB::table('transactions')
                 ->where('category', 'virtual_account_credit')
                 ->where('type', 'credit')
                 ->where('status', 'success')
-                ->whereBetween('created_at', [$prevStartDate, $prevEndDate])
-                ->sum('amount');
+                ->whereBetween('created_at', [$prevStartDate, $prevEndDate]);
+
+            // Only filter by company if not admin
+            if (!$isAdmin) {
+                $prevRevenueQuery->where('company_id', $user->active_company_id);
+            }
+
+            $prevRevenue = $prevRevenueQuery->sum('amount');
 
             if ($prevRevenue > 0) {
                 $revenueGrowth = (($totalRevenue - $prevRevenue) / $prevRevenue) * 100;
@@ -173,21 +230,25 @@ class UserDashboardController extends Controller
         }
 
         // 5. Network Balance Analytics (Data Sales by Network and Plan Type)
-        $networkBalances = $this->getNetworkBalances($user->active_company_id, $startDate, $endDate);
+        $networkBalances = $this->getNetworkBalances($companyId, $startDate, $endDate);
 
         // 6. Service Analytics
-        $serviceAnalytics = $this->getServiceAnalytics($user->active_company_id, $startDate, $endDate);
+        $serviceAnalytics = $this->getServiceAnalytics($companyId, $startDate, $endDate);
 
         // 7. Customer Analytics
-        $customerStats = $this->getCustomerStats($user->active_company_id, $startDate, $endDate);
+        $customerStats = $this->getCustomerStats($companyId, $startDate, $endDate);
 
         return response()->json([
             'status' => 'success',
             'filter' => $filter,
+            'is_admin' => $isAdmin,
             'data' => [
                 'total_revenue' => $totalRevenue,
                 'total_transactions' => $totalTransactions,
                 'pending_settlement' => $pendingSettlement,
+                'system_wallet_balance' => $totalSystemBalance, // NEW: Total system wallet balance
+                'total_companies' => $totalCompanies, // NEW: Total active companies
+                'total_virtual_accounts' => $totalVirtualAccounts, // NEW: Total virtual accounts
                 'revenue_chart' => $revenueChart,
                 'transaction_chart' => $transactionChart,
                 'status_distribution' => [
@@ -199,8 +260,8 @@ class UserDashboardController extends Controller
                 'network_balances' => $networkBalances,
                 'service_analytics' => $serviceAnalytics,
                 'customer_stats' => $customerStats,
-                'kyc_analytics' => $this->getKycAnalytics($user->active_company_id, $startDate, $endDate),
-                'profit_loss' => $this->getProfitLossAnalytics($user->active_company_id, $startDate, $endDate),
+                'kyc_analytics' => $this->getKycAnalytics($companyId, $startDate, $endDate),
+                'profit_loss' => $this->getProfitLossAnalytics($companyId, $startDate, $endDate),
             ]
         ]);
     }

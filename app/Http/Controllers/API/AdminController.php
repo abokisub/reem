@@ -170,7 +170,7 @@ class AdminController extends Controller
                         $total_successful_charges = DB::table('transactions')
                             ->where('status', 'success')
                             ->whereDate('created_at', Carbon::today())
-                            ->sum('charge');
+                            ->sum('fee');
                         
                         // Count TODAY's pending transactions
                         $pending_transactions_count = DB::table('transactions')
@@ -180,6 +180,9 @@ class AdminController extends Controller
                     }
 
                     try {
+                        // Get TOTAL SYSTEM BALANCE from company_wallets (not just today's)
+                        $total_system_balance = (float) DB::table('company_wallets')->sum('balance');
+                        
                         $users_info = [
                             // TODAY's payment gateway metrics (resets every 24 hours)
                             'total_revenue' => $total_revenue,
@@ -191,6 +194,9 @@ class AdminController extends Controller
                             'registered_businesses' => $registered_businesses,
                             'pending_activations' => $pending_activations,
                             'total_virtual_accounts' => $total_virtual_accounts,
+
+                            // NEW: Total system wallet balance (all companies combined)
+                            'total_system_balance' => $total_system_balance,
 
                             // TODAY's additional payment gateway metrics (resets every 24 hours)
                             'total_data_sold' => $total_data_sold,
@@ -260,6 +266,8 @@ class AdminController extends Controller
                         ];
                     } catch (\Exception $e) {
                         // If legacy tables don't exist, return TODAY's payment gateway metrics only
+                        $total_system_balance = (float) DB::table('company_wallets')->sum('balance');
+                        
                         $users_info = [
                             'total_revenue' => $total_revenue,
                             'total_transactions' => $total_transactions,
@@ -274,6 +282,7 @@ class AdminController extends Controller
                             'total_transfer_amount' => $total_transfer_amount,
                             'total_successful_charges' => $total_successful_charges,
                             'pending_transactions_count' => $pending_transactions_count,
+                            'total_system_balance' => $total_system_balance,
                             'wallet_balance' => 0,
                             'ref_balance' => 0,
                             'all_user' => DB::table('users')->count(),
