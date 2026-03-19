@@ -95,6 +95,8 @@ class FixWalletBalance extends Command
             'currency' => 'NGN',
             'status' => 'success',
             'reference' => 'CORRECTION_' . strtoupper(uniqid()),
+            'session_id' => 'sess_correction_' . uniqid(),
+            'transaction_ref' => 'TXN' . strtoupper(\Illuminate\Support\Str::random(12)),
             'description' => 'Wallet balance correction - fixing double-refund bug. Old balance: ₦' . number_format($currentBalance, 2) . ', Corrected to: ₦' . number_format($calculatedBalance, 2),
             'balance_before' => $currentBalance,
             'balance_after' => $calculatedBalance,
