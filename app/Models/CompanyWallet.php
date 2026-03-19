@@ -62,10 +62,15 @@ class CompanyWallet extends Model
     }
 
     /**
-     * Remove from pending balance
+     * Remove from pending balance (never goes below zero)
      */
     public function removePending(float $amount): void
     {
-        $this->decrement('pending_balance', $amount);
+        $current = (float) $this->pending_balance;
+        if ($current <= 0) {
+            return; // Nothing pending, skip
+        }
+        $deduct = min($amount, $current);
+        $this->decrement('pending_balance', $deduct);
     }
 }
