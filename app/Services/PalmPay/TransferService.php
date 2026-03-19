@@ -320,46 +320,61 @@ class TransferService
                 'reconciliation_status' => 'not_matched',
             ]);
 
-            // 1. Ledger Reversal (High Integrity)
-            // Initial: Debit Wallet (Total), Credit Clearing (Amount), Credit Revenue (Fee)
-            // Reversal: Credit Wallet (Total), Debit Clearing (Amount), Debit Revenue (Fee)
+            // Check if this transaction came from the internal flow (TransferPurchase)
+            // If so, TransferPurchase handles its own refund — DO NOT refund here to avoid double-credit
+            $balanceAlreadyDeducted = $transaction->metadata['balance_already_deducted'] ?? false;
+            $isInternalFlow = DB::table('transactions')
+                ->where('reference', $transaction->reference)
+                ->where('company_id', $transaction->company_id)
+                ->whereNotNull('balance_before')
+                ->exists();
 
-            $companyAccount = $this->ledgerService->getOrCreateAccount("Company Wallet " . $transaction->company_id, 'company_wallet', $transaction->company_id);
-            $providerAccount = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
-            $revenueAccount = $this->ledgerService->getOrCreateAccount('Platform Revenue', 'revenue');
+            // Only refund if this was the DIRECT API flow (TransferService deducted the balance itself)
+            // For internal flow, TransferPurchase catches the exception and refunds there
+            if (!$isInternalFlow) {
+                // 1. Ledger Reversal (High Integrity)
+                $companyAccount = $this->ledgerService->getOrCreateAccount("Company Wallet " . $transaction->company_id, 'company_wallet', $transaction->company_id);
+                $providerAccount = $this->ledgerService->getOrCreateAccount('PalmPay Clearing', 'bank_clearing');
+                $revenueAccount = $this->ledgerService->getOrCreateAccount('Platform Revenue', 'revenue');
 
-            $this->ledgerService->recordTransaction($transaction->reference . '_REV', [
-                ['account_id' => $companyAccount->id, 'type' => 'credit', 'amount' => (float) $transaction->total_amount],
-                ['account_id' => $providerAccount->id, 'type' => 'debit', 'amount' => (float) $transaction->amount],
-                ['account_id' => $revenueAccount->id, 'type' => 'debit', 'amount' => (float) $transaction->fee],
-            ], "Reversal of Failed Transfer: " . $transaction->reference);
+                $this->ledgerService->recordTransaction($transaction->reference . '_REV', [
+                    ['account_id' => $companyAccount->id, 'type' => 'credit', 'amount' => (float) $transaction->total_amount],
+                    ['account_id' => $providerAccount->id, 'type' => 'debit', 'amount' => (float) $transaction->amount],
+                    ['account_id' => $revenueAccount->id, 'type' => 'debit', 'amount' => (float) $transaction->fee],
+                ], "Reversal of Failed Transfer: " . $transaction->reference);
 
-            // 2. Refund to Legacy Wallet Balance
-            $wallet = $transaction->company->wallet;
-            $wallet->credit($transaction->total_amount);
-            $wallet->removePending($transaction->total_amount);
-            $wallet->save();
+                // 2. Refund to Legacy Wallet Balance
+                $wallet = $transaction->company->wallet;
+                $wallet->credit($transaction->total_amount);
+                $wallet->removePending($transaction->total_amount);
+                $wallet->save();
 
-            // 3. Sync System Wallets Reversal
-            $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
-            if ($revWallet)
-                $revWallet->debit($transaction->fee);
+                // 3. Sync System Wallets Reversal
+                $revWallet = \App\Models\SystemWallet::where('slug', 'platform_revenue')->lockForUpdate()->first();
+                if ($revWallet)
+                    $revWallet->debit($transaction->fee);
 
-            $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
-            if ($clrWallet)
-                $clrWallet->debit($transaction->amount);
+                $clrWallet = \App\Models\SystemWallet::where('slug', 'bank_clearing')->lockForUpdate()->first();
+                if ($clrWallet)
+                    $clrWallet->debit($transaction->amount);
+
+                Log::info('Transfer Refunded & Ledger Reversed (Direct API Flow)', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'reference' => $transaction->reference
+                ]);
+            } else {
+                Log::info('Transfer Failed - Skipping refund (Internal Flow - TransferPurchase handles refund)', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'reference' => $transaction->reference
+                ]);
+            }
 
             DB::commit();
-
-            Log::info('Transfer Refunded & Ledger Reversed', [
-                'transaction_id' => $transaction->transaction_id,
-                'reference' => $transaction->reference
-            ]);
 
         } catch (\Exception $e) {
             DB::rollBack();
 
-            Log::critical('Failed to Refund Transaction', [
+            Log::critical('Failed to Process Transfer Failure', [
                 'transaction_id' => $transaction->transaction_id,
                 'error' => $e->getMessage()
             ]);

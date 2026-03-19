@@ -577,6 +577,20 @@ class WebhookHandler
             $transaction = Transaction::where('reference', $reference)
                 ->firstOrFail();
 
+            // CRITICAL: Only refund if transaction is NOT already failed/refunded
+            // This prevents double-refund when TransferPurchase already handled the refund
+            if ($transaction->status === 'failed') {
+                Log::info('Transfer already marked as failed, skipping duplicate webhook refund', [
+                    'transaction_id' => $transaction->transaction_id,
+                    'reference' => $reference
+                ]);
+                $webhook->update(['transaction_id' => $transaction->id]);
+                return [
+                    'status' => 'skipped',
+                    'message' => 'Transfer already failed - duplicate webhook ignored'
+                ];
+            }
+
             // Update transaction status
             $transaction->update([
                 'status' => 'failed',

@@ -341,14 +341,17 @@ class TransferPurchase extends Controller
                         ->first();
                     
                     if ($companyWallet) {
+                        $balBefore = $companyWallet->balance;
                         $companyWallet->credit($transactionResult['total_deduction']);
                         $new_bal = $companyWallet->balance;
                     } else {
+                        $balBefore = 0;
                         $new_bal = 0;
                     }
 
                     DB::table('transactions')->where('reference', $transid)->update([
                         'status' => 'failed',
+                        'balance_before' => $balBefore,
                         'balance_after' => $new_bal,
                         'error_message' => substr($e->getMessage(), 0, 255),
                         'updated_at' => now()
