@@ -40,16 +40,26 @@ class FixWalletBalance extends Command
         $netDebits = (float) DB::table('transactions')
             ->where('company_id', $companyId)
             ->where('type', 'debit')
-            ->where('status', 'success')
+            ->whereIn('status', ['success', 'successful'])
             ->sum(DB::raw('amount + COALESCE(fee, 0)'));
 
-        $calculatedBalance = $netCredits - $netDebits;
+        // Completed settlements (paid out to company bank, debited from wallet)
+        $completedSettlements = 0;
+        if (\Schema::hasTable('settlement_queue')) {
+            $completedSettlements = (float) DB::table('settlement_queue')
+                ->where('company_id', $companyId)
+                ->where('status', 'completed')
+                ->sum('amount');
+        }
+
+        $calculatedBalance = $netCredits - $netDebits - $completedSettlements;
         $currentBalance = (float) $wallet->balance;
         $difference = $currentBalance - $calculatedBalance;
 
         $this->table(['Metric', 'Amount'], [
             ['Net Credits (deposits - deposit fees)', '₦' . number_format($netCredits, 2)],
             ['Net Debits (withdrawals + withdrawal fees)', '₦' . number_format($netDebits, 2)],
+            ['Completed Settlements (paid out)', '₦' . number_format($completedSettlements, 2)],
             ['Calculated Correct Balance', '₦' . number_format($calculatedBalance, 2)],
             ['Current Wallet Balance', '₦' . number_format($currentBalance, 2)],
             ['Difference (overage)', '₦' . number_format($difference, 2)],

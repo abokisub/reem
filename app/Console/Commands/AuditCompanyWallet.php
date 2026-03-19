@@ -219,17 +219,27 @@ class AuditCompanyWallet extends Command
         $netDebits = (float) DB::table('transactions')
             ->where('company_id', $company->id)
             ->where('type', 'debit')
-            ->where('status', 'success')
+            ->whereIn('status', ['success', 'successful'])
             ->sum('amount');
 
-        $calculatedBalance = $netCredits - $netDebits;
+        // Include completed settlements as money out (settlements debit wallet but aren't in transactions table)
+        $completedSettlements = 0;
+        if (\Schema::hasTable('settlement_queue')) {
+            $completedSettlements = (float) DB::table('settlement_queue')
+                ->where('company_id', $company->id)
+                ->where('status', 'completed')
+                ->sum('amount');
+        }
+
+        $calculatedBalance = $netCredits - $netDebits - $completedSettlements;
         $currentBalance = $wallet ? (float) $wallet->balance : 0;
         $difference = $currentBalance - $calculatedBalance;
 
         $this->table(['Metric', 'Amount'], [
             ['Total Net Credits (deposits - fees)', '₦' . number_format($netCredits, 2)],
             ['Total Debits (withdrawals/transfers)', '₦' . number_format($netDebits, 2)],
-            ['Calculated Balance (credits - debits)', '₦' . number_format($calculatedBalance, 2)],
+            ['Completed Settlements (paid out)', '₦' . number_format($completedSettlements, 2)],
+            ['Calculated Balance (credits - debits - settlements)', '₦' . number_format($calculatedBalance, 2)],
             ['Current Wallet Balance', '₦' . number_format($currentBalance, 2)],
             ['DIFFERENCE (wallet - calculated)', '₦' . number_format($difference, 2)],
         ]);
