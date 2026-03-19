@@ -2160,4 +2160,71 @@ class AuthController extends Controller
             'active_company_id' => $activeCompany->id ?? null,
         ];
     }
+
+    /**
+     * Verify transaction PIN for web dashboard access
+     * Called after login to gate dashboard access
+     */
+    public function verifyPin(Request $request)
+    {
+        $token = $request->input('token');
+        $pin = $request->input('pin');
+
+        if (!$token || !$pin) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'PIN and token are required'
+            ], 400);
+        }
+
+        // Resolve user from token
+        $userId = $this->verifyapptoken($token);
+
+        if (!$userId) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Invalid or expired session. Please login again.'
+            ], 401);
+        }
+
+        $user = DB::table('users')->where('id', $userId)->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        // Check if user has a PIN set
+        if (empty($user->pin)) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No transaction PIN set. Please create a PIN in Settings.',
+                'no_pin' => true
+            ], 400);
+        }
+
+        // Compare PIN (stored as plain or hashed)
+        $pinMatch = false;
+        if (strlen($user->pin) <= 6) {
+            // Plain text PIN comparison
+            $pinMatch = ($user->pin === $pin);
+        } else {
+            // Hashed PIN comparison
+            $pinMatch = password_verify($pin, $user->pin);
+        }
+
+        if ($pinMatch) {
+            return response()->json([
+                'status' => 'success',
+                'message' => 'PIN verified successfully'
+            ]);
+        }
+
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Invalid PIN. Please try again.'
+        ], 403);
+    }
 }

@@ -58,6 +58,7 @@ Route::post('verify/user/account', [AuthController::class, 'verify']);
 Route::post('create-pin', [AuthController::class, 'createPin']);
 Route::get('website/app/setting', [AppController::class, 'system']);
 Route::post('login/verify/user', [AuthController::class, 'login']);
+Route::post('verify/pin', [AuthController::class, 'verifyPin']);
 Route::post('email-receipt', [AppController::class, 'emailReceipt']);
 Route::post('sync-master-wallet', [AppController::class, 'syncMasterWallet'])->middleware(['auth.token']);
 Route::get('transfer/banks', [Banks::class, 'getPublicBanksList']); // Public bank list for onboarding

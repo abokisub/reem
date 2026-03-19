@@ -69,6 +69,9 @@ class UserDashboardController extends Controller
             $totalSystemBalance = (float) DB::table('company_wallets')->sum('balance');
             $totalCompanies = DB::table('companies')->where('status', 'active')->count();
             $totalVirtualAccounts = DB::table('virtual_accounts')->where('status', 'active')->count();
+            $registeredBusinesses = DB::table('companies')->count();
+            $pendingActivations = DB::table('companies')->where('status', 'pending')->count();
+            $totalUsers = DB::table('company_users')->count();
         } else {
             // For regular companies: Get their wallet balance
             $companyWallet = DB::table('company_wallets')
@@ -84,6 +87,30 @@ class UserDashboardController extends Controller
         }
 
         // 1. Total Revenue, Daily Revenue (for charts), and Status Distribution
+        // Always calculate TODAY's stats separately for admin dashboard cards
+        $todayStart = $now->copy()->startOfDay();
+        $todayEnd = $now->copy()->endOfDay();
+
+        $todayRevenueQuery = DB::table('transactions')
+            ->where('category', 'virtual_account_credit')
+            ->where('type', 'credit')
+            ->where('status', 'success')
+            ->whereBetween('created_at', [$todayStart, $todayEnd]);
+        if (!$isAdmin) {
+            $todayRevenueQuery->where('company_id', $user->active_company_id);
+        }
+        $todayRevenue = (float) $todayRevenueQuery->sum('amount');
+
+        $todayTransactionsQuery = DB::table('transactions')
+            ->where('category', 'virtual_account_credit')
+            ->where('type', 'credit')
+            ->whereBetween('created_at', [$todayStart, $todayEnd]);
+        if (!$isAdmin) {
+            $todayTransactionsQuery->where('company_id', $user->active_company_id);
+        }
+        $todayTransactions = $todayTransactionsQuery->count();
+
+        // Filtered revenue (based on selected filter)
         $revenueQuery = DB::table('transactions')
             ->where('category', 'virtual_account_credit')
             ->where('type', 'credit');
@@ -244,11 +271,16 @@ class UserDashboardController extends Controller
             'is_admin' => $isAdmin,
             'data' => [
                 'total_revenue' => $totalRevenue,
+                'today_revenue' => $todayRevenue,
                 'total_transactions' => $totalTransactions,
+                'today_transactions' => $todayTransactions,
                 'pending_settlement' => $pendingSettlement,
                 'system_wallet_balance' => $totalSystemBalance, // NEW: Total system wallet balance
                 'total_companies' => $totalCompanies, // NEW: Total active companies
                 'total_virtual_accounts' => $totalVirtualAccounts, // NEW: Total virtual accounts
+                'registered_businesses' => $isAdmin ? $registeredBusinesses : 1,
+                'pending_activations' => $isAdmin ? $pendingActivations : 0,
+                'all_users' => $isAdmin ? $totalUsers : 0,
                 'revenue_chart' => $revenueChart,
                 'transaction_chart' => $transactionChart,
                 'status_distribution' => [
