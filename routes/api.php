@@ -935,3 +935,16 @@ Route::middleware(['auth.token'])->prefix('v1/checkout/card')->group(function ()
 // PalmPay webhook callbacks (no auth — verified by signature)
 Route::post('/webhooks/palmpay/card-payment', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'paymentWebhook']);
 Route::post('/webhooks/palmpay/card-refund',  [App\Http\Controllers\API\V1\CardCheckoutController::class, 'refundWebhook']);
+
+// ============================================
+// Dynamic Virtual Account (Pay With Bank Transfer) Routes
+// ============================================
+
+Route::middleware(['auth.token'])->prefix('v1/checkout/bank-transfer')->group(function () {
+    Route::post('/create',        [App\Http\Controllers\API\V1\DynamicAccountController::class, 'create']);
+    Route::post('/query',         [App\Http\Controllers\API\V1\DynamicAccountController::class, 'query']);
+    Route::post('/check-account', [App\Http\Controllers\API\V1\DynamicAccountController::class, 'checkAccount']);
+});
+
+// PalmPay bank transfer webhook (no auth — verified by signature)
+Route::post('/webhooks/palmpay/bank-transfer', [App\Http\Controllers\API\V1\DynamicAccountController::class, 'webhook']);
