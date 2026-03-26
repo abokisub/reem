@@ -23,8 +23,8 @@ class FeeService
     // Maps internal transaction types to settings table column prefixes
     const TYPE_MAP = [
         'bank_transfer'      => 'transfer_charge',
-        'settlement'         => 'payout_bank_charge',
-        'external_transfer'  => 'payout_palmpay_charge',
+        'settlement'         => 'payout_palmpay_charge',
+        'external_transfer'  => 'payout_bank_charge',
     ];
 
     /**
