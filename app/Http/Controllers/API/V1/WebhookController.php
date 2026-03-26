@@ -88,7 +88,7 @@ class WebhookController extends Controller
         $customer = CompanyUser::find($va->company_user_id);
 
         // 4. Calculate Fee
-        $feeData = $this->feeService->calculateFee($company->id, $amount);
+        $feeData = $this->feeService->calculateFee($company->id, $amount, 'va_deposit');
 
         // 5. Create Transaction Record (Master Ledger Event)
         $tx = Transaction::create([

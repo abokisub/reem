@@ -42,29 +42,14 @@ class SettlementService
 
         $amountToSettle = $wallet->balance;
 
-        // --- NEW: Multi-tenant Payout Charges ---
-        $settings = \Illuminate\Support\Facades\DB::table('settings')->where('company_id', $company->id)->first();
-        if (!$settings) {
-            $settings = \Illuminate\Support\Facades\DB::table('settings')->where('company_id', 1)->first();
-        }
-
-        $type = $settings->payout_bank_charge_type ?? 'FLAT';
-        $val = $settings->payout_bank_charge_value ?? 0;
-        $cap = $settings->payout_bank_charge_cap ?? 0;
-
-        $charge = 0;
-        if ($type == 'PERCENTAGE') {
-            $charge = ($amountToSettle / 100) * $val;
-            if ($cap > 0 && $charge > $cap) {
-                $charge = $cap;
-            }
-        } else {
-            $charge = $val;
-        }
+        // Use FeeService for settlement fee (supports company custom pricing)
+        $feeResult = app(\App\Services\FeeService::class)->calculateFee(
+            $company->id, $amountToSettle, 'settlement'
+        );
+        $charge = $feeResult['fee'];
 
         $netAmount = $amountToSettle - $charge;
-        if ($netAmount < 0)
-            $netAmount = 0;
+        if ($netAmount < 0) $netAmount = 0;
 
         $settlementRef = 'PWV_SET_' . strtoupper(substr(bin2hex(random_bytes(6)), 0, 10));
 

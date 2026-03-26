@@ -467,32 +467,19 @@ class MerchantApiController extends Controller
         if ($validator->fails())
             return $this->respond(false, $validator->errors()->first(), [], 422);
 
-        // Get External Transfer (Other Banks) charges - same as dashboard
-        // This uses payout_bank_* settings (configured in /secure/discount/banks)
-        $settings = DB::table('settings')->first();
-        $chargeType = $settings->payout_bank_charge_type ?? 'FLAT';
-        $chargeValue = $settings->payout_bank_charge_value ?? 30;
-        $chargeCap = $settings->payout_bank_charge_cap ?? null;
-        
-        // Calculate transfer fee
-        $transferFee = 0;
-        if ($chargeType === 'PERCENT' || $chargeType === 'PERCENTAGE') {
-            $transferFee = ($request->amount * $chargeValue) / 100;
-            if ($chargeCap && $transferFee > $chargeCap) {
-                $transferFee = $chargeCap;
-            }
-        } else {
-            $transferFee = $chargeValue;
-        }
-        
+        // Calculate transfer fee using FeeService (supports company custom pricing)
+        $feeResult = app(\App\Services\FeeService::class)->calculateFee(
+            $company->id, $request->amount, 'external_transfer'
+        );
+        $transferFee = $feeResult['fee'];
+
         Log::info('Transfer Charge Calculation', [
             'category' => 'External Transfer (Other Banks)',
-            'type' => $chargeType,
-            'flat_fee' => $chargeValue,
-            'amount' => $request->amount,
-            'final_charge' => $transferFee
+            'source'   => $feeResult['source'],
+            'amount'   => $request->amount,
+            'final_charge' => $transferFee,
         ]);
-        
+
         $totalDeduction = $request->amount + $transferFee;
 
         // Check balance from company_wallets table (source of truth)

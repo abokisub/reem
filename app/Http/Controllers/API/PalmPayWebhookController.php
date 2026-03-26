@@ -114,9 +114,12 @@ class PalmPayWebhookController extends Controller
                 return;
             }
 
-            // Calculate fee (e.g., 1.5% + ₦100)
-            $fee = ($amount * 0.015) + 100;
-            $netAmount = $amount - $fee;
+            // Calculate fee using FeeService (supports company custom pricing)
+            $feeResult = app(\App\Services\FeeService::class)->calculateFee(
+                $virtualAccount->company_id, $amount, 'va_deposit'
+            );
+            $fee = $feeResult['fee'];
+            $netAmount = $feeResult['net'];
 
             // Create transaction record
             $transaction = EndUserTransaction::create([
