@@ -924,13 +924,11 @@ Route::middleware(['auth.token'])->group(function () {
 // ============================================
 // Company Custom Fee Management (Admin)
 // ============================================
-Route::prefix('admin/company-fees')->group(function () {
-    Route::get('/search',              [App\Http\Controllers\Admin\CompanyFeeController::class, 'searchCompanies']);
-    Route::post('/simulate',           [App\Http\Controllers\Admin\CompanyFeeController::class, 'simulate']);
-    Route::get('/{companyId}',         [App\Http\Controllers\Admin\CompanyFeeController::class, 'show']);
-    Route::post('/{companyId}',        [App\Http\Controllers\Admin\CompanyFeeController::class, 'update']);
-    Route::delete('/{companyId}/{transactionType}', [App\Http\Controllers\Admin\CompanyFeeController::class, 'destroy']);
-});
+Route::get('admin/company-fees/search',   [App\Http\Controllers\Admin\CompanyFeeController::class, 'searchCompanies']);
+Route::post('admin/company-fees/simulate', [App\Http\Controllers\Admin\CompanyFeeController::class, 'simulate']);
+Route::get('admin/company-fees/{companyId}',         [App\Http\Controllers\Admin\CompanyFeeController::class, 'show']);
+Route::post('admin/company-fees/{companyId}',        [App\Http\Controllers\Admin\CompanyFeeController::class, 'update']);
+Route::delete('admin/company-fees/{companyId}/{transactionType}', [App\Http\Controllers\Admin\CompanyFeeController::class, 'destroy']);
 
 // ============================================
 // Card Checkout (Pay With Bank Card) Routes
