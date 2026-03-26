@@ -788,6 +788,7 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/pending', [App\Http\Controllers\Admin\SettlementController::class, 'getPendingSettlements']);
         Route::get('/history', [App\Http\Controllers\Admin\SettlementController::class, 'getSettlementHistory']);
         Route::get('/statistics', [App\Http\Controllers\Admin\SettlementController::class, 'getStatistics']);
+        Route::get('/diagnostics', [App\Http\Controllers\Admin\SettlementController::class, 'diagnostics']);
     });
 
     // Banks (for admin use - no auth required on gateway)
@@ -919,3 +920,18 @@ Route::middleware(['auth.token'])->group(function () {
     Route::get('/webhooks', [App\Http\Controllers\API\CompanyWebhookController::class, 'index']);
     Route::get('/webhooks/{webhook}', [App\Http\Controllers\API\CompanyWebhookController::class, 'show']);
 });
+
+// ============================================
+// Card Checkout (Pay With Bank Card) Routes
+// ============================================
+
+// Merchant-facing endpoints (require auth)
+Route::middleware(['auth.token'])->prefix('v1/checkout/card')->group(function () {
+    Route::post('/create', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'create']);
+    Route::post('/query',  [App\Http\Controllers\API\V1\CardCheckoutController::class, 'query']);
+    Route::post('/refund', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'refund']);
+});
+
+// PalmPay webhook callbacks (no auth — verified by signature)
+Route::post('/webhooks/palmpay/card-payment', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'paymentWebhook']);
+Route::post('/webhooks/palmpay/card-refund',  [App\Http\Controllers\API\V1\CardCheckoutController::class, 'refundWebhook']);

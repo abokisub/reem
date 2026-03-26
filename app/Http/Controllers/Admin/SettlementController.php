@@ -179,6 +179,72 @@ class SettlementController extends Controller
     }
 
     /**
+     * Settlement Diagnostics — shows exactly what the cron sees on live
+     */
+    public function diagnostics(Request $request)
+    {
+        $settings = DB::table('settings')->first();
+        $now      = now();
+
+        // What the cron would pick up RIGHT NOW
+        $dueNow = DB::table('settlement_queue')
+            ->where('status', 'pending')
+            ->where('scheduled_settlement_date', '<=', $now)
+            ->count();
+
+        $dueNowAmount = DB::table('settlement_queue')
+            ->where('status', 'pending')
+            ->where('scheduled_settlement_date', '<=', $now)
+            ->sum('amount');
+
+        // Oldest pending
+        $oldest = DB::table('settlement_queue')
+            ->where('status', 'pending')
+            ->orderBy('scheduled_settlement_date')
+            ->first();
+
+        // Simulate next settlement date for a transaction happening right now
+        $nextSettle = \App\Console\Commands\ProcessSettlements::calculateSettlementDate(
+            $now,
+            (float) ($settings->settlement_delay_hours ?? 24),
+            (bool)  ($settings->settlement_skip_weekends ?? true),
+            (bool)  ($settings->settlement_skip_holidays ?? true),
+            $settings->settlement_time ?? '03:00:00'
+        );
+
+        return response()->json([
+            'status'   => 'success',
+            'server_time' => [
+                'utc'      => $now->toDateTimeString(),
+                'timezone' => config('app.timezone'),
+                'lagos'    => $now->copy()->setTimezone('Africa/Lagos')->toDateTimeString(),
+            ],
+            'settings' => [
+                'auto_settlement_enabled'  => (bool) ($settings->auto_settlement_enabled ?? false),
+                'settlement_delay_hours'   => $settings->settlement_delay_hours ?? 24,
+                'settlement_time'          => $settings->settlement_time ?? '03:00:00',
+                'skip_weekends'            => (bool) ($settings->settlement_skip_weekends ?? true),
+                'skip_holidays'            => (bool) ($settings->settlement_skip_holidays ?? true),
+            ],
+            'queue' => [
+                'pending_total'            => DB::table('settlement_queue')->where('status', 'pending')->count(),
+                'pending_amount_total'     => DB::table('settlement_queue')->where('status', 'pending')->sum('amount'),
+                'due_right_now'            => $dueNow,
+                'due_right_now_amount'     => $dueNowAmount,
+                'completed_total'          => DB::table('settlement_queue')->where('status', 'completed')->count(),
+                'failed_total'             => DB::table('settlement_queue')->where('status', 'failed')->count(),
+                'oldest_pending_due'       => $oldest ? $oldest->scheduled_settlement_date : null,
+                'oldest_pending_amount'    => $oldest ? $oldest->amount : null,
+            ],
+            'simulation' => [
+                'if_transaction_now'       => $now->toDateTimeString(),
+                'would_settle_at'          => $nextSettle->toDateTimeString(),
+                'hours_until_settlement'   => round($now->diffInMinutes($nextSettle) / 60, 1),
+            ],
+        ]);
+    }
+
+    /**
      * Get settlement statistics
      */
     public function getStatistics(Request $request)

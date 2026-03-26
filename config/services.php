@@ -36,8 +36,9 @@ return [
         'public_key' => env('PALMPAY_PUBLIC_KEY'),
         'private_key' => env('PALMPAY_PRIVATE_KEY'),
         'palmpay_public_key' => env('PALMPAY_PALMPAY_PUBLIC_KEY'),
-        'bank_code' => env('PALMPAY_BANK_CODE', '100033'), // Dynamic from env
-        'bank_name' => env('PALMPAY_BANK_NAME', 'PalmPay'), // Dynamic from env
+        'bank_code' => env('PALMPAY_BANK_CODE', '100033'),
+        'bank_name' => env('PALMPAY_BANK_NAME', 'PalmPay'),
+        'card_checkout_enabled' => env('CARD_CHECKOUT_ENABLED', false),
     ],
 
     /*
