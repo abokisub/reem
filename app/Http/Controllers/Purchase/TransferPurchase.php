@@ -409,12 +409,13 @@ class TransferPurchase extends Controller
         
         // Determine if this is a settlement withdrawal
         $isSettlementWithdrawal = false;
-        if ($cid && $accountNumber && $bankCode) {
+        if ($cid && $accountNumber) {
             $company = \App\Models\Company::find($cid);
-            if ($company && 
-                $company->settlement_account_number == $accountNumber && 
-                $company->bank_code == $bankCode) {
-                $isSettlementWithdrawal = true;
+            if ($company && $company->settlement_account_number == $accountNumber) {
+                // Match on account number; also check bank_code if it's set
+                if (!$company->bank_code || $company->bank_code == $bankCode) {
+                    $isSettlementWithdrawal = true;
+                }
             }
         }
         
