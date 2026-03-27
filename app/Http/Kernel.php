@@ -75,5 +75,6 @@ class Kernel extends HttpKernel
         'gateway.auth' => \App\Http\Middleware\GatewayAuth::class,
         'idempotency' => \App\Http\Middleware\IdempotencyMiddleware::class,
         'admin' => \App\Http\Middleware\AdminMiddleware::class,
+        'merchant.auth' => \App\Http\Middleware\V1\MerchantAuth::class,
     ];
 }
