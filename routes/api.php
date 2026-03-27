@@ -949,7 +949,7 @@ Route::post('/webhooks/palmpay/card-refund',  [App\Http\Controllers\API\V1\CardC
 // Dynamic Virtual Account (Pay With Bank Transfer) Routes
 // ============================================
 
-Route::middleware(['auth.token'])->prefix('v1/checkout/bank-transfer')->group(function () {
+Route::middleware(['merchant.auth'])->prefix('v1/checkout/bank-transfer')->group(function () {
     Route::post('/create',        [App\Http\Controllers\API\V1\DynamicAccountController::class, 'create']);
     Route::post('/query',         [App\Http\Controllers\API\V1\DynamicAccountController::class, 'query']);
     Route::post('/check-account', [App\Http\Controllers\API\V1\DynamicAccountController::class, 'checkAccount']);

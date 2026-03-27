@@ -36,7 +36,7 @@ class DynamicAccountController extends Controller
             'order_expire_time' => 'sometimes|integer|min:1800|max:86400',
         ]);
 
-        $company = $request->user();
+        $company = $request->attributes->get('company');
         $result  = $this->service->createOrder($company->id, $validated);
 
         if (!$result['success']) {
@@ -67,7 +67,7 @@ class DynamicAccountController extends Controller
         $request->validate(['order_id' => 'required|string|max:32']);
 
         $order = CardCheckoutOrder::where('merchant_order_id', $request->order_id)
-            ->where('company_id', $request->user()->id)
+            ->where('company_id', $request->attributes->get('company')->id)
             ->firstOrFail();
 
         $result = $this->service->queryOrder($order->merchant_order_id);
