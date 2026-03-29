@@ -165,13 +165,13 @@ class AdminController extends Controller
                             ->where('status', 'success')
                             ->whereDate('created_at', Carbon::today())
                             ->sum('amount');
-                        
+
                         // Calculate TODAY's charges from successful transactions
                         $total_successful_charges = DB::table('transactions')
                             ->where('status', 'success')
                             ->whereDate('created_at', Carbon::today())
                             ->sum('fee');
-                        
+
                         // Count TODAY's pending transactions
                         $pending_transactions_count = DB::table('transactions')
                             ->where('status', 'pending')
@@ -182,7 +182,7 @@ class AdminController extends Controller
                     try {
                         // Get TOTAL SYSTEM BALANCE from company_wallets (not just today's)
                         $total_system_balance = (float) DB::table('company_wallets')->sum('balance');
-                        
+
                         $users_info = [
                             // TODAY's payment gateway metrics (resets every 24 hours)
                             'total_revenue' => $total_revenue,
@@ -267,7 +267,7 @@ class AdminController extends Controller
                     } catch (\Exception $e) {
                         // If legacy tables don't exist, return TODAY's payment gateway metrics only
                         $total_system_balance = (float) DB::table('company_wallets')->sum('balance');
-                        
+
                         $users_info = [
                             'total_revenue' => $total_revenue,
                             'total_transactions' => $total_transactions,
@@ -402,22 +402,40 @@ class AdminController extends Controller
                     //declaring user status
                     if ($request->status == 'Active' || $request->status == 'active') {
                         $status = 'active';
+                        $kyc = 1; // Auto-verify if active
+                        $email_verified = 1;
+                        $phone_verified = 1;
                     } else if ($request->status == 'Deactivate' || $request->status == 'suspended') {
                         $status = 'suspended';
+                        $kyc = 0;
+                        $email_verified = 0;
+                        $phone_verified = 0;
                     } else if ($request->status == 'Banned' || $request->status == 'suspended') {
                         $status = 'suspended';
+                        $kyc = 0;
+                        $email_verified = 0;
+                        $phone_verified = 0;
                     } else if ($request->status == 'Unverified' || $request->status == 'pending') {
                         $status = 'pending';
+                        $kyc = 0;
+                        $email_verified = 0;
+                        $phone_verified = 0;
                     } else {
                         $status = 'pending';
+                        $kyc = 0;
+                        $email_verified = 0;
+                        $phone_verified = 0;
                     }
 
-                    //system kyc
-                    if ($request->kyc == 'true') {
+                    //system kyc (override if explicitly set in request)
+                    if ($request->kyc == 'true' || $request->kyc == 1) {
                         $kyc = 1;
-                    } else {
-                        $kyc = 0;
                     }
+                    if ($request->isVerified == 'true' || $request->isVerified == 1) {
+                        $email_verified = 1;
+                        $phone_verified = 1;
+                    }
+
                     //checking referral username
                     if ($request->ref != null) {
                         $check_ref = DB::table('users')
@@ -486,6 +504,9 @@ class AdminController extends Controller
                         $user->date = Carbon::now("Africa/Lagos");
                         $user->kyc = $kyc;
                         $user->status = $status;
+                        $user->kyc_status = ($status == 'active') ? 'verified' : 'unverified';
+                        $user->email_verified = $email_verified;
+                        $user->phone_verified = $phone_verified;
                         // Get default limit from settings, fallback to 999999999 (unlimited) if not configured
                         $settings = $this->habukhan_key();
                         $user->user_limit = $settings ? $settings->default_limit : 999999999;
@@ -621,11 +642,11 @@ class AdminController extends Controller
                     if (DB::table('users')->where(['id' => $request->user_id])->count() == 1) {
                         $main_validator = validator::make($request->all(), [
                             'name' => 'required',
-                            'email' => "required|unique:user,email,$request->user_id",
-                            'phone' => "required|numeric|unique:user,phone,$request->user_id|digits:11",
+                            'email' => "required|unique:users,email,$request->user_id",
+                            'phone' => "required|numeric|unique:users,phone,$request->user_id|digits:11",
                             'status' => 'required',
                             'type' => 'required',
-                            'user_limit' => 'required|numeric|digits_between:2,6',
+                            'user_limit' => 'required|numeric',
                         ], [
                             'name.required' => 'Full Name is Required',
                             'email.required' => 'E-mail is Required',
@@ -645,22 +666,40 @@ class AdminController extends Controller
                         //declaring user status
                         if ($request->status == 'Active' || $request->status == 'active') {
                             $status = 'active';
+                            $kyc = 1; // Auto-verify if active
+                            $email_verified = 1;
+                            $phone_verified = 1;
                         } else if ($request->status == 'Deactivate' || $request->status == 'suspended') {
                             $status = 'suspended';
+                            $kyc = 0;
+                            $email_verified = 0;
+                            $phone_verified = 0;
                         } else if ($request->status == 'Banned' || $request->status == 'suspended') {
                             $status = 'suspended';
+                            $kyc = 0;
+                            $email_verified = 0;
+                            $phone_verified = 0;
                         } else if ($request->status == 'Unverified' || $request->status == 'pending') {
                             $status = 'pending';
+                            $kyc = 0;
+                            $email_verified = 0;
+                            $phone_verified = 0;
                         } else {
                             $status = 'pending';
+                            $kyc = 0;
+                            $email_verified = 0;
+                            $phone_verified = 0;
                         }
 
-                        //system kyc
-                        if ($request->kyc == 'true') {
+                        //system kyc (override if explicitly set in request)
+                        if ($request->kyc == 'true' || $request->kyc == 1) {
                             $kyc = 1;
-                        } else {
-                            $kyc = 0;
                         }
+                        if ($request->isVerified == 'true' || $request->isVerified == 1) {
+                            $email_verified = 1;
+                            $phone_verified = 1;
+                        }
+
                         //checking referral username
                         if ($request->ref != null) {
                             $check_ref = DB::table('users')
@@ -728,9 +767,19 @@ class AdminController extends Controller
                             $user->webhook = $request->webhook;
                             $user->about = $request->about;
                             $user->address = $request->address;
+                            $user->email_verified = $email_verified;
+                            $user->phone_verified = $phone_verified;
+                            $user->kyc_status = ($status == 'active') ? 'verified' : ($user->kyc_status == 'verified' ? 'verified' : 'unverified');
                             $user->profile_image = $path;
                             $user->save();
-                            $user->save();
+
+                            // Sync company status if status is active
+                            if ($status == 'active') {
+                                DB::table('companies')->where('user_id', $user->id)->update([
+                                    'is_active' => 1,
+                                    'kyc_status' => 'verified'
+                                ]);
+                            }
                             if ($user != null) {
                                 $general = $this->general();
                                 if ($status == 'pending' && $request->isVerified == false) {
@@ -1320,7 +1369,7 @@ class AdminController extends Controller
                                                 'role' => 'debit'
                                             ];
                                             $this->inserting_data('message', $message_data);
-                                            
+
                                             // inserting notif
                                             $notif_data = [
                                                 'username' => $user_details->username,
@@ -1964,19 +2013,19 @@ class AdminController extends Controller
                         $cid = $habukhan->active_company_id;
 
                         return response()->json([
-                            'airtime_discount' => DB::table('airtime_discount')->where('company_id', $cid)->first() 
+                            'airtime_discount' => DB::table('airtime_discount')->where('company_id', $cid)->first()
                                 ?: DB::table('airtime_discount')->whereNull('company_id')->orWhere('company_id', 1)->first(),
-                            'cable_charges' => Schema::hasTable('cable_charge') ? 
-                                (DB::table('cable_charge')->where('company_id', $cid)->first() 
-                                ?: DB::table('cable_charge')->where('company_id', 1)->first()) : (object) [],
-                            'bill_charges' => Schema::hasTable('bill_charge') ? 
-                                (DB::table('bill_charge')->where('company_id', $cid)->first() 
-                                ?: DB::table('bill_charge')->where('company_id', 1)->first()) : (object) [],
-                            'cash_discount' => DB::table('cash_discount')->where('company_id', $cid)->first() 
+                            'cable_charges' => Schema::hasTable('cable_charge') ?
+                                (DB::table('cable_charge')->where('company_id', $cid)->first()
+                                    ?: DB::table('cable_charge')->where('company_id', 1)->first()) : (object) [],
+                            'bill_charges' => Schema::hasTable('bill_charge') ?
+                                (DB::table('bill_charge')->where('company_id', $cid)->first()
+                                    ?: DB::table('bill_charge')->where('company_id', 1)->first()) : (object) [],
+                            'cash_discount' => DB::table('cash_discount')->where('company_id', $cid)->first()
                                 ?: DB::table('cash_discount')->whereNull('company_id')->orWhere('company_id', 1)->first(),
-                            'result_charges' => Schema::hasTable('result_charge') ? 
-                                (DB::table('result_charge')->where('company_id', $cid)->first() 
-                                ?: DB::table('result_charge')->where('company_id', 1)->first()) : (object) [],
+                            'result_charges' => Schema::hasTable('result_charge') ?
+                                (DB::table('result_charge')->where('company_id', $cid)->first()
+                                    ?: DB::table('result_charge')->where('company_id', 1)->first()) : (object) [],
                             'all_network' => DB::table('network')->get(),
                             'cable_result_lock' => Schema::hasTable('cable_result_lock') ? DB::table('cable_result_lock')->first() : (object) [],
 
@@ -3228,12 +3277,22 @@ class AdminController extends Controller
                             $status = 'deactivated';
                     }
 
+                    // Calculate Totals for Dashboard Metrics
+                    $totals = [
+                        'all' => DB::table('users')->count(),
+                        'active' => DB::table('users')->where('status', 'active')->count(),
+                        'banned' => DB::table('users')->where('status', 'banned')->count(),
+                        'business' => DB::table('users')->where('type', 'company')->count(),
+                        'unverified' => DB::table('users')->where('status', 'unverified')->count(),
+                    ];
+
                     if ($request->role == 'ALL' && $status == 'ALL' && empty($search)) {
                         return response()->json([
                             'all_users' => DB::table('users')
                                 ->leftJoin('companies', 'users.id', '=', 'companies.user_id')
                                 ->select('users.id', 'users.name', 'users.username', 'users.email', 'users.pin', 'users.phone', 'users.balance', 'users.referral_balance', 'users.kyc', 'users.status', 'users.type', 'users.profile_image', 'users.date', 'companies.name as business_name', 'companies.is_active as business_active', 'companies.id as company_id', 'companies.kyc_status as business_kyc_status', 'users.kyc_status as user_kyc_status')
                                 ->orderBy('users.id', 'desc')->paginate($request->input('perPage', 15)),
+                            'totals' => $totals
                         ]);
                     } else if ($request->role != 'ALL' && $status == 'ALL' && empty($search)) {
                         return response()->json([
@@ -3242,6 +3301,7 @@ class AdminController extends Controller
                                 ->where(['users.type' => $request->role])
                                 ->select('users.id', 'users.name', 'users.username', 'users.email', 'users.pin', 'users.phone', 'users.balance', 'users.referral_balance', 'users.kyc', 'users.status', 'users.type', 'users.profile_image', 'users.date', 'companies.name as business_name', 'companies.is_active as business_active', 'companies.id as company_id', 'companies.kyc_status as business_kyc_status', 'users.kyc_status as user_kyc_status')
                                 ->orderBy('users.id', 'desc')->paginate($request->input('perPage', 15)),
+                            'totals' => $totals
                         ]);
                     } else if ($request->role == 'ALL' && $status != 'ALL' && empty($search)) {
                         return response()->json([
@@ -3250,6 +3310,7 @@ class AdminController extends Controller
                                 ->where(['users.status' => $status])
                                 ->select('users.id', 'users.name', 'users.username', 'users.email', 'users.pin', 'users.phone', 'users.balance', 'users.referral_balance', 'users.kyc', 'users.status', 'users.type', 'users.profile_image', 'users.date', 'companies.name as business_name', 'companies.is_active as business_active', 'companies.id as company_id', 'companies.kyc_status as business_kyc_status', 'users.kyc_status as user_kyc_status')
                                 ->orderBy('users.id', 'desc')->paginate($request->input('perPage', 15)),
+                            'totals' => $totals
                         ]);
                     } else if ($request->role != 'ALL' && $status != 'ALL' && empty($search)) {
                         return response()->json([
@@ -3258,6 +3319,7 @@ class AdminController extends Controller
                                 ->where(['users.status' => $status, 'users.type' => $request->role])
                                 ->select('users.id', 'users.name', 'users.username', 'users.email', 'users.pin', 'users.phone', 'users.balance', 'users.referral_balance', 'users.kyc', 'users.status', 'users.type', 'users.profile_image', 'users.date', 'companies.name as business_name', 'companies.is_active as business_active', 'companies.id as company_id', 'companies.kyc_status as business_kyc_status', 'users.kyc_status as user_kyc_status')
                                 ->orderBy('users.id', 'desc')->paginate($request->input('perPage', 15)),
+                            'totals' => $totals
                         ]);
                     } else if ($request->role == 'ALL' && $status == 'ALL' && !empty($search)) {
                         return response()->json([
@@ -3503,7 +3565,7 @@ class AdminController extends Controller
 
         // Check if virtual account exists and is not a master account
         $virtualAccount = DB::table('virtual_accounts')->where('uuid', $request->uuid)->first();
-        
+
         if (!$virtualAccount) {
             return response()->json(['status' => 'error', 'message' => 'Virtual account not found'], 404);
         }
@@ -4067,7 +4129,7 @@ class AdminController extends Controller
                     $updateData['transfer_charge_type'] = $request->transfer_type;
                     $updateData['transfer_charge_value'] = $request->transfer_value ?? 0;
                     $updateData['transfer_charge_cap'] = $request->transfer_cap ?? 0;
-                    
+
                     // Also update virtual_funding (used by FeeService for VA deposits)
                     $updateData['virtual_funding_type'] = $request->transfer_type;
                     $updateData['virtual_funding_value'] = $request->transfer_value ?? 0;

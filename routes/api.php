@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\API\AdminController;
+use App\Http\Controllers\API\DataManagementController;
 use App\Http\Controllers\Admin\AdminPendingSettlementController;
 use App\Http\Controllers\API\AdminTrans;
 use App\Http\Controllers\API\AppController;
@@ -214,8 +215,14 @@ Route::get('/clear/notification/clear/all/{id}/by/admin', [AdminController::clas
 Route::get('/system/all/user/records/admin/safe/url/{id}/secure', [AdminController::class, 'UserSystem']);
 Route::post('/delete/user/record/user/hacker/{id}/system', [AppController::class, 'DeleteUser']);
 Route::post('/delete/single/record/user/hacker/{id}/system', [AppController::class, 'singleDelete']);
-Route::post('/system/all/user/edit/user/safe/url/{id}/secure', [AdminController::class, 'editUserDetails']);
-Route::post('/system/admin/create/new/user/safe/url/{id}/secure', [AdminController::class, 'CreateNewUser']);
+Route::post('/system/admin/edit/user/safe/url/{id}/secure', [AdminController::class, 'EditUser']);
+Route::post('/system/admin/create/user/safe/url/{id}/secure', [AdminController::class, 'CreateNewUser']);
+
+// Data Management & Cleanup
+Route::get('/system/admin/data-management/inactive-accounts/{id}', [DataManagementController::class, 'getInactiveVirtualAccounts']);
+Route::post('/system/admin/data-management/delete-accounts/{id}', [DataManagementController::class, 'deleteVirtualAccounts']);
+Route::get('/system/admin/data-management/old-transactions/{id}', [DataManagementController::class, 'getOldTransactions']);
+Route::post('/system/admin/data-management/delete-transactions/{id}', [DataManagementController::class, 'deleteTransactions']);
 Route::post('/system/admin/change_key/changes/of/key/url/{id}/secure', [AdminController::class, 'ChangeApiKey']);
 Route::post('/system/admin/edit/edituser/habukhan/habukhan/secure/boss/asd/asd/changes/of/key/url/{id}/secure', [AdminController::class, 'EditUser']);
 Route::post('/filter/user/details/admin/by/habukhan/{id}/secure/react', [AdminController::class, 'FilterUser']);
@@ -443,6 +450,7 @@ Route::post('admin/data_card_refund/{id}/secure', [AdminTrans::class, 'DataCardR
 Route::post('admin/recharge_card_refund/{id}/secure', [AdminTrans::class, 'RechargeCardRefund']);
 Route::get('admin/all/data_recharge_cards/{id}/secure', [AdminTrans::class, 'DataRechargeCard']);
 Route::get('admin/all/transaction/history/{id}/secure', [AdminTrans::class, 'AllSummaryTrans']);
+Route::get('admin/all/transaction/history/{id}/secure/export', [AdminTrans::class, 'exportSummaryTrans']);
 Route::get('admin/all/data/trans/by/system/{id}/secure', [AdminTrans::class, 'DataTransSum']);
 Route::get('admin/all/airtime/trans/by/system/{id}/secure', [AdminTrans::class, 'AirtimeTransSum']);
 Route::get('admin/all/stock/trans/by/system/{id}/secure', [AdminTrans::class, 'StockTransSum']);
@@ -494,6 +502,7 @@ Route::delete('admin/notifications/delete/{notificationId}/{id}/secure', [Notifi
 
 //calculator
 Route::post('transaction/calculator/{id}/habukhan/secure', [SimpleTransactionCalculator::class, 'Admin']);
+Route::post('transaction/calculator/{id}/company/secure', [SimpleTransactionCalculator::class, 'Company']);
 Route::post('user/calculator/{id}/habukhan/secure', [SimpleTransactionCalculator::class, 'Admin']); // Using same method for now
 
 // User Dashboard
@@ -845,7 +854,7 @@ Route::middleware([\App\Http\Middleware\V1\MerchantAuth::class])->prefix('v1/kyc
     Route::post('/verify-bvn', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyBVN']);
     Route::post('/verify-nin', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyNIN']);
     Route::post('/verify-bank-account', [App\Http\Controllers\API\V1\MerchantApiController::class, 'verifyBankAccount']);
-    
+
     // Advanced KYC Services
     Route::post('/face-compare', [App\Http\Controllers\API\V1\MerchantApiController::class, 'compareFaces']);
     Route::post('/liveness/initialize', [App\Http\Controllers\API\V1\MerchantApiController::class, 'initializeLiveness']);
@@ -908,7 +917,7 @@ Route::middleware(['auth.token'])->prefix('admin')->group(function () {
     Route::get('/webhooks', [App\Http\Controllers\Admin\AdminWebhookController::class, 'index']);
     Route::get('/webhooks/{webhook}', [App\Http\Controllers\Admin\AdminWebhookController::class, 'show']);
     Route::post('/webhooks/{webhook}/retry', [App\Http\Controllers\Admin\AdminWebhookController::class, 'retry']);
-    
+
     // PalmPay incoming webhook logs
     Route::get('/palmpay-webhooks', [App\Http\Controllers\Admin\AdminPalmPayWebhookController::class, 'index']);
     Route::get('/palmpay-webhooks/stats', [App\Http\Controllers\Admin\AdminPalmPayWebhookController::class, 'stats']);
@@ -924,10 +933,10 @@ Route::middleware(['auth.token'])->group(function () {
 // ============================================
 // Company Custom Fee Management (Admin)
 // ============================================
-Route::get('admin/company-fees/search',   [App\Http\Controllers\Admin\CompanyFeeController::class, 'searchCompanies']);
+Route::get('admin/company-fees/search', [App\Http\Controllers\Admin\CompanyFeeController::class, 'searchCompanies']);
 Route::post('admin/company-fees/simulate', [App\Http\Controllers\Admin\CompanyFeeController::class, 'simulate']);
-Route::get('admin/company-fees/{companyId}',         [App\Http\Controllers\Admin\CompanyFeeController::class, 'show']);
-Route::post('admin/company-fees/{companyId}',        [App\Http\Controllers\Admin\CompanyFeeController::class, 'update']);
+Route::get('admin/company-fees/{companyId}', [App\Http\Controllers\Admin\CompanyFeeController::class, 'show']);
+Route::post('admin/company-fees/{companyId}', [App\Http\Controllers\Admin\CompanyFeeController::class, 'update']);
 Route::delete('admin/company-fees/{companyId}/{transactionType}', [App\Http\Controllers\Admin\CompanyFeeController::class, 'destroy']);
 
 // ============================================
@@ -937,21 +946,21 @@ Route::delete('admin/company-fees/{companyId}/{transactionType}', [App\Http\Cont
 // Merchant-facing endpoints (require auth)
 Route::middleware(['auth.token'])->prefix('v1/checkout/card')->group(function () {
     Route::post('/create', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'create']);
-    Route::post('/query',  [App\Http\Controllers\API\V1\CardCheckoutController::class, 'query']);
+    Route::post('/query', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'query']);
     Route::post('/refund', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'refund']);
 });
 
 // PalmPay webhook callbacks (no auth — verified by signature)
 Route::post('/webhooks/palmpay/card-payment', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'paymentWebhook']);
-Route::post('/webhooks/palmpay/card-refund',  [App\Http\Controllers\API\V1\CardCheckoutController::class, 'refundWebhook']);
+Route::post('/webhooks/palmpay/card-refund', [App\Http\Controllers\API\V1\CardCheckoutController::class, 'refundWebhook']);
 
 // ============================================
 // Dynamic Virtual Account (Pay With Bank Transfer) Routes
 // ============================================
 
 Route::middleware(['merchant.auth'])->prefix('v1/checkout/bank-transfer')->group(function () {
-    Route::post('/create',        [App\Http\Controllers\API\V1\DynamicAccountController::class, 'create']);
-    Route::post('/query',         [App\Http\Controllers\API\V1\DynamicAccountController::class, 'query']);
+    Route::post('/create', [App\Http\Controllers\API\V1\DynamicAccountController::class, 'create']);
+    Route::post('/query', [App\Http\Controllers\API\V1\DynamicAccountController::class, 'query']);
     Route::post('/check-account', [App\Http\Controllers\API\V1\DynamicAccountController::class, 'checkAccount']);
 });
 

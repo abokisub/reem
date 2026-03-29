@@ -73,7 +73,7 @@ export default function NavbarVertical({ isOpenSidebar, onCloseSidebar }) {
     wallet: getIcon('wallet'),
     cal: getIcon('cal'),
     price: getIcon('price'),
-    logout: getIcon('ic_logout')
+    logout: getIcon('ic_logout'),
   };
 
 
@@ -145,7 +145,7 @@ export default function NavbarVertical({ isOpenSidebar, onCloseSidebar }) {
     {
       subheader: 'MERCHANT',
       items: [
-        // { title: 'Calculator', path: PATH_DASHBOARD.general.calculator, icon: ICONS.cal },
+        { title: 'Calculator', path: PATH_DASHBOARD.general.calculator, icon: ICONS.cal },
         // { title: 'Pricing', path: PATH_DASHBOARD.general.pricing, icon: ICONS.price },
         { title: 'Settings', path: PATH_DASHBOARD.general.settings, icon: ICONS.setting },
         { title: 'Webhook Event', path: PATH_DASHBOARD.general.webhook, icon: getIcon('ic_chat'), info: <Label color="info">New</Label> },
