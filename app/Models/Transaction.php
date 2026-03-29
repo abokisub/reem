@@ -48,6 +48,10 @@ class Transaction extends Model
         'transaction_ref',
         'transaction_type',
         'settlement_status',
+        'settlement_batch_no',
+        'settlement_time',
+        'refund_status',
+        'dispute_status',
     ];
 
     protected static function booted()
@@ -56,20 +60,20 @@ class Transaction extends Model
             // Legacy fields - keep existing logic
             $transaction->transaction_id = $transaction->transaction_id ?? self::generateTransactionId();
             $transaction->reference = $transaction->reference ?? self::generateReference();
-            
+
             // Transaction normalization fields - use TransactionValidator
             $validator = new \App\Validators\TransactionValidator();
-            
+
             // Auto-generate session_id if not provided
             if (!$transaction->session_id) {
                 $transaction->session_id = 'sess_' . \Illuminate\Support\Str::uuid();
             }
-            
+
             // Auto-generate transaction_ref if not provided
             if (!$transaction->transaction_ref) {
                 $transaction->transaction_ref = self::generateTransactionRef();
             }
-            
+
             // Calculate net_amount automatically based on transaction type
             // For CREDIT (deposits): net_amount = amount - fee (what company receives after fee)
             // For DEBIT (withdrawals/transfers): net_amount = amount (what recipient receives, fee is separate)
@@ -82,7 +86,7 @@ class Transaction extends Model
                     $transaction->net_amount = $transaction->amount;
                 }
             }
-            
+
             // Set default settlement_status based on type and status
             if (!$transaction->settlement_status && $transaction->transaction_type && $transaction->status) {
                 $transaction->settlement_status = self::determineSettlementStatus(
@@ -184,17 +188,17 @@ class Transaction extends Model
         if (in_array($type, ['fee_charge', 'kyc_charge', 'manual_adjustment'])) {
             return 'not_applicable';
         }
-        
+
         // Failed/reversed transactions don't settle
         if (in_array($status, ['failed', 'reversed'])) {
             return 'not_applicable';
         }
-        
+
         // Successful transactions are settled
         if ($status === 'successful') {
             return 'settled';
         }
-        
+
         // Default to unsettled for pending/processing
         return 'unsettled';
     }

@@ -116,7 +116,9 @@ class PalmPayWebhookController extends Controller
 
             // Calculate fee using FeeService (supports company custom pricing)
             $feeResult = app(\App\Services\FeeService::class)->calculateFee(
-                $virtualAccount->company_id, $amount, 'va_deposit'
+                $virtualAccount->company_id,
+                $amount,
+                'va_deposit'
             );
             $fee = $feeResult['fee'];
             $netAmount = $feeResult['net'];
@@ -142,7 +144,49 @@ class PalmPayWebhookController extends Controller
             // Update company wallet balance
             $company = Company::find($virtualAccount->company_id);
             if ($company && $company->wallet) {
+                $oldBal = $company->wallet->balance;
                 $company->wallet->increment('balance', $netAmount);
+                $newBal = $oldBal + $netAmount;
+
+                // Handle automated email delivery based on Merchant Preferences
+                try {
+                    $merchant = \App\Models\User::find($company->user_id);
+                    if ($merchant) {
+                        $general = DB::table('general')->first(); // Fallback if $this->general() not available
+
+                        $email_data = [
+                            'name' => $merchant->name,
+                            'email' => $merchant->email,
+                            'username' => $merchant->username ?? $merchant->name,
+                            'title' => 'Payment Received',
+                            'sender_mail' => $general->app_email ?? config('mail.from.address', 'noreply@pointwave.com'),
+                            'app_name' => config('app.name', 'Pointwave'),
+                            'wallet' => 'Main Wallet',
+                            'amount' => number_format($amount, 2),
+                            'oldbal' => number_format($oldBal, 2),
+                            'newbal' => number_format($newBal, 2),
+                            'deposit_type' => 'VIRTUAL ACCOUNT DEPOSIT',
+                            'transid' => $transactionReference
+                        ];
+
+                        // 1. Notify Merchant if they opted in
+                        if ($merchant->email_on_payment) {
+                            \App\Http\Controllers\MailController::send_mail($email_data, 'email.deposit');
+                        }
+
+                        // 2. Send Receipt to Customer if opted in and email is available
+                        if ($merchant->email_customer_on_success && !empty($payload['customer_email'])) {
+                            $customer_email_data = $email_data;
+                            $customer_email_data['name'] = $customerName ?? 'Valued Customer';
+                            $customer_email_data['username'] = $customerName ?? 'Customer';
+                            $customer_email_data['email'] = $payload['customer_email'];
+                            $customer_email_data['title'] = 'Payment Receipt for ' . $company->name;
+                            \App\Http\Controllers\MailController::send_mail($customer_email_data, 'email.receipt');
+                        }
+                    }
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to send webhook emails: ' . $e->getMessage());
+                }
             }
 
             // TODO: Forward webhook to company's webhook URL

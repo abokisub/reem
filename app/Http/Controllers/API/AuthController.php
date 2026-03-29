@@ -99,7 +99,7 @@ class AuthController extends Controller
                     try {
                         $keys = \App\Models\Company::generateApiKeys();
                         $testKeys = \App\Models\Company::generateApiKeys('test_');
-                        
+
                         $companyData = [
                             'user_id' => $user->id,
                             'name' => $request->business_name,
@@ -124,7 +124,7 @@ class AuthController extends Controller
                         ];
 
                         $companyId = DB::table('companies')->insertGetId($companyData);
-                        
+
                         // Create company wallet
                         DB::table('company_wallets')->insert([
                             'company_id' => $companyId,
@@ -135,10 +135,10 @@ class AuthController extends Controller
                             'created_at' => now(),
                             'updated_at' => now(),
                         ]);
-                        
+
                         // Set as active company
                         DB::table('users')->where('id', $user->id)->update(['active_company_id' => $companyId]);
-                        
+
                         \Log::info("Auto-created company for user {$user->id}: Company ID {$companyId}");
                     } catch (\Exception $e) {
                         \Log::error("Failed to auto-create company during registration: " . $e->getMessage());
@@ -791,17 +791,17 @@ class AuthController extends Controller
                             ->where('is_active', true)
                             ->whereNull('palmpay_account_number')
                             ->first();
-                        
+
                         if ($company) {
                             \Log::info('Company missing master wallet on login', ['company_id' => $company->id]);
-                            
+
                             // First check if master wallet already exists in virtual_accounts table
                             $existingMasterAccount = DB::table('virtual_accounts')
                                 ->where('company_id', $company->id)
                                 ->where('is_master', 1)
                                 ->where('provider', 'pointwave')
                                 ->first();
-                            
+
                             if ($existingMasterAccount) {
                                 // Master wallet exists, just sync it to company record
                                 DB::table('companies')->where('id', $company->id)->update([
@@ -810,7 +810,7 @@ class AuthController extends Controller
                                     'palmpay_bank_name' => $existingMasterAccount->bank_name,
                                     'palmpay_bank_code' => '100033',
                                 ]);
-                                
+
                                 \Log::info('Master wallet synced from virtual_accounts on login', [
                                     'company_id' => $company->id,
                                     'account_number' => $existingMasterAccount->account_number
@@ -818,7 +818,7 @@ class AuthController extends Controller
                             } else {
                                 // Create new master wallet
                                 \Log::info('Creating new master wallet for company on login', ['company_id' => $company->id]);
-                                
+
                                 $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
                                 $virtualAccount = $virtualAccountService->createVirtualAccount(
                                     $company->id,
@@ -889,6 +889,10 @@ class AuthController extends Controller
 
                         if ($user->status == 'active' || trim(strtoupper($user->type)) == 'ADMIN' || strcasecmp($user->username, 'Habukhan') == 0) {
                             $t6 = microtime(true);
+                            $userModel = \App\Models\User::find($user->id);
+                            if ($userModel) {
+                                $userModel->tokens()->delete();
+                            }
                             $token = $this->generatetoken($user->id);
                             \Log::info('Login Step 5 (Token Gen): ' . (microtime(true) - $t6) . 's');
 
@@ -1884,7 +1888,7 @@ class AuthController extends Controller
             // Generate API Keys and IDs for new company
             $keys = \App\Models\Company::generateApiKeys();
             $testKeys = \App\Models\Company::generateApiKeys('test_');
-            
+
             $companyData['uuid'] = bin2hex(random_bytes(20)); // 40 chars hex
             $companyData['business_id'] = bin2hex(random_bytes(20)); // 40 chars hex
             $companyData['api_public_key'] = $keys['api_public_key'];
@@ -1895,9 +1899,9 @@ class AuthController extends Controller
             $companyData['secret_key'] = $keys['api_secret_key'];
             $companyData['api_key'] = $keys['api_public_key'];
             $companyData['test_api_key'] = $testKeys['api_public_key'];
-            
+
             $companyId = DB::table('companies')->insertGetId($companyData);
-            
+
             // Create company wallet
             DB::table('company_wallets')->insert([
                 'company_id' => $companyId,
@@ -1908,7 +1912,7 @@ class AuthController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-            
+
             // Set as active company
             $user->active_company_id = $companyId;
         }
@@ -2124,6 +2128,7 @@ class AuthController extends Controller
             'onboarding_completed' => (bool) ($user->onboarding_completed ?? false),
 
             'business_name' => $activeCompany->name ?? $user->business_name ?? null,
+            'business_id' => $activeCompany->business_id ?? null,
             'business_phone' => $activeCompany->phone ?? $user->phone ?? null,
             'business_type' => $activeCompany->business_type ?? $user->business_type ?? null,
             'business_category' => $activeCompany->business_category ?? $user->business_category ?? null,

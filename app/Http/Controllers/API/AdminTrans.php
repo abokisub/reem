@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class AdminTrans extends Controller
 {
@@ -499,19 +500,29 @@ class AdminTrans extends Controller
                     $query = DB::table('transactions')
                         ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
                         ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
+                        ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
                         ->select(
                             'transactions.id',
                             'transactions.reference as transid',
                             'transactions.reference',
+                            'transactions.transaction_ref',
+                            'transactions.session_id',
                             'transactions.amount',
                             'transactions.fee',
+                            'transactions.net_amount',
                             'transactions.type',
                             'transactions.category',
                             'transactions.transaction_type',
                             'transactions.status',
+                            'transactions.settlement_status',
+                            'transactions.settlement_batch_no',
+                            'transactions.settlement_time',
+                            'transactions.refund_status',
+                            'transactions.dispute_status',
                             'transactions.description as message',
                             'transactions.metadata',
                             'transactions.created_at',
+                            'transactions.updated_at',
                             'transactions.balance_before as oldbal',
                             'transactions.balance_after as newbal',
                             'transactions.recipient_account_number',
@@ -519,6 +530,9 @@ class AdminTrans extends Controller
                             'transactions.recipient_bank_name',
                             'users.username',
                             'companies.name as company_name',
+                            'virtual_accounts.account_number as payee_account_number',
+                            'virtual_accounts.account_name as payee_account_name',
+                            'virtual_accounts.bank_name as payee_bank_name',
                             DB::raw("CASE 
                                 WHEN transactions.status = 'success' THEN 'success'
                                 WHEN transactions.status = 'successful' THEN 'success'
@@ -532,23 +546,52 @@ class AdminTrans extends Controller
                     if (!empty($search)) {
                         $query->where(function ($q) use ($search) {
                             $q->orWhere('transactions.reference', 'LIKE', "%$search%")
+                                ->orWhere('transactions.transaction_ref', 'LIKE', "%$search%")
+                                ->orWhere('transactions.session_id', 'LIKE', "%$search%")
                                 ->orWhere('transactions.description', 'LIKE', "%$search%")
                                 ->orWhere('transactions.amount', 'LIKE', "%$search%")
+                                ->orWhere('transactions.recipient_account_number', 'LIKE', "%$search%")
                                 ->orWhere('users.username', 'LIKE', "%$search%")
                                 ->orWhere('companies.name', 'LIKE', "%$search%");
                         });
                     }
 
-                    if ($request->status != 'ALL') {
+                    // Advanced Filters
+                    if ($request->has('start_date') && !empty($request->start_date)) {
+                        $query->whereDate('transactions.created_at', '>=', $request->start_date);
+                    }
+                    if ($request->has('end_date') && !empty($request->end_date)) {
+                        $query->whereDate('transactions.created_at', '<=', $request->end_date);
+                    }
+                    if ($request->has('category') && !empty($request->category)) {
+                        $query->where('transactions.category', $request->category);
+                    }
+                    if ($request->has('trans_order_no') && !empty($request->trans_order_no)) {
+                        $query->where('transactions.reference', 'LIKE', "%" . $request->trans_order_no . "%");
+                    }
+                    if ($request->has('merchant_order_no') && !empty($request->merchant_order_no)) {
+                        $query->where('transactions.transaction_ref', 'LIKE', "%" . $request->merchant_order_no . "%");
+                    }
+                    if ($request->has('session_id') && !empty($request->session_id)) {
+                        $query->where('transactions.session_id', 'LIKE', "%" . $request->session_id . "%");
+                    }
+                    if ($request->has('payer_account') && !empty($request->payer_account)) {
+                        $query->where('transactions.metadata', 'LIKE', "%" . $request->payer_account . "%");
+                    }
+                    if ($request->has('payee_account') && !empty($request->payee_account)) {
+                        $query->where('virtual_accounts.account_number', 'LIKE', "%" . $request->payee_account . "%");
+                    }
+
+                    if ($request->status != 'ALL' && !empty($request->status)) {
                         $query->where('transactions.status', $request->status);
                     }
 
                     $transactions = $query->orderBy('transactions.id', 'desc')->paginate($request->limit ?? 20);
 
-                    $transactions->through(function ($item) {
+                    $transactions->getCollection()->transform(function ($item) {
                         // Decode metadata
                         $metadata = is_string($item->metadata) ? json_decode($item->metadata, true) : $item->metadata;
-                        
+
                         // For KYC transactions, show identifier from metadata
                         if ($item->transaction_type === 'kyc_charge') {
                             if (is_array($metadata) && isset($metadata['identifier']) && isset($metadata['identifier_type'])) {
@@ -558,27 +601,34 @@ class AdminTrans extends Controller
                             }
                         }
                         // For debit transactions (transfers/withdrawals), use recipient info from transaction columns
-                        // For credit transactions (deposits), use sender info from metadata
                         elseif ($item->type === 'debit') {
                             $item->phone = $item->recipient_account_number ?? null;
                             $item->phone_account = $item->recipient_account_name ?? null;
+                            $item->payer_bank = "PointWave Wallet";
+                            $item->payee_bank = $item->recipient_bank_name ?? 'N/A';
+                            $item->payee_account = $item->recipient_account_number ?? 'N/A';
                         } else {
-                            // Credit transaction - extract sender info from metadata
-                            // Check multiple possible keys for sender account and name
+                            // Credit transaction (Deposit) - extract sender info from metadata
                             $item->phone = $metadata['sender_account'] ?? $metadata['account_number'] ?? $metadata['sender_account_number'] ?? null;
                             $item->phone_account = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? $metadata['account_name'] ?? null;
+
+                            $item->payer_bank = $metadata['sender_bank'] ?? $metadata['bank_name'] ?? 'N/A';
+                            $item->payer_account = $item->phone;
+
+                            $item->payee_bank = $item->payee_bank_name ?? 'PalmPay';
+                            $item->payee_account = $item->payee_account_number ?? 'N/A';
                         }
-                        
+
                         // Set display values
                         $item->display_category = Str::headline($item->category);
                         $item->display_status = strtoupper($item->status ?? 'pending');
-                        
+
                         // Set merchant/user display name
                         $item->merchant_display = $item->company_name ?? $item->username ?? 'N/A';
-                        
+
                         // Format date
                         $item->plan_date = $item->created_at;
-                        
+
                         return $item;
                     });
 
@@ -2015,8 +2065,10 @@ class AdminTrans extends Controller
 
                             DB::table('transactions')->where('id', $trans->id)->update([
                                 'status' => 'failed',
+                                'refund_status' => 'successful',
                                 'description' => $trans->description . ' (Admin Refunded)',
-                                'balance_after' => ($user->balance + $refundAmount)
+                                'balance_after' => ($user->balance + $refundAmount),
+                                'updated_at' => now()
                             ]);
 
                             return response()->json(['status' => 'success', 'message' => 'Transaction Refunded Successfully']);
@@ -2040,6 +2092,7 @@ class AdminTrans extends Controller
                             DB::table('transactions')->where('id', $trans->id)->update([
                                 'status' => 'success',
                                 'processed_at' => now(),
+                                'updated_at' => now(),
                                 'balance_after' => ($user->balance + ($trans->type === 'credit' ? $trans->amount : 0))
                             ]);
 
@@ -2048,6 +2101,103 @@ class AdminTrans extends Controller
                     }
 
                     return response()->json(['status' => 400, 'message' => 'Invalid action'])->setStatusCode(400);
+                }
+            }
+        }
+        return response()->json(['status' => 403, 'message' => 'Unauthorized'])->setStatusCode(403);
+    }
+
+    public function exportSummaryTrans(Request $request)
+    {
+        $allowed_origins = explode(',', config('app.habukhan_app_key'));
+        $server_ip = $request->server('SERVER_ADDR');
+        $is_internal = in_array($request->ip(), ['127.0.0.1', '::1', $server_ip]);
+        if (!$request->headers->get('origin') || in_array($request->headers->get('origin'), $allowed_origins) || $is_internal) {
+            if (!empty($request->id)) {
+                $check_user = DB::table('users')->where(['status' => 'active', 'id' => $this->verifytoken($request->id)])->where('type', 'ADMIN');
+
+                if ($check_user->count() > 0) {
+                    $search = strtolower($request->search);
+                    $query = DB::table('transactions')
+                        ->leftJoin('companies', 'transactions.company_id', '=', 'companies.id')
+                        ->leftJoin('users', 'transactions.user_id', '=', 'users.id')
+                        ->leftJoin('virtual_accounts', 'transactions.virtual_account_id', '=', 'virtual_accounts.id')
+                        ->select(
+                            'transactions.created_at as Date',
+                            'transactions.category as OrderType',
+                            'transactions.transaction_ref as MerchantOrderNo',
+                            'transactions.reference as TransOrderNo',
+                            'transactions.amount as Amount',
+                            'transactions.fee as Fee',
+                            'transactions.status as Status',
+                            'transactions.settlement_status',
+                            'transactions.session_id as PayId',
+                            'users.username as Customer',
+                            'companies.name as Company'
+                        );
+
+                    if (!empty($search)) {
+                        $query->where(function ($q) use ($search) {
+                            $q->orWhere('transactions.reference', 'LIKE', "%$search%")
+                                ->orWhere('transactions.transaction_ref', 'LIKE', "%$search%")
+                                ->orWhere('transactions.session_id', 'LIKE', "%$search%")
+                                ->orWhere('users.username', 'LIKE', "%$search%")
+                                ->orWhere('companies.name', 'LIKE', "%$search%");
+                        });
+                    }
+
+                    if ($request->has('start_date') && !empty($request->start_date)) {
+                        $query->whereDate('transactions.created_at', '>=', $request->start_date);
+                    }
+                    if ($request->has('end_date') && !empty($request->end_date)) {
+                        $query->whereDate('transactions.created_at', '<=', $request->end_date);
+                    }
+                    if ($request->has('category') && !empty($request->category)) {
+                        $query->where('transactions.category', $request->category);
+                    }
+                    if ($request->status != 'ALL' && !empty($request->status)) {
+                        $query->where('transactions.status', $request->status);
+                    }
+
+                    $transactions = $query->orderBy('transactions.id', 'desc')->get();
+
+                    if ($request->format === 'pdf') {
+                        $pdf = Pdf::loadView('receipts.history', [
+                            'transactions' => $transactions,
+                            'start_date' => $request->start_date,
+                            'end_date' => $request->end_date
+                        ]);
+                        $filename = "transaction_history_" . date('Y-m-d_H-i-s') . ".pdf";
+                        return $pdf->download($filename);
+                    }
+
+                    $filename = "transaction_history_" . date('Y-m-d_H-i-s') . ".csv";
+                    $handle = fopen('php://temp', 'r+');
+                    fputcsv($handle, ['Date', 'Order Type', 'Merchant Order No', 'Trans Order No', 'Amount', 'Fee', 'Status', 'Settlement Status', 'Pay ID', 'Customer', 'Company']);
+
+                    foreach ($transactions as $row) {
+                        fputcsv($handle, [
+                            $row->Date,
+                            $row->OrderType,
+                            $row->MerchantOrderNo,
+                            $row->TransOrderNo,
+                            $row->Amount,
+                            $row->Fee,
+                            $row->Status,
+                            $row->settlement_status,
+                            $row->PayId,
+                            $row->Customer,
+                            $row->Company
+                        ]);
+                    }
+
+                    rewind($handle);
+                    $csv = stream_get_contents($handle);
+                    fclose($handle);
+
+                    return response($csv)
+                        ->header('Content-Type', 'text/csv')
+                        ->header('Content-Disposition', 'attachment; filename="' . $filename . '"');
                 }
             }
         }
@@ -2126,10 +2276,10 @@ class AdminTrans extends Controller
     {
         try {
             $transaction = \App\Models\Transaction::with('company')->findOrFail($id);
-            
+
             $receiptService = new \App\Services\ReceiptService();
             return $receiptService->generateReceipt($transaction);
-            
+
         } catch (\Exception $e) {
             \Illuminate\Support\Facades\Log::error('Admin receipt generation failed: ' . $e->getMessage());
             return response()->json([

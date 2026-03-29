@@ -449,20 +449,22 @@ class Trans extends Controller
                 }
 
                 $search = strtolower($request->search);
-                
+
                 // Use Eloquent with eager loading for relationships
                 $query = \App\Models\Transaction::query()
-                    ->with(['company', 'customer', 'virtualAccount'])
-                    ->where('company_id', $user->active_company_id);
+                    ->with(['company', 'customer', 'virtualAccount']);
 
-                // Filter to customer-facing transaction types only
-                if (!empty($request->transaction_type)) {
-                    $query->where('transaction_type', $request->transaction_type);
+                // If not admin, filter by company
+                if (strtoupper($user->type) !== 'ADMIN') {
+                    $query->where('company_id', $user->active_company_id);
+                }
+
+                // Filter by transaction type (mapping 'category' from frontend to 'transaction_type' in DB)
+                $typeFilter = $request->category ?? $request->transaction_type;
+                if (!empty($typeFilter) && $typeFilter !== 'ALL') {
+                    $query->where('transaction_type', $typeFilter);
                 } else {
                     // Default: show only customer-facing types
-                    // Include 'transfer' and 'settlement_withdrawal' for company transfers
-                    // Include 'kyc_charge' for KYC verification charges
-                    // Include 'manual_adjustment' for admin manual transactions
                     $query->whereIn('transaction_type', ['va_deposit', 'api_transfer', 'company_withdrawal', 'kyc_charge', 'refund', 'transfer', 'settlement_withdrawal', 'manual_adjustment']);
                 }
 
@@ -475,51 +477,55 @@ class Trans extends Controller
                             ->orWhere('transaction_ref', 'LIKE', "%$search%")
                             ->orWhere('session_id', 'LIKE', "%$search%")
                             ->orWhere('description', 'LIKE', "%$search%")
-                            ->orWhere('status', 'LIKE', "%$search%");
+                            ->orWhere('recipient_account_number', 'LIKE', "%$search%")
+                            ->orWhere('recipient_account_name', 'LIKE', "%$search%");
                     });
                 }
 
-                // Apply status filter
-                if ($request->status != 'ALL') {
+                // Advanced Filters (Parity with Admin)
+                if ($request->has('start_date') && !empty($request->start_date)) {
+                    $query->whereDate('created_at', '>=', $request->start_date);
+                }
+                if ($request->has('end_date') && !empty($request->end_date)) {
+                    $query->whereDate('created_at', '<=', $request->end_date);
+                }
+                // Category already handled above via transaction_type mapping
+                if ($request->has('trans_order_no') && !empty($request->trans_order_no)) {
+                    $query->where('reference', 'LIKE', "%" . $request->trans_order_no . "%");
+                }
+                if ($request->has('merchant_order_no') && !empty($request->merchant_order_no)) {
+                    $query->where('transaction_ref', 'LIKE', "%" . $request->merchant_order_no . "%");
+                }
+                if ($request->has('session_id') && !empty($request->session_id)) {
+                    $query->where('session_id', 'LIKE', "%" . $request->session_id . "%");
+                }
+
+                if ($request->status != 'ALL' && !empty($request->status)) {
+                    $query->where('status', $request->status);
+                }
+
+                // Filtering by legacy status code if provided (for compatibility)
+                if ($request->has('plan_status') && $request->plan_status !== 'ALL') {
                     $statusMap = [
-                        'active' => 'success',
-                        'blocked' => 'failed',
-                        'pending' => 'pending'
+                        '1' => 'success',
+                        '2' => 'failed',
+                        '0' => 'pending'
                     ];
-                    $dbStatus = $statusMap[strtolower($request->status)] ?? $request->status;
-                    $query->where('status', $dbStatus);
+                    $dbStatus = $statusMap[$request->plan_status] ?? null;
+                    if ($dbStatus) {
+                        $query->where('status', $dbStatus);
+                    }
                 }
 
-                // Apply additional filters from spec
-                if (!empty($request->session_id)) {
-                    $query->where('session_id', $request->session_id);
-                }
-
-                if (!empty($request->transaction_ref)) {
-                    $query->where('transaction_ref', $request->transaction_ref);
-                }
-
-                if (!empty($request->customer_id)) {
-                    $query->where('company_user_id', $request->customer_id);
-                }
-
-                if (!empty($request->date_from)) {
-                    $query->where('created_at', '>=', $request->date_from);
-                }
-
-                if (!empty($request->date_to)) {
-                    $query->where('created_at', '<=', $request->date_to);
-                }
-
-                // Order by created_at DESC (as per spec)
+                // Order by created_at DESC
                 $query->orderBy('created_at', 'desc');
 
                 // Paginate with default 50 per page
-                $perPage = $request->limit ?? 50;
+                $perPage = $request->perPage ?? $request->limit ?? 50;
                 $transactions = $query->paginate($perPage);
 
                 // Transform data for frontend compatibility
-                $transactions->getCollection()->transform(function ($transaction) {
+                $transactions->setCollection($transactions->getCollection()->map(function ($transaction) {
                     // Map new schema columns to legacy frontend expectations
                     $transaction->transid = $transaction->reference;
                     $transaction->date = $transaction->created_at;
@@ -530,84 +536,89 @@ class Trans extends Controller
 
                     // Use transactions.settlement_status directly (not from settlement_queue)
                     $transaction->settlement_status = $transaction->settlement_status ?? 'unsettled';
-
-                    // Extract customer info based on transaction type
-                    $metadata = is_array($transaction->metadata) ? $transaction->metadata : json_decode($transaction->metadata, true);
-                    
-                    // For credit transactions (deposits), show sender info
-                    if ($transaction->type === 'credit' || $transaction->transaction_type === 'va_deposit') {
-                        $transaction->customer_name = $metadata['sender_name'] ?? 
-                            ($transaction->virtualAccount ? $transaction->virtualAccount->account_name : null) ?? 
-                            'Unknown';
-                        $transaction->customer_account = $metadata['sender_account'] ?? '';
-                        $transaction->customer_bank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '';
-                        
-                        // Add virtual account details for recipient section (CRITICAL FIX)
-                        if ($transaction->virtualAccount) {
-                            $transaction->va_account_name = $transaction->virtualAccount->palmpay_account_name 
-                                ?? $transaction->virtualAccount->account_name 
-                                ?? '';
-                            $transaction->va_account_number = $transaction->virtualAccount->palmpay_account_number 
-                                ?? $transaction->virtualAccount->account_number 
-                                ?? '';
-                            $transaction->va_bank_name = $transaction->virtualAccount->palmpay_bank_name 
-                                ?? $transaction->virtualAccount->bank_name 
-                                ?? 'PalmPay';
-                        } else {
-                            $transaction->va_account_name = '';
-                            $transaction->va_account_number = '';
-                            $transaction->va_bank_name = 'PalmPay';
-                        }
-                    } 
-                    // For debit transactions (transfers/withdrawals), show recipient info
-                    else {
-                        // For KYC charges, show identifier from metadata
-                        if ($transaction->transaction_type === 'kyc_charge' && isset($metadata['identifier'], $metadata['identifier_type'])) {
-                            $transaction->customer_name = $metadata['identifier_type'] . ': ' . $metadata['identifier'];
-                            $transaction->customer_account = '';
-                            $transaction->customer_bank = '';
-                        } else {
-                            $transaction->customer_name = $transaction->recipient_account_name ?? 'Unknown Recipient';
-                            $transaction->customer_account = $transaction->recipient_account_number ?? '';
-                            $transaction->customer_bank = $transaction->recipient_bank_name ?? '';
-                        }
-                        
-                        // PROFESSIONAL STANDARD FOR SETTLEMENT WITHDRAWALS:
-                        // SENDER = Company's Virtual Account (master wallet where money is held)
-                        // RECIPIENT = Settlement account OR external transfer account (where money goes)
-                        if ($transaction->company) {
-                            // Sender: Company's Virtual Account (master wallet)
-                            $transaction->company_virtual_account_number = $transaction->company->palmpay_account_number 
-                                ?: $transaction->company->account_number 
-                                ?: '';
-                            $transaction->company_virtual_account_name = $transaction->company->palmpay_account_name 
-                                ?: $transaction->company->name 
-                                ?: '';
-                            $transaction->company_virtual_bank_name = $transaction->company->palmpay_bank_name 
-                                ?: 'PalmPay';
-                            $transaction->company_name = $transaction->company->name ?? '';
-                        } else {
-                            $transaction->company_virtual_account_number = '';
-                            $transaction->company_virtual_account_name = '';
-                            $transaction->company_virtual_bank_name = 'PalmPay';
-                            $transaction->company_name = '';
-                        }
+                    // Ensure settlement time exists if status is settled
+                    if ($transaction->settlement_status === 'settled') {
+                        $transaction->settlement_time = $transaction->settlement_time ?? $transaction->processed_at ?? $transaction->created_at;
+                    } else {
+                        $transaction->settlement_time = $transaction->settlement_time ?? null;
                     }
-                    
-                    // Ensure no N/A values - use empty string or 0 instead
-                    $transaction->customer_name = $transaction->customer_name ?: '';
-                    $transaction->customer_account = $transaction->customer_account ?: '';
-                    $transaction->customer_bank = $transaction->customer_bank ?: '';
-                    $transaction->details = $transaction->details ?: '';
-                    
+
+                    // 5. Robust Payer & Destination Mapping for High-Fidelity Receipts
+                    $metadata = is_array($transaction->metadata) ? $transaction->metadata : json_decode($transaction->metadata, true);
+                    $isDeposit = in_array($transaction->transaction_type, ['va_deposit', 'credit']);
+
+                    // Fixed Financials: Ensure Gross - Fee = Net for all types
+                    $amount = (float) ($transaction->amount ?? 0);
+                    $fee = (float) ($transaction->fee ?? 0);
+
+                    if ($isDeposit) {
+                        // DEPOSIT: Gross is the full amount sent, Net is what company gets
+                        $transaction->setAttribute('amount', $amount);
+                        $transaction->setAttribute('fee', $fee);
+                        $transaction->setAttribute('net_amount', $amount - $fee);
+
+                        // PAYER (Section 3): The External Sender
+                        $transaction->setAttribute('customer_name', $metadata['sender_name'] ?? 'External Payer');
+                        $transaction->setAttribute('customer_account', $metadata['sender_account'] ?? '');
+                        $transaction->setAttribute('customer_bank', $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? '');
+
+                        // DESTINATION (Section 4): The Company Virtual Account
+                        if ($transaction->virtualAccount) {
+                            $transaction->setAttribute('recipient_account_name', $transaction->company->name ?? 'System Wallet');
+                            $transaction->setAttribute('recipient_account_number', $transaction->virtualAccount->account_number ?? '');
+                            $transaction->setAttribute('recipient_bank_name', $transaction->virtualAccount->bank_name ?? 'PalmPay');
+                        } else {
+                            $transaction->setAttribute('recipient_account_name', 'System Wallet');
+                            $transaction->setAttribute('recipient_account_number', '');
+                            $transaction->setAttribute('recipient_bank_name', 'PalmPay');
+                        }
+                    } else {
+                        // TRANSFER: Net is what was sent, Gross is total deduction (Amount + Fee)
+                        $transaction->setAttribute('amount', $amount + $fee); // Gross
+                        $transaction->setAttribute('fee', $fee);
+                        $transaction->setAttribute('net_amount', $amount); // Net delivered
+
+                        // PAYER (Section 3): The Company
+                        if ($transaction->company) {
+                            $transaction->setAttribute('customer_name', $transaction->company->name ?? 'The Company');
+                            $transaction->setAttribute('va_account_name', $transaction->company->name ?? '');
+                            $transaction->setAttribute('va_account_number', $transaction->company->account_number ?? '');
+                            $transaction->setAttribute('va_bank_name', $transaction->company->bank_name ?? 'PalmPay');
+                        } else {
+                            $transaction->setAttribute('customer_name', 'The Company');
+                            $transaction->setAttribute('va_account_name', '');
+                            $transaction->setAttribute('va_account_number', '');
+                            $transaction->setAttribute('va_bank_name', 'PalmPay');
+                        }
+
+                        // DESTINATION (Section 4): The Recipient
+                        $recipient_bank = $transaction->recipient_bank_name;
+                        if (empty($recipient_bank) && !empty($transaction->recipient_bank_code)) {
+                            $bank = \DB::table('banks')->where('code', $transaction->recipient_bank_code)->first();
+                            if ($bank)
+                                $recipient_bank = $bank->name;
+                        }
+
+                        $transaction->setAttribute('recipient_account_name', $transaction->recipient_account_name ?? 'Recipient');
+                        $transaction->setAttribute('recipient_account_number', $transaction->recipient_account_number ?? '');
+                        $transaction->setAttribute('recipient_bank_name', $recipient_bank ?? '');
+                    }
+
                     // Keep metadata as object for frontend access
-                    $transaction->metadata = $metadata;
+                    $transaction->setAttribute('metadata', $metadata);
+
+                    // Always ensure a Batch No exists - generate a Virtual ID if missing
+                    $batchNumber = $transaction->settlement_batch_no
+                        ?? ('BN-' . ($transaction->created_at ? $transaction->created_at->format('Ymd') : date('Ymd')) . '-' . strtoupper(substr($transaction->reference, -4)));
+                    $transaction->setAttribute('settlement_batch_no', $batchNumber);
 
                     return $transaction;
-                });
+                }));
 
                 return response()->json([
-                    'ra_trans' => $transactions
+                    'status' => 'success',
+                    'ra_trans' => $transactions,
+                    'data' => $transactions
                 ]);
 
             } else {
@@ -949,7 +960,7 @@ class Trans extends Controller
             $trans->sender_name = $metadata['sender_name'] ?? $metadata['sender_account_name'] ?? 'N/A';
             $trans->sender_account = $metadata['sender_account'] ?? 'N/A';
             $trans->sender_bank = $metadata['sender_bank'] ?? $metadata['sender_bank_name'] ?? 'N/A';
-            
+
             return response()->json([
                 'trans' => $trans
             ]);
@@ -1076,8 +1087,13 @@ class Trans extends Controller
                 }
 
                 $search = strtolower($request->search);
+                $status = $request->status;
+                $startDate = $request->start_date;
+                $endDate = $request->end_date;
+
                 $query = CompanyUser::where('company_id', $company->id);
 
+                // Search Filter
                 if (!empty($search)) {
                     $query->where(function ($q) use ($search) {
                         $q->orWhere('first_name', 'LIKE', "%$search%")
@@ -1086,6 +1102,20 @@ class Trans extends Controller
                             ->orWhere('phone', 'LIKE', "%$search%")
                             ->orWhere('external_customer_id', 'LIKE', "%$search%");
                     });
+                }
+
+                // Status Filter
+                if ($status && $status !== 'all') {
+                    $query->where('status', $status);
+                }
+
+                // Date Range Filter
+                if ($startDate && $endDate) {
+                    $query->whereBetween('created_at', [$startDate . ' 00:00:00', $endDate . ' 23:59:59']);
+                } elseif ($startDate) {
+                    $query->where('created_at', '>=', $startDate . ' 00:00:00');
+                } elseif ($endDate) {
+                    $query->where('created_at', '<=', $endDate . ' 23:59:59');
                 }
 
                 $customers = $query->orderBy('id', 'desc')->paginate($request->limit);
@@ -1503,87 +1533,225 @@ class Trans extends Controller
             $userId = $this->verifytoken($request->id);
             if (DB::table('users')->where(['id' => $userId, 'status' => 'active'])->exists()) {
 
-                $company = Company::where('user_id', $userId)->first();
-                if (!$company) {
-                    return response()->json(['status' => 404, 'message' => 'Company not found'], 404);
+                $user = DB::table('users')->where('id', $userId)->first();
+                $isAdmin = $user && in_array(strtolower($user->type), ['admin', 'administrator', 'superadmin']);
+
+                $targetVirtualAccountId = null;
+                $company = null;
+
+                if ($isAdmin) {
+                    // Admin can see any customer
+                    $customer = CompanyUser::where(function ($q) use ($customer_id) {
+                        $q->where('id', $customer_id)
+                            ->orWhere('uuid', $customer_id)
+                            ->orWhere('external_customer_id', $customer_id);
+                    })->first();
+
+                    if ($customer) {
+                        $company = Company::find($customer->company_id);
+                    }
+                } else {
+                    $company = Company::where('user_id', $userId)->first();
+                    if (!$company) {
+                        return response()->json(['status' => 404, 'message' => 'Company not found'], 404);
+                    }
+
+                    $customer = CompanyUser::where(function ($q) use ($customer_id) {
+                        $q->where('id', $customer_id)
+                            ->orWhere('uuid', $customer_id)
+                            ->orWhere('external_customer_id', $customer_id);
+                    })->where('company_id', $company->id)->first();
                 }
 
-                $customer = CompanyUser::where('id', $customer_id)->where('company_id', $company->id)->first();
+                // If not found, check if it's a VirtualAccount ID or account_id
+                if (!$customer) {
+                    $vaQuery = VirtualAccount::where(function ($q) use ($customer_id) {
+                        $q->where('id', $customer_id)
+                            ->orWhere('account_id', $customer_id)
+                            ->orWhere('uuid', $customer_id);
+                    });
+
+                    // If NOT admin, restrict VA search to user's company
+                    if (!$isAdmin && $company) {
+                        $vaQuery->where('company_id', $company->id);
+                    }
+
+                    $virtualAccount = $vaQuery->first();
+
+                    if ($virtualAccount) {
+                        $targetVirtualAccountId = $virtualAccount->id;
+                        $company = Company::find($virtualAccount->company_id);
+
+                        $customer = CompanyUser::where('id', $virtualAccount->company_user_id)
+                            ->first();
+
+                        // If still not found by direct relation, try by email
+                        if (!$customer && $virtualAccount->customer_email) {
+                            $customer = CompanyUser::where('email', $virtualAccount->customer_email)
+                                ->where('company_id', $company->id)
+                                ->first();
+                        }
+                    }
+                }
 
                 if (!$customer) {
                     return response()->json(['status' => 404, 'message' => 'Customer not found'], 404);
                 }
 
-                // Fetch related data
-                $reserved_accounts = VirtualAccount::where('company_user_id', $customer->id)
-                    ->orWhere('customer_email', $customer->email)
-                    ->orderBy('created_at', 'desc')
-                    ->get()
-                    ->map(function ($acc) use ($customer) {
-                        return [
-                            'id' => $acc->id,
-                            'account_id' => $acc->account_id,
-                            'uuid' => $acc->uuid,
-                            'customer_email' => $customer->email,
-                            'bank_name' => $acc->bank_name,
-                            'account_number' => $acc->account_number,
-                            'account_name' => $acc->account_name,
-                            'status' => $acc->status,
-                            'date' => $acc->created_at->format('d M Y, h:i A'),
-                            'created_at' => $acc->created_at,
-                        ];
-                    });
-                
-                // Fetch transactions for this customer's virtual accounts
-                $accountIds = $reserved_accounts->pluck('id')->toArray();
-                $transactions = [];
-                
-                if (!empty($accountIds)) {
-                    $transactions = DB::table('transactions')
-                        ->whereIn('virtual_account_id', $accountIds)
-                        ->where('company_id', $company->id)
-                        ->orderBy('created_at', 'desc')
-                        ->limit(100)
-                        ->get()
-                        ->map(function ($txn) {
-                            return [
-                                'id' => $txn->id,
-                                'reference' => $txn->reference,
-                                'amount' => $txn->amount,
-                                'type' => $txn->type,
-                                'status' => $txn->status,
-                                'created_at' => $txn->created_at,
-                            ];
+                try {
+                    // Fetch related data
+                    $reserved_accounts = VirtualAccount::where('company_id', $company->id)
+                        ->where(function ($q) use ($customer) {
+                            $q->where('company_user_id', $customer->id)
+                                ->orWhere('customer_email', $customer->email);
                         })
-                        ->toArray();
-                }
-                
-                $cards = [];
+                        ->get()
+                        // If we came from a specific virtual account ID, put it first so frontend picks it up
+                        ->sortByDesc(function ($acc) use ($targetVirtualAccountId) {
+                            return $acc->id == $targetVirtualAccountId ? 1 : 0;
+                        })
+                        ->values()
+                        ->map(function ($acc) use ($customer) {
+                            return [
+                                'id' => $acc->id,
+                                'account_id' => $acc->account_id,
+                                'uuid' => $acc->uuid,
+                                'customer_email' => $customer->email,
+                                'bank_name' => $acc->bank_name,
+                                'account_number' => $acc->account_number,
+                                'account_name' => $acc->account_name,
+                                'status' => $acc->status,
+                                'date' => $acc->created_at ? $acc->created_at->format('d M Y, h:i A') : 'N/A',
+                                'created_at' => $acc->created_at,
+                            ];
+                        });
 
-                $displayId = $customer->external_customer_id ?? ($customer->uuid ?? 'CUST-' . str_pad($customer->id, 6, '0', STR_PAD_LEFT));
+                    // Fetch transactions for this customer's virtual accounts
+                    $accountIds = $reserved_accounts->pluck('id')->toArray();
+                    $accountNumbers = $reserved_accounts->pluck('account_number')->filter()->toArray();
+                    $transactions = [];
 
-                return response()->json([
-                    'status' => 'success',
-                    'data' => [
-                        'customer' => [
-                            'id' => $customer->id,
-                            'customer_id' => $displayId,
-                            'email' => $customer->email,
-                            'phone' => $customer->phone,
-                            'first_name' => $customer->first_name,
-                            'last_name' => $customer->last_name,
-                            'name' => $customer->first_name . ' ' . $customer->last_name,
-                            'address' => $customer->address,
-                            'city' => $customer->city,
-                            'state' => $customer->state,
-                            'postal_code' => $customer->postal_code,
-                            'date_of_birth' => $customer->date_of_birth,
-                        ],
-                        'virtual_accounts' => $reserved_accounts->toArray(),
+                    if (!empty($accountIds) || !empty($accountNumbers)) {
+                        $transactions = DB::table('transactions')
+                            ->where('company_id', $company->id)
+                            ->where(function ($q) use ($accountIds, $accountNumbers, $customer) {
+                                $q->whereIn('virtual_account_id', $accountIds);
+
+                                // Fallback: Check account numbers and email in metadata/description
+                                foreach ($accountNumbers as $num) {
+                                    if (!empty($num)) {
+                                        $q->orWhere('description', 'LIKE', "%$num%")
+                                            ->orWhere('metadata', 'LIKE', "%$num%")
+                                            ->orWhere('palmpay_reference', 'LIKE', "%$num%")
+                                            ->orWhere('provider_reference', 'LIKE', "%$num%");
+                                    }
+                                }
+
+                                if (!empty($customer->email)) {
+                                    $q->orWhere('description', 'LIKE', "%{$customer->email}%")
+                                        ->orWhere('metadata', 'LIKE', "%{$customer->email}%");
+                                }
+                                if (!empty($customer->phone)) {
+                                    $q->orWhere('description', 'LIKE', "%{$customer->phone}%")
+                                        ->orWhere('metadata', 'LIKE', "%{$customer->phone}%");
+                                }
+                            })
+                            ->orderBy('created_at', 'desc')
+                            ->limit(100)
+                            ->get()
+                            ->map(function ($txn) {
+                                $va = \App\Models\VirtualAccount::find($txn->virtual_account_id);
+
+                                // Parse payer info from description (e.g. "Transfer from ABOKI TELECOM" or "Ibrahim Goni:08089818908")
+                                $description = $txn->description ?? '';
+                                $payerName = null;
+                                $payerAccount = null;
+                                if (preg_match('/Transfer from (.+)/i', $description, $m)) {
+                                    $payerName = trim($m[1]);
+                                } elseif (preg_match('/^(.+):(\d{7,11})/i', $description, $m)) {
+                                    $payerName = trim($m[1]);
+                                    $payerAccount = trim($m[2]);
+                                }
+
+                                return [
+                                    'id' => $txn->id,
+                                    'transaction_ref' => $txn->transaction_ref ?? $txn->reference,
+                                    'reference' => $txn->reference,
+                                    'amount' => $txn->amount,
+                                    'fee' => $txn->fee ?? 0,
+                                    'net_amount' => $txn->net_amount ?? $txn->amount,
+                                    'type' => $txn->type,
+                                    'transaction_type' => $txn->transaction_type ?? $txn->type,
+                                    'status' => $txn->status,
+                                    'description' => $description,
+                                    'session_id' => $txn->session_id ?? null,
+                                    'palmpay_reference' => $txn->palmpay_reference ?? null,
+                                    // Payer (parsed from description)
+                                    'customer_name' => $payerName,
+                                    'customer_account' => $payerAccount ?? $txn->provider_reference,
+                                    // Recipient (for transfers/withdrawals)
+                                    'recipient_account_number' => $txn->recipient_account_number ?? null,
+                                    'recipient_account_name' => $txn->recipient_account_name ?? null,
+                                    'recipient_bank_name' => $txn->recipient_bank_name ?? null,
+                                    // VA (for deposits)
+                                    'va_account_number' => $va ? $va->account_number : null,
+                                    'va_account_name' => $va ? $va->account_name : null,
+                                    'va_bank_name' => $va ? $va->bank_name : 'PalmPay',
+                                    // Settlement
+                                    'settlement_status' => $txn->settlement_status ?? 'unsettled',
+                                    'settlement_batch_no' => $txn->settlement_batch_no ?? null,
+                                    'settlement_time' => $txn->settlement_time ?? null,
+                                    'created_at' => $txn->created_at,
+                                ];
+                            })
+                            ->toArray();
+                    }
+
+                    $cards = [];
+
+                    $displayId = $customer->external_customer_id ?? ($customer->uuid ?? 'CUST-' . str_pad($customer->id, 6, '0', STR_PAD_LEFT));
+
+                    $customerData = [
+                        'id' => $customer->id,
+                        'customer_id' => $displayId,
+                        'email' => $customer->email,
+                        'phone' => $customer->phone,
+                        'first_name' => $customer->first_name,
+                        'last_name' => $customer->last_name,
+                        'name' => $customer->first_name . ' ' . $customer->last_name,
+                        'address' => $customer->address,
+                        'city' => $customer->city,
+                        'state' => $customer->state,
+                        'postal_code' => $customer->postal_code,
+                        'date_of_birth' => $customer->date_of_birth,
+                        'merchant_name' => $company ? $company->name : 'N/A',
+                        'merchant_id' => $customer->company_id,
+                    ];
+
+                    return response()->json([
+                        'status' => 'success',
+                        'customer' => $customerData,
+                        'reserved_accounts' => $reserved_accounts,
+                        'virtual_accounts' => $reserved_accounts,
                         'transactions' => $transactions,
-                        'cards' => $cards
-                    ]
-                ], 200);
+                        'cards' => $cards,
+                        // Compatibility for older/different frontend parts
+                        'data' => [
+                            'customer' => $customerData,
+                            'reserved_accounts' => $reserved_accounts,
+                            'virtual_accounts' => $reserved_accounts,
+                            'transactions' => $transactions,
+                            'cards' => $cards,
+                        ]
+                    ], 200);
+
+                } catch (\Exception $e) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Internal Error: ' . $e->getMessage(),
+                        'debug' => $e->getTraceAsString()
+                    ], 500);
+                }
 
             } else {
                 return response()->json(['status' => 403, 'message' => 'Access Denied'], 403);

@@ -41,7 +41,7 @@ class CompanyKycController extends Controller
             });
         }
 
-        $companies = $query->orderBy('created_at', 'desc')->paginate(20);
+        $companies = $query->orderBy('created_at', 'desc')->paginate($request->per_page ?? 20);
 
         // Add KYC approval summary for each company
         /** @var \Illuminate\Pagination\LengthAwarePaginator $companies */
@@ -238,10 +238,10 @@ class CompanyKycController extends Controller
     private function approveCompany(Company $company)
     {
         // CRITICAL: Check if company has KYC before approval
-        $hasKyc = !empty($company->director_bvn) || 
-                  !empty($company->director_nin) || 
-                  !empty($company->business_registration_number);
-        
+        $hasKyc = !empty($company->director_bvn) ||
+            !empty($company->director_nin) ||
+            !empty($company->business_registration_number);
+
         if (!$hasKyc) {
             throw new \Exception('Cannot approve company: Missing KYC information. Company must provide either Director BVN, Director NIN, or RC Number before approval.');
         }
@@ -289,7 +289,7 @@ class CompanyKycController extends Controller
 
             if (!$masterAccount) {
                 $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
-                
+
                 // VirtualAccountService will automatically use:
                 // 1. Director BVN (if available) - AGGREGATOR MODEL
                 // 2. Director NIN (if available)
@@ -347,10 +347,10 @@ class CompanyKycController extends Controller
 
         // CRITICAL: Check if company has KYC before activation
         if ($request->is_active) {
-            $hasKyc = !empty($company->director_bvn) || 
-                      !empty($company->director_nin) || 
-                      !empty($company->business_registration_number);
-            
+            $hasKyc = !empty($company->director_bvn) ||
+                !empty($company->director_nin) ||
+                !empty($company->business_registration_number);
+
             if (!$hasKyc) {
                 return response()->json([
                     'status' => 'error',
@@ -393,7 +393,7 @@ class CompanyKycController extends Controller
                     ]);
 
                     $virtualAccountService = new \App\Services\PalmPay\VirtualAccountService();
-                    
+
                     // Create master wallet using correct signature
                     // VirtualAccountService will automatically use:
                     // 1. Director BVN (if available) - AGGREGATOR MODEL
@@ -443,7 +443,7 @@ class CompanyKycController extends Controller
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()
                 ]);
-                
+
                 // Return error to admin - don't silently fail!
                 return response()->json([
                     'status' => 'error',
@@ -528,10 +528,13 @@ class CompanyKycController extends Controller
             'total_companies' => Company::where('email', '!=', 'admin@pointwave.com')->count(),
             'pending_kyc' => Company::where('email', '!=', 'admin@pointwave.com')->where('kyc_status', 'pending')->count(),
             'under_review' => Company::where('email', '!=', 'admin@pointwave.com')->where('kyc_status', 'under_review')->count(),
-            'approved' => Company::where('email', '!=', 'admin@pointwave.com')->where('kyc_status', 'verified')->count(), // Changed from 'approved' to 'verified'
+            'approved' => Company::where('email', '!=', 'admin@pointwave.com')->where('kyc_status', 'verified')->count(),
             'rejected' => Company::where('email', '!=', 'admin@pointwave.com')->where('kyc_status', 'rejected')->count(),
-            'suspended' => Company::where('email', '!=', 'admin@pointwave.com')->where('status', 'suspended')->count(), // Changed to check 'status' instead of 'kyc_status'
+            'suspended' => Company::where('email', '!=', 'admin@pointwave.com')->where('status', 'suspended')->count(),
             'active_companies' => Company::where('email', '!=', 'admin@pointwave.com')->where('is_active', true)->count(),
+            'total_platform_balance' => \App\Models\CompanyWallet::whereHas('company', function ($q) {
+                $q->where('email', '!=', 'admin@pointwave.com');
+            })->sum('balance'),
         ];
 
         return response()->json([

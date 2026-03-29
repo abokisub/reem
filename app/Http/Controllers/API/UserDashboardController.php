@@ -94,7 +94,7 @@ class UserDashboardController extends Controller
         $todayRevenueQuery = DB::table('transactions')
             ->where('category', 'virtual_account_credit')
             ->where('type', 'credit')
-            ->where('status', 'success')
+            ->whereIn('status', ['success', 'successful'])
             ->whereBetween('created_at', [$todayStart, $todayEnd]);
         if (!$isAdmin) {
             $todayRevenueQuery->where('company_id', $user->active_company_id);
@@ -110,21 +110,27 @@ class UserDashboardController extends Controller
         }
         $todayTransactions = $todayTransactionsQuery->count();
 
-        // Filtered revenue (based on selected filter)
-        $revenueQuery = DB::table('transactions')
-            ->where('category', 'virtual_account_credit')
-            ->where('type', 'credit');
-
-        // Only filter by company if not admin
+        // Filtered revenue (based on selected filter) — use separate queries to avoid clone issues
+        $filteredRevenueQuery = DB::table('transactions')
+            ->where('type', 'credit')
+            ->whereIn('status', ['success', 'successful']);
         if (!$isAdmin) {
-            $revenueQuery->where('company_id', $user->active_company_id);
+            $filteredRevenueQuery->where('company_id', $user->active_company_id);
         }
-
         if ($startDate && $endDate) {
-            $revenueQuery->whereBetween('created_at', [$startDate, $endDate]);
+            $filteredRevenueQuery->whereBetween('created_at', [$startDate, $endDate]);
         }
+        $filteredRevenue = (float) $filteredRevenueQuery->sum('amount');
 
-        $totalRevenue = (float) $revenueQuery->where('status', 'success')->sum('amount');
+        // FOR ADMIN: Top card shows lifetime revenue regardless of filter
+        if ($isAdmin) {
+            $topRevenue = (float) DB::table('transactions')
+                ->where('type', 'credit')
+                ->whereIn('status', ['success', 'successful'])
+                ->sum('amount');
+        } else {
+            $topRevenue = $filteredRevenue;
+        }
 
         // Status Distribution (Deposits)
         $statusDistribution = DB::table('transactions')
@@ -144,13 +150,16 @@ class UserDashboardController extends Controller
             ->get()
             ->pluck('count', 'status');
 
+        $successfulCount = ($statusStats['success'] ?? 0) + ($statusStats['successful'] ?? 0);
+        $pendingCount = ($statusStats['pending'] ?? 0) + ($statusStats['PENDING'] ?? 0);
+        $failedCount = ($statusStats['failed'] ?? 0) + ($statusStats['FAILED'] ?? 0);
+
         // Revenue Chart (Daily)
         $revenueChart = [];
         if ($startDate && $endDate) {
             $dailyRevenueQuery = DB::table('transactions')
-                ->where('category', 'virtual_account_credit')
                 ->where('type', 'credit')
-                ->where('status', 'success')
+                ->whereIn('status', ['success', 'successful'])
                 ->whereBetween('created_at', [$startDate, $endDate]);
 
             // Only filter by company if not admin
@@ -239,7 +248,7 @@ class UserDashboardController extends Controller
             $prevRevenueQuery = DB::table('transactions')
                 ->where('category', 'virtual_account_credit')
                 ->where('type', 'credit')
-                ->where('status', 'success')
+                ->whereIn('status', ['success', 'successful'])
                 ->whereBetween('created_at', [$prevStartDate, $prevEndDate]);
 
             // Only filter by company if not admin
@@ -250,9 +259,9 @@ class UserDashboardController extends Controller
             $prevRevenue = $prevRevenueQuery->sum('amount');
 
             if ($prevRevenue > 0) {
-                $revenueGrowth = (($totalRevenue - $prevRevenue) / $prevRevenue) * 100;
+                $revenueGrowth = (($filteredRevenue - $prevRevenue) / $prevRevenue) * 100;
             } else {
-                $revenueGrowth = $totalRevenue > 0 ? 100 : 0;
+                $revenueGrowth = $filteredRevenue > 0 ? 100 : 0;
             }
         }
 
@@ -270,40 +279,68 @@ class UserDashboardController extends Controller
             'filter' => $filter,
             'is_admin' => $isAdmin,
             'data' => [
-                'total_revenue' => $totalRevenue,
+                'total_revenue' => $topRevenue,
+                'filtered_revenue' => $filteredRevenue,
                 'today_revenue' => $todayRevenue,
                 'total_transactions' => $totalTransactions,
                 'today_transactions' => $todayTransactions,
                 'pending_settlement' => $pendingSettlement,
-                'system_wallet_balance' => $totalSystemBalance, // NEW: Total system wallet balance
-                'total_companies' => $totalCompanies, // NEW: Total active companies
-                'total_virtual_accounts' => $totalVirtualAccounts, // NEW: Total virtual accounts
+                'system_wallet_balance' => $totalSystemBalance,
+                'total_companies' => $totalCompanies,
+                'total_virtual_accounts' => $totalVirtualAccounts,
                 'registered_businesses' => $isAdmin ? $registeredBusinesses : 1,
                 'pending_activations' => $isAdmin ? $pendingActivations : 0,
                 'all_users' => $isAdmin ? $totalUsers : 0,
                 'revenue_chart' => $revenueChart,
                 'transaction_chart' => $transactionChart,
                 'status_distribution' => [
-                    ['label' => 'Successful', 'value' => (int) ($statusStats['success'] ?? 0)],
-                    ['label' => 'Pending', 'value' => (int) ($statusStats['pending'] ?? 0)],
-                    ['label' => 'Failed', 'value' => (int) ($statusStats['failed'] ?? 0)],
+                    ['label' => 'Successful', 'value' => (int) $successfulCount],
+                    ['label' => 'Pending', 'value' => (int) $pendingCount],
+                    ['label' => 'Failed', 'value' => (int) $failedCount],
                 ],
                 'revenue_growth' => round($revenueGrowth, 2),
                 'network_balances' => $networkBalances,
                 'service_analytics' => $serviceAnalytics,
                 'customer_stats' => $customerStats,
                 'kyc_analytics' => $this->getKycAnalytics($companyId, $startDate, $endDate),
+                'lifetime_kyc' => $isAdmin ? $this->getKycAnalytics(null, null, null) : null,
                 'profit_loss' => $this->getProfitLossAnalytics($companyId, $startDate, $endDate),
+                'lifetime_profit' => $isAdmin ? $this->getProfitLossAnalytics(null, null, null) : null,
+                'lifetime_status_distribution' => $isAdmin ? $this->getLifetimeStatusDistribution() : null,
             ]
         ]);
+    }
+
+    private function getLifetimeStatusDistribution()
+    {
+        $stats = DB::table('transactions')
+            ->where('category', 'virtual_account_credit')
+            ->where('type', 'credit')
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->get()
+            ->pluck('count', 'status');
+
+        $successfulCount = ($stats['success'] ?? 0) + ($stats['successful'] ?? 0);
+        $pendingCount = ($stats['pending'] ?? 0) + ($stats['PENDING'] ?? 0);
+        $failedCount = ($stats['failed'] ?? 0) + ($stats['FAILED'] ?? 0);
+
+        return [
+            ['label' => 'Successful', 'value' => (int) $successfulCount],
+            ['label' => 'Pending', 'value' => (int) $pendingCount],
+            ['label' => 'Failed', 'value' => (int) $failedCount],
+        ];
     }
 
     private function getNetworkBalances($companyId, $startDate, $endDate)
     {
         $query = DB::table('transactions')
-            ->where('company_id', $companyId)
             ->where('category', 'data')
-            ->where('status', 'success');
+            ->whereIn('status', ['success', 'successful']);
+
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
 
         if ($startDate && $endDate) {
             $query->whereBetween('created_at', [$startDate, $endDate]);
@@ -318,21 +355,21 @@ class UserDashboardController extends Controller
             'mtn_datashare' => ['amount' => 0, 'volume' => 0],
             'mtn_cg' => ['amount' => 0, 'volume' => 0],
             'mtn_gifting' => ['amount' => 0, 'volume' => 0],
-            
+
             // Airtel Plans
             'airtel_sme' => ['amount' => 0, 'volume' => 0],
             'airtel_sme2' => ['amount' => 0, 'volume' => 0],
             'airtel_datashare' => ['amount' => 0, 'volume' => 0],
             'airtel_cg' => ['amount' => 0, 'volume' => 0],
             'airtel_gifting' => ['amount' => 0, 'volume' => 0],
-            
+
             // GLO Plans
             'glo_sme' => ['amount' => 0, 'volume' => 0],
             'glo_sme2' => ['amount' => 0, 'volume' => 0],
             'glo_datashare' => ['amount' => 0, 'volume' => 0],
             'glo_cg' => ['amount' => 0, 'volume' => 0],
             'glo_gifting' => ['amount' => 0, 'volume' => 0],
-            
+
             // 9Mobile Plans
             'mobile_sme' => ['amount' => 0, 'volume' => 0],
             'mobile_sme2' => ['amount' => 0, 'volume' => 0],
@@ -344,7 +381,7 @@ class UserDashboardController extends Controller
         foreach ($dataTransactions as $transaction) {
             $description = strtolower($transaction->description ?? '');
             $amount = $transaction->amount ?? 0;
-            
+
             // Extract data volume from description
             preg_match('/(\d+(?:\.\d+)?)\s*(gb|mb)/i', $description, $matches);
             $volume = 0;
@@ -353,7 +390,7 @@ class UserDashboardController extends Controller
                 $unit = strtolower($matches[2]);
                 $volume = ($unit === 'gb') ? $size : ($size / 1024);
             }
-            
+
             // Categorize by network and plan type
             if (strpos($description, 'mtn') !== false) {
                 if (strpos($description, 'sme2') !== false || strpos($description, 'sme 2') !== false) {
@@ -432,8 +469,11 @@ class UserDashboardController extends Controller
     private function getServiceAnalytics($companyId, $startDate, $endDate)
     {
         $query = DB::table('transactions')
-            ->where('company_id', $companyId)
-            ->where('status', 'success');
+            ->whereIn('status', ['success', 'successful']);
+
+        if ($companyId) {
+            $query->where('company_id', $companyId);
+        }
 
         if ($startDate && $endDate) {
             $query->whereBetween('created_at', [$startDate, $endDate]);
@@ -457,14 +497,18 @@ class UserDashboardController extends Controller
     private function getCustomerStats($companyId, $startDate, $endDate)
     {
         // Total customers
-        $totalCustomers = DB::table('virtual_accounts')
-            ->where('company_id', $companyId)
-            ->count();
+        $totalCustomersQuery = DB::table('virtual_accounts');
+        if ($companyId) {
+            $totalCustomersQuery->where('company_id', $companyId);
+        }
+        $totalCustomers = $totalCustomersQuery->count();
 
         // Active customers (made transactions in period)
         $activeCustomersQuery = DB::table('transactions')
-            ->where('company_id', $companyId)
-            ->where('status', 'success');
+            ->whereIn('status', ['success', 'successful']);
+        if ($companyId) {
+            $activeCustomersQuery->where('company_id', $companyId);
+        }
 
         if ($startDate && $endDate) {
             $activeCustomersQuery->whereBetween('created_at', [$startDate, $endDate]);
@@ -472,11 +516,13 @@ class UserDashboardController extends Controller
 
         $activeCustomers = $activeCustomersQuery->distinct('user_id')->count();
 
-        // Customer balance (company's wallet balance)
-        $customerBalance = DB::table('company_wallets')
-            ->where('company_id', $companyId)
-            ->where('currency', 'NGN')
-            ->value('balance') ?? 0;
+        // Customer balance (aggregated if admin, company's wallet if not)
+        $customerBalanceQuery = DB::table('company_wallets')
+            ->where('currency', 'NGN');
+        if ($companyId) {
+            $customerBalanceQuery->where('company_id', $companyId);
+        }
+        $customerBalance = (float) $customerBalanceQuery->sum('balance');
 
         return [
             'total_customers' => $totalCustomers,
@@ -487,39 +533,52 @@ class UserDashboardController extends Controller
 
     private function getKycAnalytics($companyId, $startDate, $endDate)
     {
-        $kycQuery = DB::table('transactions')
-            ->where('company_id', $companyId)
-            ->where('status', 'success');
+        // Build BVN and NIN queries separately to avoid clone/reuse issues
+        $bvnQuery = DB::table('transactions')
+            ->whereIn('status', ['success', 'successful'])
+            ->where('description', 'LIKE', '%BVN%')
+            ->where(function ($q) {
+                $q->where('category', 'kyc_charge')
+                    ->orWhere('transaction_type', 'kyc_charge')
+                    ->orWhere(function ($q2) {
+                        $q2->where('category', 'other')
+                            ->where('transaction_type', 'kyc_charge');
+                    });
+            });
 
+        if ($companyId) {
+            $bvnQuery->where('company_id', $companyId);
+        }
         if ($startDate && $endDate) {
-            $kycQuery->whereBetween('created_at', [$startDate, $endDate]);
+            $bvnQuery->whereBetween('created_at', [$startDate, $endDate]);
         }
 
-        // BVN Verification Analytics
-        $bvnTransactions = $kycQuery->clone()
-            ->where(function($query) {
-                $query->where('category', 'kyc_charge')
-                      ->where('description', 'LIKE', '%BVN%')
-                      ->orWhere('transaction_type', 'kyc_charge')
-                      ->where('description', 'LIKE', '%BVN%');
+        $bvnTotal = (float) (clone $bvnQuery)->sum('amount');
+        $bvnCharges = (float) (clone $bvnQuery)->sum('fee');
+        $bvnCount = (int) (clone $bvnQuery)->count();
+
+        $ninQuery = DB::table('transactions')
+            ->whereIn('status', ['success', 'successful'])
+            ->where('description', 'LIKE', '%NIN%')
+            ->where(function ($q) {
+                $q->where('category', 'kyc_charge')
+                    ->orWhere('transaction_type', 'kyc_charge')
+                    ->orWhere(function ($q2) {
+                        $q2->where('category', 'other')
+                            ->where('transaction_type', 'kyc_charge');
+                    });
             });
 
-        $bvnTotal = $bvnTransactions->sum('amount');
-        $bvnCharges = $bvnTransactions->sum('fee');
-        $bvnCount = $bvnTransactions->count();
+        if ($companyId) {
+            $ninQuery->where('company_id', $companyId);
+        }
+        if ($startDate && $endDate) {
+            $ninQuery->whereBetween('created_at', [$startDate, $endDate]);
+        }
 
-        // NIN Verification Analytics
-        $ninTransactions = $kycQuery->clone()
-            ->where(function($query) {
-                $query->where('category', 'kyc_charge')
-                      ->where('description', 'LIKE', '%NIN%')
-                      ->orWhere('transaction_type', 'kyc_charge')
-                      ->where('description', 'LIKE', '%NIN%');
-            });
-
-        $ninTotal = $ninTransactions->sum('amount');
-        $ninCharges = $ninTransactions->sum('fee');
-        $ninCount = $ninTransactions->count();
+        $ninTotal = (float) (clone $ninQuery)->sum('amount');
+        $ninCharges = (float) (clone $ninQuery)->sum('fee');
+        $ninCount = (int) (clone $ninQuery)->count();
 
         return [
             'bvn_total' => $bvnTotal,
@@ -537,8 +596,11 @@ class UserDashboardController extends Controller
     private function getProfitLossAnalytics($companyId, $startDate, $endDate)
     {
         $transactionQuery = DB::table('transactions')
-            ->where('company_id', $companyId)
-            ->where('status', 'success');
+            ->whereIn('status', ['success', 'successful']);
+
+        if ($companyId) {
+            $transactionQuery->where('company_id', $companyId);
+        }
 
         if ($startDate && $endDate) {
             $transactionQuery->whereBetween('created_at', [$startDate, $endDate]);
