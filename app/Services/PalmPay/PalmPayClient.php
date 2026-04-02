@@ -90,7 +90,10 @@ class PalmPayClient
 
             if ($respCode !== null && !in_array($respCode, $successCodes)) {
                 $respMsg = $responseData['message'] ?? ($responseData['respMsg'] ?? 'Unknown error');
-                $this->recordFailure();
+                // Only trip circuit breaker for server/network errors, not KYC/business errors
+                if (!$this->isBusinessError($respCode)) {
+                    $this->recordFailure();
+                }
                 throw new \Exception("PalmPay Error: {$respMsg} (Code: {$respCode})");
             }
 
@@ -103,7 +106,10 @@ class PalmPayClient
             return $responseData;
 
         } catch (\Exception $e) {
-            $this->recordFailure();
+            // Only trip circuit breaker for real connectivity/server errors
+            if (!$this->isBusinessError('') && !str_contains($e->getMessage(), 'PalmPay Error:')) {
+                $this->recordFailure();
+            }
             $duration = (int) ((microtime(true) * 1000) - $startTime);
             $this->logToDatabase($endpoint, 'POST', $data, $response ? $response->json() : 'No Response', $duration, $e->getMessage());
 
@@ -207,6 +213,27 @@ class PalmPayClient
 
             throw $e;
         }
+    }
+
+    /**
+     * Business errors should NOT trip the circuit breaker.
+     * These are KYC/duplicate/validation errors from PalmPay, not connectivity issues.
+     */
+    private function isBusinessError(string $code): bool
+    {
+        $businessCodes = [
+            'AC100009', // licenseNumber duplicate
+            'AC100001', // Virtual Account not exist
+            'AC100003', // Failed to create account
+            'AC100007', // LicenseNumber verification failed
+            'MC100000', // Merchant orders already exist
+            'MC100001', // Merchant order status abnormal
+            'MC100004', // Merchant order does not exist
+            'OPEN_GW_000002', // Missing parameter
+            'OPEN_GW_000008', // Sign error
+            'OPEN_GW_000020', // Param error
+        ];
+        return in_array($code, $businessCodes);
     }
 
     /**
