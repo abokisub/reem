@@ -25,6 +25,7 @@ class GlobalKycPool extends Model
         'usage_count',
         'success_count',
         'failure_count',
+        'max_usage',
         'last_used_at',
         'last_success_at',
         'blacklisted_until',
@@ -98,7 +99,7 @@ class GlobalKycPool extends Model
     }
 
     /**
-     * Scope: Get available KYC numbers
+     * Scope: Get available KYC numbers (respects max_usage limit)
      */
     public function scopeAvailable($query)
     {
@@ -106,6 +107,11 @@ class GlobalKycPool extends Model
             ->where(function ($q) {
                 $q->whereNull('blacklisted_until')
                   ->orWhere('blacklisted_until', '<=', now());
+            })
+            ->where(function ($q) {
+                // Exclude entries that have hit max_usage
+                $q->whereNull('max_usage')
+                  ->orWhereRaw('usage_count < max_usage');
             });
     }
 
