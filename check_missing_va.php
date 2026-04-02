@@ -48,6 +48,13 @@ if ($action === 'create') {
             echo "SKIP (no KYC): {$m['customer_name']} [{$m['company_name']}]" . PHP_EOL;
             continue;
         }
+
+        // Skip customers with unverified NIN/BVN
+        $customerRecord = DB::table('company_users')->where('id', $m['customer_id'])->first();
+        if (!($customerRecord->bvn_verified ?? false) && !($customerRecord->nin_verified ?? false)) {
+            echo "SKIP (KYC not verified): {$m['customer_name']} [{$m['company_name']}]" . PHP_EOL;
+            continue;
+        }
         try {
             // Reset circuit breaker before each attempt
             \Illuminate\Support\Facades\Cache::forget('palmpay_circuit_breaker_failures');
