@@ -4,8 +4,10 @@ $app = require_once __DIR__ . '/bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 use Illuminate\Support\Facades\DB;
+use App\Services\PalmPay\VirtualAccountService;
+use App\Models\CompanyUser;
 
-$customers = DB::table('company_users')->get(['id','uuid','company_id','first_name','last_name','email']);
+$customers = DB::table('company_users')->get(['id','uuid','company_id','first_name','last_name','email','bvn','nin','phone']);
 $missing = [];
 
 foreach ($customers as $c) {
@@ -16,18 +18,59 @@ foreach ($customers as $c) {
     if (!$va) {
         $company = DB::table('companies')->where('id', $c->company_id)->first();
         $missing[] = [
-            'customer_id'  => $c->id,
-            'customer_name'=> trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')),
-            'company_id'   => $c->company_id,
-            'company_name' => $company->name ?? 'Unknown',
-            'email'        => $c->email,
+            'customer_id'   => $c->id,
+            'customer_name' => trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')),
+            'company_id'    => $c->company_id,
+            'company_name'  => $company->name ?? 'Unknown',
+            'email'         => $c->email,
+            'has_bvn'       => !empty($c->bvn),
+            'has_nin'       => !empty($c->nin),
+            'uuid'          => $c->uuid,
         ];
     }
 }
 
 echo "Total customers: " . $customers->count() . PHP_EOL;
-echo "Missing VA: " . count($missing) . PHP_EOL . PHP_EOL;
+echo "Missing VA: " . count($missing) . PHP_EOL;
+echo "Has KYC (can auto-create): " . count(array_filter($missing, fn($m) => $m['has_bvn'] || $m['has_nin'])) . PHP_EOL;
+echo "No KYC (cannot auto-create): " . count(array_filter($missing, fn($m) => !$m['has_bvn'] && !$m['has_nin'])) . PHP_EOL;
+echo PHP_EOL;
 
-foreach ($missing as $m) {
-    echo "Customer ID:{$m['customer_id']} | Company:{$m['company_name']} (ID:{$m['company_id']}) | Name:{$m['customer_name']}" . PHP_EOL;
+$action = $argv[1] ?? 'check';
+
+if ($action === 'create') {
+    echo "=== AUTO-CREATING VIRTUAL ACCOUNTS ===" . PHP_EOL;
+    $service = app(VirtualAccountService::class);
+    $success = 0; $fail = 0;
+
+    foreach ($missing as $m) {
+        if (!$m['has_bvn'] && !$m['has_nin']) {
+            echo "SKIP (no KYC): {$m['customer_name']} [{$m['company_name']}]" . PHP_EOL;
+            continue;
+        }
+        try {
+            $customer = CompanyUser::find($m['customer_id']);
+            $result = $service->createVirtualAccount($m['company_id'], $m['uuid'], [
+                'first_name' => $customer->first_name,
+                'last_name'  => $customer->last_name,
+                'email'      => $customer->email,
+                'phone'      => $customer->phone,
+                'bvn'        => $customer->bvn,
+                'nin'        => $customer->nin,
+            ], '100033', $m['customer_id']);
+            echo "✅ Created: {$m['customer_name']} [{$m['company_name']}] → " . ($result->palmpay_account_number ?? 'N/A') . PHP_EOL;
+            $success++;
+            sleep(1); // avoid rate limiting
+        } catch (\Exception $e) {
+            echo "❌ Failed: {$m['customer_name']} [{$m['company_name']}] → " . $e->getMessage() . PHP_EOL;
+            $fail++;
+        }
+    }
+    echo PHP_EOL . "Done: {$success} created, {$fail} failed" . PHP_EOL;
+} else {
+    foreach ($missing as $m) {
+        $kyc = ($m['has_bvn'] ? 'BVN' : '') . ($m['has_nin'] ? ' NIN' : '');
+        echo "ID:{$m['customer_id']} | {$m['company_name']} | {$m['customer_name']} | KYC:" . (trim($kyc) ?: 'NONE') . PHP_EOL;
+    }
+    echo PHP_EOL . "Run 'php check_missing_va.php create' to auto-create VAs for customers with KYC" . PHP_EOL;
 }
