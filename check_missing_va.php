@@ -5,7 +5,7 @@ $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 use Illuminate\Support\Facades\DB;
 
-$customers = DB::table('company_users')->get(['id','uuid','company_id','name','email']);
+$customers = DB::table('company_users')->get(['id','uuid','company_id','first_name','last_name','email']);
 $missing = [];
 
 foreach ($customers as $c) {
@@ -17,7 +17,7 @@ foreach ($customers as $c) {
         $company = DB::table('companies')->where('id', $c->company_id)->first();
         $missing[] = [
             'customer_id'  => $c->id,
-            'customer_name'=> $c->name,
+            'customer_name'=> trim(($c->first_name ?? '') . ' ' . ($c->last_name ?? '')),
             'company_id'   => $c->company_id,
             'company_name' => $company->name ?? 'Unknown',
             'email'        => $c->email,
