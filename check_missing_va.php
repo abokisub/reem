@@ -49,9 +49,10 @@ if ($action === 'create') {
             continue;
         }
 
-        // Skip Rukaiya Zakari - identity mismatch on PalmPay side
-        if ($m['customer_id'] == 252) {
-            echo "SKIP (identity mismatch): {$m['customer_name']} [{$m['company_name']}]" . PHP_EOL;
+        // Skip customers that consistently fail PalmPay (unverified KYC, no company backup working)
+        $skipIds = [167, 168, 169, 171, 172, 192, 252];
+        if (in_array($m['customer_id'], $skipIds)) {
+            echo "SKIP (known failure): {$m['customer_name']} [{$m['company_name']}]" . PHP_EOL;
             continue;
         }
         try {
