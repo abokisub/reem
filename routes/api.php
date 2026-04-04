@@ -931,6 +931,17 @@ Route::middleware(['auth.token'])->group(function () {
 });
 
 // ============================================
+// KYC Pool Management (Admin)
+// ============================================
+Route::get('admin/kyc-pool/overview',                    [App\Http\Controllers\Admin\KycPoolController::class, 'overview']);
+Route::get('admin/kyc-pool/entries',                     [App\Http\Controllers\Admin\KycPoolController::class, 'entries']);
+Route::post('admin/kyc-pool/add',                        [App\Http\Controllers\Admin\KycPoolController::class, 'add']);
+Route::delete('admin/kyc-pool/{id}',                     [App\Http\Controllers\Admin\KycPoolController::class, 'deactivate']);
+Route::post('admin/kyc-pool/{id}/set-max',               [App\Http\Controllers\Admin\KycPoolController::class, 'setMax']);
+Route::post('admin/kyc-pool/company/{companyId}/assign-fresh', [App\Http\Controllers\Admin\KycPoolController::class, 'assignFresh']);
+Route::post('admin/kyc-pool/regenerate-missing',         [App\Http\Controllers\Admin\KycPoolController::class, 'regenerateMissing']);
+
+// ============================================
 // Company Custom Fee Management (Admin)
 // ============================================
 Route::get('admin/company-fees/search', [App\Http\Controllers\Admin\CompanyFeeController::class, 'searchCompanies']);
