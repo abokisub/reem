@@ -44,22 +44,29 @@ class KycPoolController extends Controller
             ->get(['id', 'name', 'director_nin', 'director_bvn', 'bvn', 'nin', 'status']);
 
         $companyHealth = $companies->map(function ($c) {
-            $vaCount = VirtualAccount::where('company_id', $c->id)
-                ->whereNotNull('palmpay_account_number')
-                ->count();
+            // Count VAs since last KYC refresh (or all time if never refreshed)
+            $query = VirtualAccount::where('company_id', $c->id)->whereNotNull('palmpay_account_number');
+            if ($c->kyc_refreshed_at) {
+                $query->where('created_at', '>=', $c->kyc_refreshed_at);
+            }
+            $vaCount = $query->count();
+            $totalVaCount = VirtualAccount::where('company_id', $c->id)->whereNotNull('palmpay_account_number')->count();
+
             $maxLimit = 130;
             $pct = $maxLimit > 0 ? round(($vaCount / $maxLimit) * 100) : 0;
             $status = $pct >= 100 ? 'critical' : ($pct >= 80 ? 'warning' : 'healthy');
 
             return [
-                'id'           => $c->id,
-                'name'         => $c->name,
-                'director_nin' => $c->director_nin ? substr($c->director_nin, 0, 5) . '***' : null,
-                'director_bvn' => $c->director_bvn ? substr($c->director_bvn, 0, 5) . '***' : null,
-                'va_count'     => $vaCount,
-                'max_limit'    => $maxLimit,
-                'usage_pct'    => $pct,
-                'status'       => $status,
+                'id'              => $c->id,
+                'name'            => $c->name,
+                'director_nin'    => $c->director_nin ? substr($c->director_nin, 0, 5) . '***' : null,
+                'director_bvn'    => $c->director_bvn ? substr($c->director_bvn, 0, 5) . '***' : null,
+                'va_count'        => $vaCount,
+                'total_va_count'  => $totalVaCount,
+                'max_limit'       => $maxLimit,
+                'usage_pct'       => $pct,
+                'status'          => $status,
+                'kyc_refreshed_at'=> $c->kyc_refreshed_at,
             ];
         });
 
@@ -172,25 +179,39 @@ class KycPoolController extends Controller
     public function assignFresh(Request $request, $companyId)
     {
         $company = Company::findOrFail($companyId);
-        $fresh = GlobalKycPool::available()->where('kyc_type', 'nin')->leastUsedFirst()->first();
 
-        if (!$fresh) {
-            return response()->json(['status' => 'error', 'message' => 'No available NIN in pool'], 400);
+        // Assign fresh NIN
+        $freshNin = GlobalKycPool::available()->where('kyc_type', 'nin')->leastUsedFirst()->first();
+        // Assign fresh BVN
+        $freshBvn = GlobalKycPool::available()->where('kyc_type', 'bvn')->leastUsedFirst()->first();
+
+        if (!$freshNin && !$freshBvn) {
+            return response()->json(['status' => 'error', 'message' => 'No available NIN or BVN in pool'], 400);
         }
 
-        $company->update([
-            'director_nin'         => $fresh->kyc_number,
-            'kyc_method_blacklist' => null,
-        ]);
+        $updates = ['kyc_method_blacklist' => null, 'kyc_refreshed_at' => now()];
+        $assigned = [];
 
-        Log::info('Admin assigned fresh NIN to company', [
+        if ($freshNin) {
+            $updates['director_nin'] = $freshNin->kyc_number;
+            $assigned[] = 'NIN';
+        }
+        if ($freshBvn) {
+            $updates['director_bvn'] = $freshBvn->kyc_number;
+            $assigned[] = 'BVN';
+        }
+
+        $company->update($updates);
+
+        Log::info('Admin assigned fresh KYC to company', [
             'company_id' => $companyId,
-            'kyc_id'     => $fresh->id,
+            'nin_kyc_id' => $freshNin?->id,
+            'bvn_kyc_id' => $freshBvn?->id,
         ]);
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Fresh NIN assigned to ' . $company->name,
+            'message' => implode(' & ', $assigned) . ' refreshed for ' . $company->name,
         ]);
     }
 
