@@ -798,6 +798,7 @@ Route::prefix('admin')->middleware(['auth:sanctum'])->group(function () {
         Route::get('/history', [App\Http\Controllers\Admin\SettlementController::class, 'getSettlementHistory']);
         Route::get('/statistics', [App\Http\Controllers\Admin\SettlementController::class, 'getStatistics']);
         Route::get('/diagnostics', [App\Http\Controllers\Admin\SettlementController::class, 'diagnostics']);
+        Route::post('/process-now', [App\Http\Controllers\Admin\SettlementController::class, 'processNow']);
     });
 
     // Banks (for admin use - no auth required on gateway)

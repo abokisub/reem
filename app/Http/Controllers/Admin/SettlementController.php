@@ -179,6 +179,31 @@ class SettlementController extends Controller
     }
 
     /**
+     * Process overdue settlements immediately (admin trigger)
+     */
+    public function processNow()
+    {
+        try {
+            $result = \Artisan::call('settlements:process');
+            $output = \Artisan::output();
+
+            $completed = DB::table('settlement_queue')
+                ->where('status', 'completed')
+                ->whereDate('actual_settlement_date', today())
+                ->count();
+
+            return response()->json([
+                'status'    => 'success',
+                'message'   => 'Settlement processed',
+                'completed' => $completed,
+                'output'    => trim($output),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Settlement Diagnostics — shows exactly what the cron sees on live
      */
     public function diagnostics(Request $request)
@@ -232,9 +257,11 @@ class SettlementController extends Controller
                 'due_right_now'            => $dueNow,
                 'due_right_now_amount'     => $dueNowAmount,
                 'completed_total'          => DB::table('settlement_queue')->where('status', 'completed')->count(),
+                'completed_today'          => DB::table('settlement_queue')->where('status', 'completed')->whereDate('actual_settlement_date', today())->count(),
                 'failed_total'             => DB::table('settlement_queue')->where('status', 'failed')->count(),
                 'oldest_pending_due'       => $oldest ? $oldest->scheduled_settlement_date : null,
                 'oldest_pending_amount'    => $oldest ? $oldest->amount : null,
+                'last_settled_at'          => DB::table('settlement_queue')->where('status', 'completed')->max('actual_settlement_date'),
             ],
             'simulation' => [
                 'if_transaction_now'       => $now->toDateTimeString(),
