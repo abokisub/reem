@@ -1188,9 +1188,13 @@ class AppController extends Controller
         $origin = $request->headers->get('origin');
         if (!$origin || in_array($origin, $explode_url)) {
             $general = $this->general();
-            $faqs = DB::table('faqs')->where('status', 1)->get();
+            try {
+                $faqs = DB::table('faqs')->where('status', 1)->get();
+            } catch (\Throwable $e) {
+                $faqs = collect([]);
+            }
 
-            return response()->json([
+            $response = [
                 'status' => 'success',
                 'system' => [
                     'name' => $general->app_name ?? 'Pointwave',
@@ -1214,7 +1218,37 @@ class AppController extends Controller
                     'support_whatsapp' => $general->app_whatsapp ?? $general->app_phone,
                 ],
                 'faqs' => $faqs
-            ]);
+            ];
+
+            // If user is authenticated, include user and company data
+            $user = $request->user();
+            if ($user) {
+                $response['user'] = [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'type' => $user->type,
+                    'active_company_id' => $user->active_company_id,
+                ];
+
+                // Get company data if user has an active company
+                if ($user->active_company_id) {
+                    $company = \App\Models\Company::find($user->active_company_id);
+                    if ($company) {
+                        $response['company'] = [
+                            'id' => $company->id,
+                            'name' => $company->company_name ?? $company->name,
+                            'company_name' => $company->company_name ?? $company->name,
+                            'email' => $company->email,
+                            'phone' => $company->phone,
+                            'status' => $company->status,
+                        ];
+                    }
+                }
+            }
+
+            return response()->json($response);
         } else {
             return response()->json([
                 'status' => 403,

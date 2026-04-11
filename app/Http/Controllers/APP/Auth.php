@@ -65,7 +65,7 @@ class Auth extends Controller
                             $active_default = 'xixapay';
                     }
 
-                    if ($xixapay_enabled && ($user->kolomoni_mfb == null || $user->palmpay == null))
+                    if ($xixapay_enabled && (empty($user->palmpay_account_number)))
                         $this->xixapay_account($user->username);
                     if ($monnify_enabled && empty($user->palmpay_account_number))
                         $this->monnify_account($user->username);
@@ -90,8 +90,8 @@ class Auth extends Controller
                         'sterlen' => $moniepoint_acc,
                         'fed' => null,
                         'wema' => null, // paystack_account column removed
-                        'kolomoni_mfb' => $user->palmpay_account_number,
-                        'palmpay' => $user->palmpay_account_number,
+                        'kolomoni_mfb' => $user->palmpay_account_number ?? null,
+                        'palmpay' => $user->palmpay_account_number ?? null,
 
                         'account_number' => ($active_default == 'palmpay' || $active_default == 'xixapay' || $active_default == 'monnify') ? $user->palmpay_account_number : null,
 
@@ -108,6 +108,7 @@ class Auth extends Controller
                         'about' => $user->about,
                         'api_key' => $user->api_key,
                         'notif' => DB::table('notif')->where(['username' => $user->username, 'adex' => 0])->count(),
+                        'company_virtual_account' => $this->getCompanyVirtualAccount($user->id),
                     ];
                     $hash = substr(sha1(md5($request->password)), 3, 10);
                     $mdpass = md5($request->password);
@@ -530,7 +531,7 @@ class Auth extends Controller
                                 $active_default = 'xixapay';
                         }
 
-                        if ($xixapay_enabled && ($user->kolomoni_mfb == null || $user->palmpay == null))
+                        if ($xixapay_enabled && (empty($user->palmpay_account_number)))
                             $this->xixapay_account($user->username);
                         if ($monnify_enabled && empty($user->palmpay_account_number))
                             $this->monnify_account($user->username);
@@ -557,15 +558,15 @@ class Auth extends Controller
                             'sterlen' => $moniepoint_acc,
                             'fed' => null,
                             'wema' => $user->paystack_account,
-                            'kolomoni_mfb' => $user->kolomoni_mfb,
-                            'palmpay' => $user->palmpay,
+                            'kolomoni_mfb' => $user->palmpay_account_number ?? null,
+                            'palmpay' => $user->palmpay_account_number ?? null,
 
                             // Polyfill for Frontend 'Generating...' issue
                             // Polyfill for Frontend 'Generating...' issue
                             'account_number' => ($active_default == 'wema') ? $user->paystack_account :
                                 (($active_default == 'monnify') ? $moniepoint_acc :
-                                    (($active_default == 'xixapay') ? $user->palmpay :
-                                        ($active_default == 'palmpay' ? $user->palmpay : null))),
+                                    (($active_default == 'xixapay') ? $user->palmpay_account_number :
+                                        ($active_default == 'palmpay' ? $user->palmpay_account_number : null))),
 
                             'bank_name' => ($active_default == 'wema') ? 'Wema Bank' :
                                 (($active_default == 'monnify') ? 'Moniepoint' :
@@ -745,7 +746,7 @@ class Auth extends Controller
                             $active_default = 'xixapay';
                     }
 
-                    if ($xixapay_enabled && ($user->kolomoni_mfb == null || $user->palmpay == null))
+                    if ($xixapay_enabled && (empty($user->palmpay_account_number)))
                         $this->xixapay_account($user->username);
                     if ($monnify_enabled && empty($user->palmpay_account_number))
                         $this->monnify_account($user->username);
@@ -775,8 +776,8 @@ class Auth extends Controller
 
                         'account_number' => ($active_default == 'wema') ? $user->paystack_account :
                             (($active_default == 'monnify') ? $moniepoint_acc :
-                                (($active_default == 'xixapay') ? $user->palmpay :
-                                    ($active_default == 'palmpay' ? $user->palmpay : null))),
+                                (($active_default == 'xixapay') ? $user->palmpay_account_number :
+                                    ($active_default == 'palmpay' ? $user->palmpay_account_number : null))),
 
                         'bank_name' => ($active_default == 'wema') ? 'Wema Bank' :
                             (($active_default == 'monnify') ? 'Moniepoint' :
@@ -808,7 +809,7 @@ class Auth extends Controller
                         }
                         if ($user->status == 'active') {
                             //here we go .....
-                            if ($xixapay_enabled && $user->kolomoni_mfb == null)
+                            if ($xixapay_enabled && empty($user->palmpay_account_number))
                                 $this->xixapay_account($user->username);
                             if ($monnify_enabled && $user->wema == null)
                                 $this->monnify_account($user->username);
@@ -947,7 +948,7 @@ class Auth extends Controller
                 }
 
                 try {
-                    if ($xixapay_enabled && ($user->kolomoni_mfb == null || $user->palmpay == null))
+                    if ($xixapay_enabled && (empty($user->palmpay_account_number)))
                         $this->xixapay_account($user->username);
                 } catch (\Exception $e) {
                     \Log::error("APPLOAD Xixapay: " . $e->getMessage());
@@ -961,7 +962,7 @@ class Auth extends Controller
                 }
 
                 try {
-                    if ($palmpay_enabled && ($user->palmpay == null || $user->opay == null))
+                    if ($palmpay_enabled && (empty($user->palmpay_account_number)))
                         $this->paymentpoint_account($user->username);
                 } catch (\Exception $e) {
                     \Log::error("APPLOAD PaymentPoint: " . $e->getMessage());
@@ -976,7 +977,15 @@ class Auth extends Controller
 
                 $this->insert_stock($user->username);
                 $user = DB::table('users')->where(['id' => $user->id])->first();
-                $moniepoint_acc = DB::table('user_bank')->where(['username' => $user->username, 'bank' => 'MONIEPOINT'])->first()->account_number ?? null;
+                
+                // Safely get moniepoint account (user_bank table may not exist)
+                $moniepoint_acc = null;
+                try {
+                    $moniepoint_acc = DB::table('user_bank')->where(['username' => $user->username, 'bank' => 'MONIEPOINT'])->first()->account_number ?? null;
+                } catch (\Exception $e) {
+                    // Table doesn't exist, skip
+                }
+                
                 $user_details = [
                     'id' => $user->id,
                     'username' => $user->username,
@@ -992,53 +1001,67 @@ class Auth extends Controller
                     'sterlen' => $moniepoint_acc,
                     'fed' => null,
                     'wema' => $user->paystack_account,
-                    'kolomoni_mfb' => $user->kolomoni_mfb,
-                    'palmpay' => $user->palmpay,
-                    'nin' => $user->nin,
-                    'bvn' => $user->bvn,
-                    'dob' => $user->dob,
-                    'next_of_kin' => json_decode($user->next_of_kin, true),
-                    'occupation' => $user->occupation,
-                    'marital_status' => $user->marital_status,
-                    'religion' => $user->religion,
+                    'kolomoni_mfb' => $user->palmpay_account_number ?? null,
+                    'palmpay' => $user->palmpay_account_number ?? null,
+                    'nin' => $user->nin ?? null,
+                    'bvn' => $user->bvn ?? null,
+                    'dob' => $user->dob ?? null,
+                    'next_of_kin' => json_decode($user->next_of_kin ?? '{}', true),
+                    'occupation' => $user->occupation ?? null,
+                    'marital_status' => $user->marital_status ?? null,
+                    'religion' => $user->religion ?? null,
 
-                    'account_number' => ($active_default == 'wema') ? $user->paystack_account :
+                    'account_number' => ($active_default == 'wema') ? ($user->paystack_account ?? null) :
                         (($active_default == 'monnify') ? $moniepoint_acc :
-                            (($active_default == 'xixapay') ? $user->palmpay :
-                                (($active_default == 'palmpay') ? $user->palmpay : null))),
+                            (($active_default == 'xixapay') ? ($user->palmpay_account_number ?? null) :
+                                (($active_default == 'palmpay') ? ($user->palmpay_account_number ?? null) : null))),
 
                     'bank_name' => ($active_default == 'wema') ? 'Wema Bank' :
                         (($active_default == 'monnify') ? 'Moniepoint' :
                             (($active_default == 'xixapay') ? 'PalmPay' :
                                 (($active_default == 'palmpay') ? 'PalmPay' : null))),
-                    'address' => $user->address,
-                    'webhook' => $user->webhook,
-                    'about' => $user->about,
+                    'address' => $user->address ?? null,
+                    'webhook' => $user->webhook ?? null,
+                    'about' => $user->about ?? null,
                     'api_key' => $user->api_key,
                     'notif' => DB::table('notif')->where(['username' => $user->username, 'habukhan' => 0])->count(),
                 ];
 
-                $data_purchase = DB::table('data')->where(['username' => $user->username, 'plan_status' => 1])->whereDate('plan_date', Carbon::now())->get();
+                // Wrap data table query in try-catch to prevent crashes if table doesn't exist
                 $total_gb = 0;
-                $gb = 0;
-                foreach ($data_purchase as $data) {
-                    $plans = $data->plan_name;
-                    $check_gb = substr($plans, -2);
-                    if ($check_gb == 'MB') {
-                        $mb = rtrim($plans, "MB");
-                        $gb = $mb / 1024;
-                    } elseif ($check_gb == 'GB') {
-                        $gb = rtrim($plans, "GB");
-                    } elseif ($check_gb == 'TB') {
-                        $tb = rtrim($plans, 'TB');
-                        $gb = ceil($tb * 1020);
+                $calculate_gb = '0GB';
+                try {
+                    $data_purchase = DB::table('data')->where(['username' => $user->username, 'plan_status' => 1])->whereDate('plan_date', Carbon::now())->get();
+                    $gb = 0;
+                    foreach ($data_purchase as $data) {
+                        $plans = $data->plan_name;
+                        $check_gb = substr($plans, -2);
+                        if ($check_gb == 'MB') {
+                            $mb = rtrim($plans, "MB");
+                            $gb = $mb / 1024;
+                        } elseif ($check_gb == 'GB') {
+                            $gb = rtrim($plans, "GB");
+                        } elseif ($check_gb == 'TB') {
+                            $tb = rtrim($plans, 'TB');
+                            $gb = ceil($tb * 1020);
+                        }
+                        $total_gb += $gb;
                     }
-                    $total_gb += $gb;
+                    if ($total_gb >= 1024) {
+                        $calculate_gb = $total_gb / 1024 . 'TB';
+                    } else {
+                        $calculate_gb = $total_gb . 'GB';
+                    }
+                } catch (\Exception $e) {
+                    \Log::warning('APPLOAD: data table query failed - ' . $e->getMessage());
                 }
-                if ($total_gb >= 1024) {
-                    $calculate_gb = $total_gb / 1024 . 'TB';
-                } else {
-                    $calculate_gb = $total_gb . 'GB';
+
+                // Wrap system_locks query in try-catch to prevent crashes if table doesn't exist
+                $systemLocks = [];
+                try {
+                    $systemLocks = DB::table('system_locks')->get(['feature_key', 'is_locked']);
+                } catch (\Exception $e) {
+                    \Log::warning('APPLOAD: system_locks table query failed - ' . $e->getMessage());
                 }
 
                 return response()->json([
@@ -1047,7 +1070,7 @@ class Auth extends Controller
                     'user' => $user_details,
                     'data_purchased' => $calculate_gb,
                     'setting' => DB::table('settings')->first(),
-                    'system_locks' => DB::table('system_locks')->get(['feature_key', 'is_locked']),
+                    'system_locks' => $systemLocks,
                     'notif' => DB::table('notif')->where(['username' => $user->username, 'habukhan' => 0])->count()
                 ]);
             } else if ($user_info && $user_info->status == 'pending') {
@@ -2338,7 +2361,7 @@ class Auth extends Controller
                         'sterlen' => $moniepoint_acc,
                         'fed' => null,
                         'wema' => $user->paystack_account,
-                        'kolomoni_mfb' => $user->kolomoni_mfb,
+                        'kolomoni_mfb' => $user->palmpay_account_number ?? null,
                         'address' => $user->address,
                         'webhook' => $user->webhook,
                         'about' => $user->about,
@@ -2521,7 +2544,7 @@ class Auth extends Controller
                         'sterlen' => $moniepoint_acc,
                         'fed' => null,
                         'wema' => $user->paystack_account,
-                        'kolomoni_mfb' => $user->kolomoni_mfb,
+                        'kolomoni_mfb' => $user->palmpay_account_number ?? null,
                         'address' => $user->address,
                         'nin' => $user->nin,
                         'bvn' => $user->bvn,
@@ -3155,11 +3178,21 @@ class Auth extends Controller
             $request->validate([
                 'fcm_token' => 'required|string',
             ]);
-            DB::table('users')->where('id', $user->id)->update(['app_token' => $request->fcm_token]);
-            return response()->json([
-                'status' => 'success',
-                'message' => 'FCM Token updated successfully'
-            ]);
+            
+            try {
+                DB::table('users')->where('id', $user->id)->update(['app_token' => $request->fcm_token]);
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'FCM Token updated successfully'
+                ]);
+            } catch (\Exception $e) {
+                // Log warning if app_token column doesn't exist
+                \Log::warning('FCM Token update failed - app_token column may not exist: ' . $e->getMessage());
+                return response()->json([
+                    'status' => 'success',
+                    'message' => 'FCM Token update skipped - feature not configured'
+                ]);
+            }
         }
         return response()->json(['message' => 'Unauthorised'], 403);
     }
@@ -3556,5 +3589,50 @@ class Auth extends Controller
                 'receipt' => $final_receipt
             ]
         ]);
+    }
+
+    /**
+     * Get company virtual account for a user
+     * Returns null if user has no active company or no virtual account exists
+     */
+    private function getCompanyVirtualAccount($userId)
+    {
+        $user = DB::table('users')->where('id', $userId)->first();
+        
+        if (!$user || !$user->active_company_id) {
+            return null;
+        }
+
+        $company = DB::table('companies')->where('id', $user->active_company_id)->first();
+        
+        if (!$company) {
+            return null;
+        }
+
+        // Try to get master virtual account from virtual_accounts table
+        $masterVA = DB::table('virtual_accounts')
+            ->where('company_id', $company->id)
+            ->where('is_master', 1)
+            ->where('provider', 'pointwave')
+            ->first();
+        
+        if ($masterVA) {
+            return [
+                'account_number' => $masterVA->account_number,
+                'account_name' => $masterVA->account_name,
+                'bank_name' => $masterVA->bank_name,
+            ];
+        }
+        
+        // Fallback to company's palmpay fields
+        if ($company->palmpay_account_number) {
+            return [
+                'account_number' => $company->palmpay_account_number,
+                'account_name' => $company->palmpay_account_name ?? $company->name,
+                'bank_name' => $company->palmpay_bank_name ?? 'PalmPay',
+            ];
+        }
+        
+        return null;
     }
 }

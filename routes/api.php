@@ -508,6 +508,17 @@ Route::post('user/calculator/{id}/habukhan/secure', [SimpleTransactionCalculator
 // User Dashboard
 Route::get('user/dashboard-stats', [UserDashboardController::class, 'index'])->middleware('auth.token');
 
+// User Settlements
+Route::middleware('auth.token')->group(function () {
+    Route::get('user/settlements', [App\Http\Controllers\API\UserSettlementController::class, 'index']);
+    Route::get('user/settlements/{id}', [App\Http\Controllers\API\UserSettlementController::class, 'show']);
+    Route::get('user/settlements/{id}/transactions', [App\Http\Controllers\API\UserSettlementController::class, 'transactions']);
+    
+    // User Withdrawals
+    Route::post('user/withdrawal/initiate', [App\Http\Controllers\API\UserWithdrawalController::class, 'initiate']);
+    Route::get('user/beneficiaries', [App\Http\Controllers\API\UserWithdrawalController::class, 'beneficiaries']);
+});
+
 // fund
 Route::post('atmfunding/habukhan/secure/{id}/secure', [PaymentController::class, 'ATM']);
 // Route::get('monnify/callback', [PaymentController::class, 'MonnifyATM']);
