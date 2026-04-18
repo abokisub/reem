@@ -74,7 +74,8 @@ class ProcessTransactionReconciliation extends Command
 
         try {
             // Run scheduled reconciliation
-            $reconciledCount = $this->reconciliationService->runScheduledReconciliation();
+            $result = $this->reconciliationService->reconcileAll();
+            $reconciledCount = $result['reconciled'] ?? 0;
 
             $endTime = now();
             $duration = $startTime->diffInSeconds($endTime);
