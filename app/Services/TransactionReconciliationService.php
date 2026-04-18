@@ -24,6 +24,7 @@ class TransactionReconciliationService
     {
         $results = [
             'checked' => 0,
+            'reconciled' => 0,
             'confirmed_success' => 0,
             'confirmed_failure' => 0,
             'timeout' => 0,
@@ -31,12 +32,12 @@ class TransactionReconciliationService
         ];
         
         // Find transactions needing reconciliation
+        // Only check processing/pending transactions from the last 24 hours
         $transactions = Transaction::where(function($query) {
             $query->where('status', 'processing')
                   ->orWhere('status', 'pending');
         })
-        ->where('reconciliation_status', 'pending')
-        ->where('reconciliation_attempt_count', '<', 10) // Max 10 attempts
+        ->where('created_at', '>=', now()->subHours(24))
         ->orderBy('created_at', 'asc')
         ->limit(100) // Process in batches
         ->get();
@@ -49,8 +50,10 @@ class TransactionReconciliationService
                 
                 if ($result['status'] === 'success') {
                     $results['confirmed_success']++;
+                    $results['reconciled']++;
                 } elseif ($result['status'] === 'failure') {
                     $results['confirmed_failure']++;
+                    $results['reconciled']++;
                 } elseif ($result['status'] === 'timeout') {
                     $results['timeout']++;
                 }
