@@ -97,17 +97,17 @@ $failCount = 0;
 
 foreach ($companyUsers as $companyUser) {
     try {
-        // Try to find user by user_id or uuid
-        $userId = $companyUser->user_id ?: $companyUser->uuid;
+        // The user_id in company_users is actually a hash/uuid that matches users.id
+        $userId = $companyUser->user_id;
         
         if (!$userId) {
-            echo "⚠️  Company user {$companyUser->id} has no user_id or uuid\n";
+            echo "⚠️  Company user {$companyUser->id} has no user_id\n";
             $failCount++;
             continue;
         }
 
-        // Find user by ID or UUID
-        $user = DB::table('users')->where('id', $userId)->orWhere('uuid', $userId)->first();
+        // Find user by ID (which is a hash)
+        $user = DB::table('users')->where('id', $userId)->first();
         
         if (!$user) {
             echo "⚠️  User {$userId} not found\n";
@@ -126,7 +126,7 @@ foreach ($companyUsers as $companyUser) {
 
         $virtualAccount = $virtualAccountService->createVirtualAccount(
             $kobopoint->id,
-            $user->id ?? $user->uuid,
+            $userId,
             $customerData,
             '100033',
             $companyUser->id
