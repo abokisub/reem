@@ -97,9 +97,20 @@ $failCount = 0;
 
 foreach ($companyUsers as $companyUser) {
     try {
-        $user = DB::table('users')->find($companyUser->user_id);
+        // Try to find user by user_id or uuid
+        $userId = $companyUser->user_id ?: $companyUser->uuid;
+        
+        if (!$userId) {
+            echo "⚠️  Company user {$companyUser->id} has no user_id or uuid\n";
+            $failCount++;
+            continue;
+        }
+
+        // Find user by ID or UUID
+        $user = DB::table('users')->where('id', $userId)->orWhere('uuid', $userId)->first();
+        
         if (!$user) {
-            echo "⚠️  User {$companyUser->user_id} not found\n";
+            echo "⚠️  User {$userId} not found\n";
             $failCount++;
             continue;
         }
@@ -115,7 +126,7 @@ foreach ($companyUsers as $companyUser) {
 
         $virtualAccount = $virtualAccountService->createVirtualAccount(
             $kobopoint->id,
-            $user->id,
+            $user->id ?? $user->uuid,
             $customerData,
             '100033',
             $companyUser->id
