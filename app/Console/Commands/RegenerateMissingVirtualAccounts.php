@@ -262,10 +262,9 @@ class RegenerateMissingVirtualAccounts extends Command
         foreach ($users as $user) {
             try {
                 $customerData = [
+                    'name' => trim(($user->first_name ?? 'User') . ' ' . ($user->last_name ?? '')),
                     'email' => $user->email,
-                    'phone_number' => $user->phone,
-                    'first_name' => $user->first_name ?? 'User',
-                    'last_name' => $user->last_name ?? $user->id,
+                    'phone' => $user->phone,
                 ];
 
                 $virtualAccount = $this->virtualAccountService->createVirtualAccount(
