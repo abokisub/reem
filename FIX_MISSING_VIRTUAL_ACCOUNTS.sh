@@ -60,9 +60,15 @@ echo ""
 # Step 2: Find companies with missing virtual accounts
 echo -e "${GREEN}Step 2: Finding companies with missing virtual accounts...${NC}"
 php artisan tinker --execute="
-\$companies = \App\Models\Company::whereHas('companyUsers', function(\$q) {
-    \$q->whereDoesntHave('virtualAccounts');
-})->get();
+\$companies = \App\Models\Company::whereHas('virtualAccounts', function(\$q) {
+    // Companies that have virtual accounts
+})->get()->filter(function(\$company) {
+    // But have users without virtual accounts
+    \$usersWithoutVA = \App\Models\CompanyUser::where('company_id', \$company->id)
+        ->whereDoesntHave('virtualAccounts')
+        ->count();
+    return \$usersWithoutVA > 0;
+});
 
 echo '=== COMPANIES WITH MISSING VIRTUAL ACCOUNTS ===' . PHP_EOL;
 echo 'Total Companies: ' . \$companies->count() . PHP_EOL;

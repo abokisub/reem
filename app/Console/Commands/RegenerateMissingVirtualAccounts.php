@@ -128,8 +128,6 @@ class RegenerateMissingVirtualAccounts extends Command
                 ['Email', $company->email],
                 ['Director BVN', $company->director_bvn ? substr($company->director_bvn, 0, 5) . '***' : 'NULL'],
                 ['Director NIN', $company->director_nin ? substr($company->director_nin, 0, 5) . '***' : 'NULL'],
-                ['Backup Director 1 BVN', $company->backup_director_1_bvn ? substr($company->backup_director_1_bvn, 0, 5) . '***' : 'NULL'],
-                ['Backup Director 1 NIN', $company->backup_director_1_nin ? substr($company->backup_director_1_nin, 0, 5) . '***' : 'NULL'],
             ]
         );
         $this->newLine();
@@ -170,14 +168,21 @@ class RegenerateMissingVirtualAccounts extends Command
         
         $hasDirectorBvn = !empty($company->director_bvn);
         $hasDirectorNin = !empty($company->director_nin);
-        $hasBackupBvn = !empty($company->backup_director_1_bvn);
-        $hasBackupNin = !empty($company->backup_director_1_nin);
 
         $status = [];
         $status[] = ['Director BVN', $hasDirectorBvn ? '✅ Available' : '❌ Missing'];
         $status[] = ['Director NIN', $hasDirectorNin ? '✅ Available' : '❌ Missing'];
-        $status[] = ['Backup Director 1 BVN', $hasBackupBvn ? '✅ Available' : '❌ Missing'];
-        $status[] = ['Backup Director 1 NIN', $hasBackupNin ? '✅ Available' : '❌ Missing'];
+        
+        // Check backup directors 2-10
+        $backupCount = 0;
+        for ($i = 2; $i <= 10; $i++) {
+            $bvnField = "backup_director_{$i}_bvn";
+            $ninField = "backup_director_{$i}_nin";
+            if (!empty($company->$bvnField) || !empty($company->$ninField)) {
+                $backupCount++;
+            }
+        }
+        $status[] = ['Backup Directors (2-10)', $backupCount > 0 ? "✅ {$backupCount} assigned" : '❌ None assigned'];
 
         $this->table(['KYC Type', 'Status'], $status);
         $this->newLine();
@@ -202,18 +207,28 @@ class RegenerateMissingVirtualAccounts extends Command
             return;
         }
 
-        // Assign to backup director slot
-        if (empty($company->backup_director_1_bvn) && empty($company->backup_director_1_nin)) {
-            if ($globalKyc->kyc_type === 'bvn') {
-                $company->backup_director_1_bvn = $globalKyc->kyc_number;
-            } else {
-                $company->backup_director_1_nin = $globalKyc->kyc_number;
+        // Find first available backup director slot (2-10)
+        $assigned = false;
+        for ($i = 2; $i <= 10; $i++) {
+            $bvnField = "backup_director_{$i}_bvn";
+            $ninField = "backup_director_{$i}_nin";
+            
+            if (empty($company->$bvnField) && empty($company->$ninField)) {
+                if ($globalKyc->kyc_type === 'bvn') {
+                    $company->$bvnField = $globalKyc->kyc_number;
+                } else {
+                    $company->$ninField = $globalKyc->kyc_number;
+                }
+                $company->save();
+                
+                $this->info("✅ Assigned {$globalKyc->kyc_type} ({$globalKyc->kyc_number}) to backup_director_{$i}");
+                $assigned = true;
+                break;
             }
-            $company->save();
+        }
 
-            $this->info("✅ Assigned {$globalKyc->kyc_type} ({$globalKyc->kyc_number}) to backup_director_1");
-        } else {
-            $this->warn('⚠️  Backup director slots already filled, skipping assignment');
+        if (!$assigned) {
+            $this->warn('⚠️  All backup director slots (2-10) already filled, skipping assignment');
         }
     }
 
