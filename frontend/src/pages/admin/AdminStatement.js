@@ -18,7 +18,6 @@ import {
     Grid,
     TextField,
     Button,
-    CircularProgress,
     IconButton
 } from '@mui/material';
 
@@ -30,6 +29,7 @@ import Label from '../../components/Label';
 import Scrollbar from '../../components/Scrollbar';
 import SearchNotFound from '../../components/SearchNotFound';
 import Iconify from '../../components/Iconify';
+import LogoLoader from '../../components/LogoLoader';
 // format number
 import { fCurrency } from '../../utils/formatNumber';
 // sections
@@ -263,12 +263,12 @@ export default function AdminStatement() {
                                             const displaySessionId = row.session_id || '';
                                             const displayFee = row.fee !== undefined ? row.fee : (row.charges || 0);
                                             const displayNetAmount = row.net_amount !== undefined ? row.net_amount : (row.amount - displayFee);
-                                            
+
                                             const formatDate = (dateStr) => {
                                                 if (!dateStr) return '';
                                                 const d = new Date(dateStr);
                                                 if (isNaN(d.getTime())) return '';
-                                                
+
                                                 // Convert to Nigerian time (WAT - UTC+1)
                                                 const options = {
                                                     timeZone: 'Africa/Lagos',
@@ -280,7 +280,7 @@ export default function AdminStatement() {
                                                     second: '2-digit',
                                                     hour12: false
                                                 };
-                                                
+
                                                 const formatted = d.toLocaleString('en-GB', options);
                                                 return `${formatted} WAT`;
                                             };
@@ -312,7 +312,7 @@ export default function AdminStatement() {
                                             // Settlement status
                                             let settlementText = 'Unsettled';
                                             let settlementColor = 'warning';
-                                            
+
                                             if (row.settlement_status === 'settled') {
                                                 settlementText = 'Settled';
                                                 settlementColor = 'success';
@@ -342,7 +342,7 @@ export default function AdminStatement() {
                                                     const response = await axios.post(
                                                         `/api/admin/transactions/${row.id}/receipt`,
                                                         {},
-                                                        { 
+                                                        {
                                                             responseType: 'blob',
                                                             headers: { Authorization: `Bearer ${AccessToken}` }
                                                         }
@@ -461,7 +461,9 @@ export default function AdminStatement() {
                                     ) : (
                                         <TableRow>
                                             <TableCell colSpan={12} align="center" sx={{ py: 10 }}>
-                                                <CircularProgress />
+                                                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                                                    <LogoLoader size={80} />
+                                                </Box>
                                             </TableCell>
                                         </TableRow>
                                     )}

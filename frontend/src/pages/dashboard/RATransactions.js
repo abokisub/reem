@@ -16,60 +16,59 @@ import {
     TableContainer,
     TablePagination,
     Box,
-    Button,
     IconButton,
-    styled,
-    alpha
+    alpha,
+    Stack,
+    Button,
+    Menu,
+    MenuItem,
+    ListItemIcon,
+    Divider,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    FormControl,
+    InputLabel,
+    Select
 } from '@mui/material';
 import { useSnackbar } from 'notistack';
 
-// routes
-import { PATH_DASHBOARD } from '../../routes/paths';
-// hooks
-import useSettings from '../../hooks/useSettings';
 // components
 import Page from '../../components/Page';
 import Label from '../../components/Label';
 import Scrollbar from '../../components/Scrollbar';
 import SearchNotFound from '../../components/SearchNotFound';
 import Iconify from '../../components/Iconify';
+import LogoLoader from '../../components/LogoLoader';
 // format number
 import { fCurrency } from '../../utils/formatNumber';
+// utils
+import { fDateTime } from '../../utils/formatTime';
+import { exportPDF, exportCSV } from '../../utils/exportTransactions';
 // sections
-import { TransHead, PlanToolbar } from '../../sections/admin/user/list';
+import { TransHead } from '../../sections/admin/user/list';
+import RATransactionToolbar from '../../sections/@dashboard/general/RATransactionToolbar';
+import RATransactionDetailModal from '../../sections/@dashboard/general/RATransactionDetailModal';
+// hooks
+import useAuth from '../../hooks/useAuth';
 // axios
 import axios from '../../utils/axios';
 
 // ----------------------------------------------------------------------
 
 const TABLE_HEAD = [
-    { id: 'transaction_ref', label: 'Transaction Ref', alignRight: false },
-    { id: 'session_id', label: 'Session ID', alignRight: false },
-    { id: 'type', label: 'Type', alignRight: false },
-    { id: 'customer', label: 'Customer', alignRight: false },
-    { id: 'amount', label: 'Amount (₦)', alignRight: false },
-    { id: 'fee', label: 'Fee (₦)', alignRight: false },
-    { id: 'net_amount', label: 'Net Amount (₦)', alignRight: false },
-    { id: 'status', label: 'Status', alignRight: false },
-    { id: 'settlement', label: 'Settlement', alignRight: false },
     { id: 'date', label: 'Date', alignRight: false },
+    { id: 'transaction_ref', label: 'ID/Ref', alignRight: false },
+    { id: 'customer_name', label: 'Payer', alignRight: false },
+    { id: 'amount', label: 'Gross', alignRight: false },
+    { id: 'fee', label: 'Fees', alignRight: false },
+    { id: 'net_amount', label: 'Net', alignRight: false },
+    { id: 'status', label: 'Status', alignRight: false },
+    { id: 'settlement_status', label: 'Settlement', alignRight: false },
+    { id: 'settlement_time', label: 'Settled Date', alignRight: false },
     { id: 'action', label: 'Actions', alignRight: true },
 ];
-
-const HeaderCardStyle = styled(Card)(({ theme }) => ({
-    padding: theme.spacing(3),
-    background: 'linear-gradient(135deg, #01b875 0%, #018F5D 100%)',
-    borderRadius: 16,
-    border: 'none',
-    boxShadow: `0 8px 32px 0 ${alpha('#01b875', 0.2)}`,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing(4),
-    position: 'relative',
-    overflow: 'hidden',
-    color: 'white',
-}));
 
 // ----------------------------------------------------------------------
 
@@ -77,422 +76,397 @@ export default function RATransactions() {
     const theme = useTheme();
     const navigate = useNavigate();
     const { enqueueSnackbar } = useSnackbar();
-    const { themeStretch } = useSettings();
+    const { user } = useAuth();
 
-    const [transactions, setTransactions] = useState([]);
+    const [transactions, SetTransactions] = useState([]);
+    const [load, SetLoading] = useState(true);
     const [page, setPage] = useState(0);
-    const [load, SetLoad] = useState(true);
     const [totalPage, SetTotal] = useState(0);
-    const [filterName, setFilterName] = useState('');
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [rowsPerPage, setRowsPerPage] = useState(25);
     const [isNotFound, SetNotFound] = useState(false);
-    const [exportLoading, setExportLoading] = useState(false);
+
+    // Modal States
+    const [openDetail, setOpenDetail] = useState(false);
+    const [selectedTransaction, setSelectedTransaction] = useState(null);
+
+    // Export States
+    const [exportDialogOpen, setExportDialogOpen] = useState(false);
+    const [exportFormat, setExportFormat] = useState('pdf');
+    const [exportStatus, setExportStatus] = useState('ALL');
+    const [exporting, setExporting] = useState(false);
+
+    // Filter States
+    const [filterName, setFilterName] = useState('');
+    const [filterStatus, setFilterStatus] = useState('ALL');
+    const [filterType, setFilterType] = useState('ALL');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
 
     const AccessToken = window.localStorage.getItem('accessToken');
 
     useEffect(() => {
-        initialize(page, rowsPerPage, filterName);
-    }, []);
+        fetchTransactions();
+    }, [page, rowsPerPage, filterName, filterStatus, filterType, startDate, endDate]);
 
-    const initialize = async (pag, limit = 10, search = '') => {
-        const Habukhan_page = pag + 1;
-        SetLoad(true);
-
+    const fetchTransactions = async () => {
+        SetLoading(true);
         try {
             const response = await axios.get(
-                `/api/system/all/ra-history/records/${AccessToken}/secure?page=${Habukhan_page}&limit=${limit}&status=ALL&search=${search}`
+                `/api/system/all/ra-history/records/${AccessToken}/secure`,
+                {
+                    params: {
+                        page: page + 1,
+                        limit: rowsPerPage,
+                        search: filterName,
+                        status: filterStatus,
+                        category: filterType,
+                        start_date: startDate,
+                        end_date: endDate
+                    }
+                }
             );
 
-            const allTransactions = response.data?.ra_trans?.data || [];
-
-            setTransactions(allTransactions);
+            const data = response.data?.ra_trans?.data || [];
+            SetTransactions(data);
             SetTotal(response.data?.ra_trans?.total || 0);
-            SetLoad(false);
-            setPage(pag);
-            SetNotFound(allTransactions.length === 0);
+            SetNotFound(data.length === 0);
         } catch (error) {
-            console.error('Error fetching RA transactions:', error);
-            const errorMessage = typeof error === 'string' ? error : (error.response?.data?.message || 'Error fetching transactions');
-            enqueueSnackbar(errorMessage, { variant: 'error' });
-            SetLoad(false);
-            setTransactions([]);
-            SetNotFound(true);
+            console.error('Error fetching transactions:', error);
+            enqueueSnackbar('Error loading transactions', { variant: 'error' });
+        } finally {
+            SetLoading(false);
         }
     };
 
     const handleChangeRowsPerPage = (event) => {
         setRowsPerPage(parseInt(event.target.value, 10));
-        initialize(0, event.target.value, filterName);
         setPage(0);
     };
 
-    const handleFilterByName = async (val) => {
-        setFilterName(val);
+    const handleFilterName = (value) => {
+        setFilterName(value);
         setPage(0);
-        initialize(0, rowsPerPage, val);
+    };
+
+    const handleFilterStatus = (value) => {
+        setFilterStatus(value);
+        setPage(0);
+    };
+
+    const handleFilterType = (value) => {
+        setFilterType(value);
+        setPage(0);
+    };
+
+    const handleResetFilters = () => {
+        setFilterName('');
+        setFilterStatus('ALL');
+        setFilterType('ALL');
+        setStartDate('');
+        setEndDate('');
     };
 
     const handleViewTransaction = (transaction) => {
-        // Navigate to transaction details page
-        navigate(`/dashboard/ra-transactions/${transaction.id}`);
+        setSelectedTransaction(transaction);
+        setOpenDetail(true);
+    };
+
+    const handleCloseDetail = () => {
+        setOpenDetail(false);
+        setSelectedTransaction(null);
     };
 
     const handleExport = async () => {
-        setExportLoading(true);
+        setExporting(true);
         try {
+            // Fetch ALL pages matching current filters but with export status override
             const response = await axios.get(
-                `/api/system/all/ra-history/records/${AccessToken}/secure/export`,
-                { responseType: 'blob' }
+                `/api/system/all/ra-history/records/${AccessToken}/secure`,
+                {
+                    params: {
+                        page: 1,
+                        limit: 5000,
+                        search: filterName,
+                        status: exportStatus,
+                        category: filterType,
+                        start_date: startDate,
+                        end_date: endDate
+                    }
+                }
             );
 
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `ra-transactions-${new Date().getTime()}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
+            const rows = response.data?.ra_trans?.data || [];
 
-            enqueueSnackbar('Export successful', { variant: 'success' });
-        } catch (error) {
-            enqueueSnackbar('Export failed', { variant: 'error' });
+            // Read company info from useAuth hook
+            const company = user?.company || {};
+
+            const filters = { status: exportStatus, startDate, endDate };
+            const filename = `ra_transactions_${new Date().toISOString().split('T')[0]}`;
+
+            if (exportFormat === 'pdf') {
+                exportPDF(rows, company, filters, filename);
+            } else {
+                exportCSV(rows, filename);
+            }
+
+            setExportDialogOpen(false);
+        } catch (err) {
+            console.error('Export error:', err);
+            enqueueSnackbar('Export failed. Please try again.', { variant: 'error' });
         } finally {
-            setExportLoading(false);
+            setExporting(false);
         }
     };
 
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '—';
+        const d = new Date(dateStr);
+        return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+            d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    };
+
     return (
-        <Page title="Reserved Account Transaction">
-            <Container maxWidth={themeStretch ? false : 'lg'}>
-                <HeaderCardStyle>
-                    <Box>
-                        <Typography variant="h4" sx={{ fontWeight: 800, color: 'white', mb: 0.5 }}>
-                            Reserved Account Transaction
-                        </Typography>
-                        <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-                            Overview &nbsp;&bull;&nbsp; Reserved Account Transaction
-                        </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button
-                            variant="contained"
-                            startIcon={<Iconify icon="eva:download-fill" />}
-                            onClick={handleExport}
-                            disabled={exportLoading}
-                            sx={{
-                                borderRadius: 1.5,
-                                bgcolor: 'white',
-                                color: 'primary.main',
-                                '&:hover': { bgcolor: 'grey.100' }
-                            }}
-                        >
-                            {exportLoading ? 'Exporting...' : 'Export'}
-                        </Button>
-                    </Box>
-                </HeaderCardStyle>
+        <Page title="RA Transactions">
+            <Container maxWidth={false}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" mb={5}>
+                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 800 }}>
+                        RA Transactions
+                    </Typography>
+                    <Button
+                        variant="contained"
+                        startIcon={<Iconify icon="eva:download-fill" />}
+                        onClick={() => setExportDialogOpen(true)}
+                        sx={{ borderRadius: 2 }}
+                    >
+                        Export
+                    </Button>
+                </Stack>
 
                 <Card sx={{ borderRadius: 2, boxShadow: theme.customShadows.z8 }}>
-                    <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                            Reserved Account Transaction
-                        </Typography>
-                    </Box>
-
-                    <PlanToolbar filterName={filterName} onFilterName={handleFilterByName} />
+                    <RATransactionToolbar
+                        filterName={filterName}
+                        onFilterName={handleFilterName}
+                        filterStatus={filterStatus}
+                        onFilterStatus={handleFilterStatus}
+                        filterType={filterType}
+                        onFilterType={handleFilterType}
+                        startDate={startDate}
+                        onStartDate={setStartDate}
+                        endDate={endDate}
+                        onEndDate={setEndDate}
+                        onResetFilters={handleResetFilters}
+                    />
 
                     <Scrollbar>
-                        <TableContainer sx={{ minWidth: 1600 }}>
+                        <TableContainer sx={{ minWidth: 800, position: 'relative' }}>
                             <Table>
                                 <TransHead
-                                    order={'desc'}
-                                    orderBy={'date'}
+                                    order="desc"
+                                    orderBy="date"
                                     headLabel={TABLE_HEAD}
                                     rowCount={transactions.length}
                                 />
-
-                                {!load ? (
-                                    <TableBody>
-                                        {transactions.map((row, index) => {
+                                <TableBody>
+                                    {!load ? (
+                                        transactions.map((row, index) => {
                                             const {
                                                 id,
                                                 transaction_ref,
-                                                session_id,
-                                                transaction_type,
-                                                transid,
-                                                customer_name,
-                                                amount,
                                                 status,
+                                                amount,
                                                 fee,
-                                                charges,
                                                 net_amount,
                                                 created_at,
-                                                date,
-                                                settlement_status
+                                                settlement_status,
+                                                settlement_time,
+                                                customer_name,
+                                                reference
                                             } = row;
 
-                                            // Use new fields with fallback to legacy
-                                            const displayTransactionRef = transaction_ref || transid || '';
-                                            const displaySessionId = session_id || '';
-                                            const displayFee = fee !== undefined ? fee : (charges || 0);
-                                            const displayNetAmount = net_amount !== undefined ? net_amount : (amount - displayFee);
-                                            const displayDate = date || created_at || '';
-                                            
-                                            const formatDate = (dateStr) => {
-                                                if (!dateStr) return '';
-                                                const d = new Date(dateStr);
-                                                if (isNaN(d.getTime())) return '';
-                                                
-                                                // Convert to Nigerian time (WAT - UTC+1)
-                                                const options = {
-                                                    timeZone: 'Africa/Lagos',
-                                                    year: 'numeric',
-                                                    month: '2-digit',
-                                                    day: '2-digit',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    second: '2-digit',
-                                                    hour12: false
-                                                };
-                                                
-                                                const formatted = d.toLocaleString('en-GB', options);
-                                                return `${formatted} WAT`;
-                                            };
-
-                                            // Transaction type labels
-                                            const typeLabels = {
-                                                'va_deposit': 'VA Deposit',
-                                                'api_transfer': 'Transfer',
-                                                'company_withdrawal': 'Withdrawal',
-                                                'kyc_charge': 'KYC Verification',
-                                                'refund': 'Refund'
-                                            };
-                                            const displayType = typeLabels[transaction_type] || sentenceCase(transaction_type || 'transaction');
-
-                                            // Standardize status and color
-                                            let statusText = 'pending';
+                                            // Status Logic
                                             let statusColor = 'warning';
+                                            if (['success', 'successful', '1'].includes(status?.toLowerCase())) statusColor = 'success';
+                                            if (['failed', '2'].includes(status?.toLowerCase())) statusColor = 'error';
 
-                                            const successStatus = ['successful', 'success', 1, '1', 'Completed', 'completed'];
-                                            const failedStatus = ['failed', 2, '2', 'Failed'];
-                                            const processingStatus = ['processing', 0, '0', 'Processing'];
-                                            const pendingStatus = ['pending', 'Pending'];
-
-                                            if (successStatus.includes(status)) {
-                                                statusText = 'successful';
-                                                statusColor = 'success';
-                                            } else if (failedStatus.includes(status)) {
-                                                statusText = 'failed';
-                                                statusColor = 'error';
-                                            } else if (processingStatus.includes(status)) {
-                                                statusText = 'processing';
-                                                statusColor = 'info';
-                                            } else if (pendingStatus.includes(status)) {
-                                                statusText = 'pending';
-                                                statusColor = 'warning';
-                                            }
-
-                                            // Settlement status - use actual settlement_status from API
-                                            let settlementText = 'Unsettled';
+                                            let settlementLabel = 'Unsettled';
                                             let settlementColor = 'warning';
-                                            
                                             if (settlement_status === 'settled') {
-                                                settlementText = 'Settled';
                                                 settlementColor = 'success';
-                                            } else if (settlement_status === 'unsettled') {
-                                                settlementText = 'Unsettled';
-                                                settlementColor = 'warning';
-                                            } else if (settlement_status === 'not_applicable') {
-                                                settlementText = 'Not Applicable';
-                                                settlementColor = 'default';
+                                                settlementLabel = 'Settled';
                                             } else if (settlement_status === 'failed') {
-                                                settlementText = 'Failed';
                                                 settlementColor = 'error';
-                                            } else {
-                                                // Fallback for legacy data
-                                                settlementText = 'Unsettled';
-                                                settlementColor = 'warning';
+                                                settlementLabel = 'Failed';
+                                            } else if (settlement_status === 'not_applicable') {
+                                                settlementColor = 'default';
+                                                settlementLabel = 'N/A';
                                             }
-
-                                            const handleDownloadReceipt = async () => {
-                                                try {
-                                                    const response = await axios.post(
-                                                        `/api/transactions/${id}/receipt`,
-                                                        {},
-                                                        { 
-                                                            responseType: 'blob',
-                                                            headers: { Authorization: `Bearer ${AccessToken}` }
-                                                        }
-                                                    );
-                                                    const url = window.URL.createObjectURL(new Blob([response.data]));
-                                                    const link = document.createElement('a');
-                                                    link.href = url;
-                                                    link.setAttribute('download', `receipt-${transid}-${new Date().toISOString().split('T')[0]}.pdf`);
-                                                    document.body.appendChild(link);
-                                                    link.click();
-                                                    link.remove();
-                                                    enqueueSnackbar('Receipt downloaded successfully', { variant: 'success' });
-                                                } catch (error) {
-                                                    enqueueSnackbar('Failed to download receipt', { variant: 'error' });
-                                                }
-                                            };
-
-                                            const handleCopyTransactionRef = () => {
-                                                navigator.clipboard.writeText(displayTransactionRef);
-                                                enqueueSnackbar('Transaction reference copied', { variant: 'success' });
-                                            };
-
-                                            const handleCopySessionId = () => {
-                                                navigator.clipboard.writeText(displaySessionId);
-                                                enqueueSnackbar('Session ID copied', { variant: 'success' });
-                                            };
 
                                             return (
-                                                <TableRow hover key={displayTransactionRef || index}>
-                                                    <TableCell>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Typography variant="subtitle2" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                                                                {displayTransactionRef || '—'}
-                                                            </Typography>
-                                                            {displayTransactionRef && (
-                                                                <IconButton size="small" onClick={handleCopyTransactionRef}>
-                                                                    <Iconify icon="eva:copy-outline" width={14} />
-                                                                </IconButton>
-                                                            )}
-                                                        </Box>
+                                                <TableRow hover key={id || index} sx={{ height: 64 }}>
+                                                    <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary', fontSize: '0.8rem' }}>
+                                                        {formatDate(created_at)}
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Typography variant="caption" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                                                                {displaySessionId || '—'}
-                                                            </Typography>
-                                                            {displaySessionId && (
-                                                                <IconButton size="small" onClick={handleCopySessionId}>
-                                                                    <Iconify icon="eva:copy-outline" width={14} />
-                                                                </IconButton>
-                                                            )}
-                                                        </Box>
+                                                        <Typography variant="subtitle2" sx={{ fontWeight: 700, fontFamily: 'monospace' }}>
+                                                            {transaction_ref || reference || '—'}
+                                                        </Typography>
                                                     </TableCell>
-                                                    <TableCell>
-                                                        <Label
-                                                            variant="soft"
-                                                            color="info"
-                                                            sx={{
-                                                                textTransform: 'capitalize',
-                                                                fontWeight: 700,
-                                                                px: 1,
-                                                                fontSize: '0.7rem',
-                                                                borderRadius: 0.75
-                                                            }}
-                                                        >
-                                                            {displayType}
-                                                        </Label>
-                                                    </TableCell>
-                                                    <TableCell sx={{ color: 'text.primary', fontWeight: 600 }}>
+                                                    <TableCell sx={{ fontWeight: 600 }}>
                                                         {customer_name || '—'}
                                                     </TableCell>
-                                                    <TableCell sx={{ fontWeight: 800, color: 'success.main', fontSize: '0.9rem' }}>
+                                                    <TableCell sx={{ fontWeight: 800, color: 'success.main' }}>
                                                         ₦{fCurrency(amount)}
                                                     </TableCell>
-                                                    <TableCell sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.85rem' }}>
-                                                        ₦{fCurrency(displayFee)}
+                                                    <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                                                        ₦{fCurrency(fee || 0)}
                                                     </TableCell>
-                                                    <TableCell sx={{ fontWeight: 700, color: 'primary.main', fontSize: '0.9rem' }}>
-                                                        ₦{fCurrency(displayNetAmount)}
+                                                    <TableCell sx={{ fontWeight: 800, color: 'primary.main' }}>
+                                                        ₦{fCurrency(net_amount || (amount - (fee || 0)))}
                                                     </TableCell>
                                                     <TableCell>
                                                         <Label
                                                             variant="soft"
                                                             color={statusColor}
-                                                            sx={{
-                                                                textTransform: 'uppercase',
-                                                                fontWeight: 800,
-                                                                px: 1.2,
-                                                                fontSize: '0.7rem',
-                                                                borderRadius: 0.75
-                                                            }}
+                                                            sx={{ textTransform: 'uppercase', fontWeight: 800, fontSize: '0.65rem' }}
                                                         >
-                                                            {statusText}
+                                                            {status || 'pending'}
                                                         </Label>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                                            <Box sx={{
-                                                                width: 8,
-                                                                height: 8,
-                                                                borderRadius: '50%',
-                                                                bgcolor: `${settlementColor}.main`
-                                                            }} />
-                                                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: '0.75rem' }}>
-                                                                {settlementText}
+                                                        <Stack direction="row" alignItems="center" spacing={1}>
+                                                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: `${settlementColor}.main` }} />
+                                                            <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                                                                {settlementLabel}
                                                             </Typography>
-                                                        </Box>
+                                                        </Stack>
                                                     </TableCell>
-                                                    <TableCell sx={{ color: 'text.secondary', fontWeight: 500, fontSize: '0.8rem' }}>
-                                                        {formatDate(displayDate) || '—'}
+                                                    <TableCell sx={{ color: 'text.secondary', fontSize: '0.75rem' }}>
+                                                        {settlement_time ? fDateTime(settlement_time) : '—'}
                                                     </TableCell>
                                                     <TableCell align="right">
-                                                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                                                            <IconButton
-                                                                color="primary"
-                                                                onClick={() => handleViewTransaction(row)}
-                                                                sx={{
-                                                                    '&:hover': {
-                                                                        bgcolor: alpha(theme.palette.primary.main, 0.08)
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <Iconify icon="eva:eye-fill" />
-                                                            </IconButton>
-                                                            <IconButton
-                                                                color="success"
-                                                                onClick={handleDownloadReceipt}
-                                                                sx={{
-                                                                    '&:hover': {
-                                                                        bgcolor: alpha(theme.palette.success.main, 0.08)
-                                                                    }
-                                                                }}
-                                                            >
-                                                                <Iconify icon="eva:download-fill" />
-                                                            </IconButton>
-                                                        </Box>
+                                                        <IconButton
+                                                            color="primary"
+                                                            onClick={() => handleViewTransaction(row)}
+                                                            sx={{ '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.08) } }}
+                                                        >
+                                                            <Iconify icon="eva:eye-fill" />
+                                                        </IconButton>
                                                     </TableCell>
                                                 </TableRow>
                                             );
-                                        })}
-                                    </TableBody>
-                                ) : (
-                                    <TableBody>
+                                        })
+                                    ) : (
                                         <TableRow>
-                                            <TableCell align="center" colSpan={11} sx={{ py: 8 }}>
-                                                <Typography variant="body2" sx={{ color: 'text.secondary' }}>Loading transactions...</Typography>
+                                            <TableCell align="center" colSpan={12} sx={{ py: 10 }}>
+                                                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                    <LogoLoader size={80} sx={{ mb: 2 }} />
+                                                    <Typography variant="body2" color="text.secondary">Loading...</Typography>
+                                                </Box>
                                             </TableCell>
                                         </TableRow>
-                                    </TableBody>
-                                )}
-
-                                {isNotFound && (
-                                    <TableBody>
+                                    )}
+                                    {isNotFound && !load && (
                                         <TableRow>
-                                            <TableCell align="center" colSpan={11} sx={{ py: 8 }}>
+                                            <TableCell align="center" colSpan={12} sx={{ py: 10 }}>
                                                 <SearchNotFound searchQuery={filterName} />
                                             </TableCell>
                                         </TableRow>
-                                    </TableBody>
-                                )}
+                                    )}
+                                </TableBody>
                             </Table>
                         </TableContainer>
                     </Scrollbar>
 
                     <TablePagination
-                        rowsPerPageOptions={[5, 10, 25, 100]}
+                        rowsPerPageOptions={[5, 10, 25, 50, 100]}
                         component="div"
                         count={totalPage}
                         rowsPerPage={rowsPerPage}
                         page={page}
-                        onPageChange={(e, p) => initialize(p, rowsPerPage, filterName)}
+                        onPageChange={(e, p) => setPage(p)}
                         onRowsPerPageChange={handleChangeRowsPerPage}
                     />
                 </Card>
+
+                {/* View Modal */}
+                <RATransactionDetailModal
+                    transaction={selectedTransaction}
+                    open={openDetail}
+                    onClose={handleCloseDetail}
+                />
+
+                {/* Export Dialog */}
+                <Dialog
+                    open={exportDialogOpen}
+                    onClose={() => !exporting && setExportDialogOpen(false)}
+                    fullWidth
+                    maxWidth="xs"
+                >
+                    <DialogTitle sx={{ pb: 2 }}>Export Transactions</DialogTitle>
+                    <DialogContent dividers>
+                        <Stack spacing={3} sx={{ mt: 1 }}>
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Export Format</InputLabel>
+                                <Select
+                                    value={exportFormat}
+                                    label="Export Format"
+                                    onChange={(e) => setExportFormat(e.target.value)}
+                                >
+                                    <MenuItem value="pdf">
+                                        <Stack direction="row" alignItems="center" spacing={1}>
+                                            <Iconify icon="eva:file-text-fill" sx={{ color: 'error.main' }} />
+                                            <span>PDF Document</span>
+                                        </Stack>
+                                    </MenuItem>
+                                    <MenuItem value="csv">
+                                        <Stack direction="row" alignItems="center" spacing={1}>
+                                            <Iconify icon="eva:grid-fill" sx={{ color: 'success.main' }} />
+                                            <span>CSV Spreadsheet</span>
+                                        </Stack>
+                                    </MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            <FormControl fullWidth size="small">
+                                <InputLabel>Filter by Status</InputLabel>
+                                <Select
+                                    value={exportStatus}
+                                    label="Filter by Status"
+                                    onChange={(e) => setExportStatus(e.target.value)}
+                                >
+                                    <MenuItem value="ALL">All Statuses</MenuItem>
+                                    <MenuItem value="success">Success</MenuItem>
+                                    <MenuItem value="failed">Failed</MenuItem>
+                                    <MenuItem value="pending">Pending</MenuItem>
+                                </Select>
+                            </FormControl>
+
+                            {(startDate || endDate) && (
+                                <Box sx={{ p: 1.5, bgcolor: 'background.neutral', borderRadius: 1 }}>
+                                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+                                        Active Date Filter:
+                                    </Typography>
+                                    <Typography variant="subtitle2">
+                                        {startDate || 'Start'} — {endDate || 'End'}
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Stack>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setExportDialogOpen(false)} color="inherit" disabled={exporting}>
+                            Cancel
+                        </Button>
+                        <Button
+                            onClick={handleExport}
+                            variant="contained"
+                            disabled={exporting}
+                            startIcon={exporting ? <LogoLoader size={16} /> : <Iconify icon="eva:download-fill" />}
+                        >
+                            {exporting ? 'Generating...' : `Export to ${exportFormat.toUpperCase()}`}
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             </Container>
         </Page>
     );

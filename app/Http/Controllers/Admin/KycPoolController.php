@@ -44,29 +44,32 @@ class KycPoolController extends Controller
             ->get(['id', 'name', 'director_nin', 'director_bvn', 'bvn', 'nin', 'status']);
 
         $companyHealth = $companies->map(function ($c) {
-            // Count VAs since last KYC refresh (or all time if never refreshed)
-            $query = VirtualAccount::where('company_id', $c->id)->whereNotNull('palmpay_account_number');
-            if ($c->kyc_refreshed_at) {
-                $query->where('created_at', '>=', $c->kyc_refreshed_at);
-            }
-            $vaCount = $query->count();
-            $totalVaCount = VirtualAccount::where('company_id', $c->id)->whereNotNull('palmpay_account_number')->count();
-
+            $vaCount = VirtualAccount::where('company_id', $c->id)
+                ->whereNotNull('palmpay_account_number')
+                ->count();
             $maxLimit = 130;
             $pct = $maxLimit > 0 ? round(($vaCount / $maxLimit) * 100) : 0;
-            $status = $pct >= 100 ? 'critical' : ($pct >= 80 ? 'warning' : 'healthy');
+
+            // Check if current director_nin is exhausted in the pool
+            $ninExhausted = false;
+            if ($c->director_nin) {
+                $poolEntry = GlobalKycPool::where('kyc_number', $c->director_nin)->first();
+                if ($poolEntry && $poolEntry->max_usage && $poolEntry->usage_count >= $poolEntry->max_usage) {
+                    $ninExhausted = true;
+                }
+            }
+
+            $status = $ninExhausted ? 'critical' : ($pct >= 80 ? 'warning' : 'healthy');
 
             return [
-                'id'              => $c->id,
-                'name'            => $c->name,
-                'director_nin'    => $c->director_nin ? substr($c->director_nin, 0, 5) . '***' : null,
-                'director_bvn'    => $c->director_bvn ? substr($c->director_bvn, 0, 5) . '***' : null,
-                'va_count'        => $vaCount,
-                'total_va_count'  => $totalVaCount,
-                'max_limit'       => $maxLimit,
-                'usage_pct'       => $pct,
-                'status'          => $status,
-                'kyc_refreshed_at'=> $c->kyc_refreshed_at,
+                'id'           => $c->id,
+                'name'         => $c->name,
+                'director_nin' => $c->director_nin ? substr($c->director_nin, 0, 5) . '***' : null,
+                'director_bvn' => $c->director_bvn ? substr($c->director_bvn, 0, 5) . '***' : null,
+                'va_count'     => $vaCount,
+                'max_limit'    => $maxLimit,
+                'usage_pct'    => $pct,
+                'status'       => $status,
             ];
         });
 

@@ -4,7 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { sentenceCase } from 'change-case';
 
 // @mui
-import { useTheme } from '@mui/material/styles';
+import { useTheme, styled, alpha } from '@mui/material/styles';
 import {
     Container,
     Typography,
@@ -12,22 +12,18 @@ import {
     Button,
     Grid,
     Stack,
-    styled,
-    alpha,
     Paper,
     IconButton,
-    Alert
+    Divider,
 } from '@mui/material';
 import { useSnackbar } from 'notistack';
 
 // hooks
-import useSettings from '../../hooks/useSettings';
 import useSystemName from '../../hooks/useSystemName';
 // components
 import Page from '../../components/Page';
 import Label from '../../components/Label';
 import Iconify from '../../components/Iconify';
-import Image from '../../components/Image';
 // format number
 import { fCurrency } from '../../utils/formatNumber';
 // axios
@@ -35,50 +31,39 @@ import axios from '../../utils/axios';
 
 // ----------------------------------------------------------------------
 
-const ReceiptPaper = styled(Paper)(({ theme }) => ({
+const DetailPaper = styled(Paper)(({ theme }) => ({
     padding: theme.spacing(4),
-    maxWidth: 600,
+    maxWidth: 900,
     margin: 'auto',
     borderRadius: 20,
     boxShadow: `0 24px 48px -12px ${alpha(theme.palette.grey[500], 0.16)}`,
-    position: 'relative',
-    overflow: 'hidden',
     border: `1px solid ${theme.palette.divider}`,
-    [theme.breakpoints.down('sm')]: {
-        padding: theme.spacing(3),
-    }
 }));
 
-const ReceiptHeader = styled(Box)(({ theme }) => ({
-    textAlign: 'center',
-    marginBottom: theme.spacing(4),
-    borderBottom: `2px dashed ${theme.palette.divider}`,
-    paddingBottom: theme.spacing(4),
+const SectionBox = styled(Box)(({ theme }) => ({
+    padding: theme.spacing(3),
+    borderRadius: 16,
+    backgroundColor: theme.palette.background.neutral,
+    height: '100%',
 }));
 
-const SectionTitle = styled(Typography)(({ theme }) => ({
-    fontSize: '0.75rem',
-    fontWeight: 800,
-    textTransform: 'uppercase',
-    color: theme.palette.text.secondary,
-    letterSpacing: 1.2,
-    marginBottom: theme.spacing(1.5),
-}));
-
-const DetailRow = styled(Box)(({ theme }) => ({
-    display: 'flex',
-    justifyContent: 'space-between',
-    padding: theme.spacing(1.5, 0),
-    borderBottom: `1px solid ${alpha(theme.palette.divider, 0.5)}`,
-    '&:last-of-type': {
-        borderBottom: 'none',
-    }
-}));
-
-const ValueText = styled(Typography)(({ theme }) => ({
-    fontWeight: 700,
-    color: theme.palette.text.primary,
-}));
+const InfoRow = ({ label, value, isCopyable, onCopy }) => (
+    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+            {label}
+        </Typography>
+        <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, textAlign: 'right' }}>
+                {value || '—'}
+            </Typography>
+            {isCopyable && value && (
+                <IconButton size="small" onClick={() => onCopy(value)}>
+                    <Iconify icon="eva:copy-outline" width={16} height={16} />
+                </IconButton>
+            )}
+        </Stack>
+    </Stack>
+);
 
 // ----------------------------------------------------------------------
 
@@ -86,59 +71,13 @@ export default function RATransactionDetails() {
     const theme = useTheme();
     const navigate = useNavigate();
     const { enqueueSnackbar } = useSnackbar();
-    const { themeStretch } = useSettings();
     const { id } = useParams();
     const systemName = useSystemName();
 
     const [transaction, setTransaction] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [refundLoading, setRefundLoading] = useState(false);
-    const [notificationLoading, setNotificationLoading] = useState(false);
 
     const AccessToken = window.localStorage.getItem('accessToken');
-
-    // Add print styles
-    React.useEffect(() => {
-        const style = document.createElement('style');
-        style.innerHTML = `
-            @media print {
-                /* Hide everything except the receipt */
-                body * {
-                    visibility: hidden;
-                }
-                
-                /* Show only the receipt paper */
-                .receipt-paper, .receipt-paper * {
-                    visibility: visible;
-                }
-                
-                .receipt-paper {
-                    position: absolute;
-                    left: 0;
-                    top: 0;
-                    width: 100%;
-                    box-shadow: none !important;
-                    border: none !important;
-                }
-                
-                /* Hide action buttons when printing */
-                .no-print {
-                    display: none !important;
-                }
-                
-                /* Optimize for PDF */
-                @page {
-                    size: A4;
-                    margin: 1cm;
-                }
-            }
-        `;
-        document.head.appendChild(style);
-        
-        return () => {
-            document.head.removeChild(style);
-        };
-    }, []);
 
     useEffect(() => {
         fetchTransactionDetails();
@@ -152,7 +91,7 @@ export default function RATransactionDetails() {
             );
 
             const allTransactions = response.data?.ra_trans?.data || [];
-            const foundTransaction = allTransactions.find(t => t.id === parseInt(id) || t.transid === id);
+            const foundTransaction = allTransactions.find(t => t.id === parseInt(id) || t.transid === id || t.transaction_ref === id);
 
             if (foundTransaction) {
                 setTransaction(foundTransaction);
@@ -162,141 +101,77 @@ export default function RATransactionDetails() {
             }
         } catch (error) {
             console.error('Error fetching transaction:', error);
-            enqueueSnackbar('Error loading transaction details', { variant: 'error' });
+            enqueueSnackbar('Error loading details', { variant: 'error' });
             navigate('/dashboard/ra-transactions');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleInitiateRefund = async () => {
-        if (!transaction) return;
-        setRefundLoading(true);
-        try {
-            await axios.post(`/api/transactions/${transaction.id}/refund`, {
-                transaction_id: transaction.transaction_id,
-                amount: transaction.amount
-            });
-            enqueueSnackbar('Refund initiated successfully', { variant: 'success' });
-            fetchTransactionDetails();
-        } catch (error) {
-            enqueueSnackbar(error.response?.data?.message || 'Failed to initiate refund', { variant: 'error' });
-        } finally {
-            setRefundLoading(false);
-        }
+    const handleCopy = (text) => {
+        navigator.clipboard.writeText(text);
+        enqueueSnackbar('Copied to clipboard', { variant: 'success', autoHideDuration: 1000 });
     };
 
-    const handleResendNotification = async () => {
-        if (!transaction) return;
-        setNotificationLoading(true);
-        try {
-            await axios.post(`/api/transactions/${transaction.id}/resend-notification`, {
-                transaction_id: transaction.transaction_id
-            });
-            enqueueSnackbar('Notification sent successfully', { variant: 'success' });
-        } catch (error) {
-            enqueueSnackbar(error.response?.data?.message || 'Failed to send notification', { variant: 'error' });
-        } finally {
-            setNotificationLoading(false);
-        }
-    };
-
-    if (loading) {
+    if (loading || !transaction) {
         return (
-            <Page title="Transaction Receipt">
+            <Page title="Transaction Details">
                 <Container sx={{ py: 10, textAlign: 'center' }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                        <Iconify icon="eos-icons:loading" width={40} height={40} sx={{ color: 'primary.main' }} />
-                        <Typography variant="body2" color="text.secondary">Fetching Receipt...</Typography>
-                    </Box>
+                    <Iconify icon="eos-icons:loading" width={40} height={40} sx={{ color: 'primary.main', mb: 2 }} />
+                    <Typography variant="body2" color="text.secondary">Loading Details...</Typography>
                 </Container>
             </Page>
         );
     }
 
-    const metadata = transaction.metadata ? (typeof transaction.metadata === 'string' ? JSON.parse(transaction.metadata) : transaction.metadata) : {};
+    const {
+        transaction_ref,
+        session_id,
+        amount,
+        fee,
+        net_amount,
+        status,
+        created_at,
+        transaction_type,
+        customer_name,
+        description,
+        recipient_account_number,
+        recipient_account_name,
+        recipient_bank_name,
+        va_account_number,
+        va_account_name,
+        va_bank_name,
+        settlement_status,
+        settlement_batch_no,
+        palmpay_reference
+    } = transaction;
 
     // Status Logic
-    let statusText = 'PENDING';
     let statusColor = 'warning';
-    const currentStatus = transaction.status?.toString().toLowerCase();
+    if (['success', 'successful', '1'].includes(status?.toLowerCase())) statusColor = 'success';
+    if (['failed', '2'].includes(status?.toLowerCase())) statusColor = 'error';
 
-    if (['successful', 'success', '1', 'completed'].includes(currentStatus)) {
-        statusText = 'SUCCESSFUL';
-        statusColor = 'success';
-    } else if (['failed', '2', 'fail'].includes(currentStatus)) {
-        statusText = 'FAILED';
-        statusColor = 'error';
-    } else if (['0', 'processing'].includes(currentStatus)) {
-        statusText = 'PROCESSING';
-        statusColor = 'info';
-    }
+    // Settlement Logic
+    let settlementColor = 'warning';
+    if (settlement_status === 'settled') settlementColor = 'success';
+    if (settlement_status === 'failed') settlementColor = 'error';
 
-    // Determine if this is a credit (deposit) or debit (transfer/withdrawal) transaction
-    const isCredit = transaction.type === 'credit';
-    
-    // PROFESSIONAL STANDARD FOR RECEIPTS:
-    // For CREDIT (deposits): SENDER = external customer, RECIPIENT = company virtual account
-    // For DEBIT (transfers/withdrawals): SENDER = company virtual account (master wallet), RECIPIENT = destination account
-    
-    // For credit transactions (deposits), show sender info
-    // For debit transactions (transfers), show company virtual account as sender
-    const senderName = isCredit 
-        ? (metadata.sender_name || metadata.sender_account_name || transaction.customer_name || transaction.va_account_name || 'N/A')
-        : (transaction.company_virtual_account_name || transaction.company_name || `${systemName} Business`);
-    
-    const senderAccount = isCredit 
-        ? (metadata.sender_account || transaction.customer_account || 'N/A')
-        : (transaction.company_virtual_account_number || transaction.va_account_number || 'N/A');
-    
-    const senderBank = isCredit 
-        ? (metadata.sender_bank || metadata.sender_bank_name || transaction.customer_bank || 'N/A')
-        : (transaction.company_virtual_bank_name || 'PalmPay');
-    
-    // Recipient information
-    const recipientName = isCredit 
-        ? (transaction.va_account_name || 'N/A')
-        : (transaction.recipient_account_name || transaction.customer_name || 'N/A');
-    
-    const recipientAccount = isCredit 
-        ? (transaction.va_account_number || 'N/A')
-        : (transaction.recipient_account_number || transaction.customer_account || 'N/A');
-    
-    const recipientBank = isCredit 
-        ? 'PalmPay'
-        : (transaction.recipient_bank_name || transaction.customer_bank || 'PalmPay');
-    
-    // Balance information
-    const oldBalance = transaction.oldbal || transaction.balance_before || 0;
-    const newBalance = transaction.newbal || transaction.balance_after || 0;
-    const fee = transaction.charges || transaction.fee || 0;
-    const netAmount = transaction.net_amount || (transaction.amount - fee);
-    
-    // Format date to Nigerian time and format
-    const formatNigerianDate = (dateStr) => {
-        if (!dateStr) return '';
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '—';
         const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return '';
-        
-        // Convert to Nigerian time (WAT - UTC+1)
-        const options = {
-            timeZone: 'Africa/Lagos',
+        return d.toLocaleString('en-GB', {
             year: 'numeric',
-            month: 'short',
+            month: 'long',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
             hour12: true
-        };
-        
-        return d.toLocaleString('en-NG', options) + ' WAT';
+        }) + ' WAT';
     };
-    
-    const isRefundable = statusText === 'SUCCESSFUL' && !transaction.is_refunded;
 
     return (
-        <Page title="Transaction Receipt">
-            <Container maxWidth={themeStretch ? false : 'lg'} sx={{ py: 5 }}>
+        <Page title="Transaction Details">
+            <Container maxWidth={false} sx={{ py: 5 }}>
                 <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 1 }}>
                     <IconButton onClick={() => navigate('/dashboard/ra-transactions')} sx={{ color: 'text.primary' }}>
                         <Iconify icon="eva:arrow-back-fill" />
@@ -304,168 +179,111 @@ export default function RATransactionDetails() {
                     <Typography variant="h4" sx={{ fontWeight: 800 }}>Transaction Receipt</Typography>
                 </Box>
 
-                <ReceiptPaper className="receipt-paper">
-                    <ReceiptHeader>
-                        <Image src="/upload/welcome.png" sx={{ maxWidth: 120, mx: 'auto', mb: 2 }} />
-                        <Typography variant="h5" sx={{ fontWeight: 900, mb: 0.5 }}>Transaction Receipt</Typography>
-                        <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>{transaction.transid || transaction.reference}</Typography>
-
-                        <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                            <Box sx={{
-                                width: 64,
-                                height: 64,
-                                borderRadius: '50%',
-                                bgcolor: alpha(theme.palette[statusColor].main, 0.1),
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                mb: 2
-                            }}>
-                                <Iconify
-                                    icon={statusColor === 'success' ? 'eva:checkmark-circle-2-fill' : statusColor === 'error' ? 'eva:close-circle-fill' : 'eva:clock-fill'}
-                                    width={40}
-                                    height={40}
-                                    sx={{ color: `${statusColor}.main` }}
-                                />
-                            </Box>
-                            <Typography variant="h3" sx={{ fontWeight: 900, color: 'text.primary' }}>
-                                ₦{fCurrency(transaction.amount)}
-                            </Typography>
-                            <Label color={statusColor} sx={{ mt: 1, px: 2, py: 2, fontWeight: 800, textTransform: 'uppercase' }}>
-                                {statusText}
-                            </Label>
-                        </Box>
-                    </ReceiptHeader>
-
-                    <Box sx={{ mb: 4 }}>
-                        <SectionTitle>Sender Details</SectionTitle>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Name</Typography>
-                            <ValueText variant="body2">{senderName}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Account</Typography>
-                            <ValueText variant="body2" sx={{ fontFamily: 'monospace' }}>{senderAccount}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Bank</Typography>
-                            <ValueText variant="body2">{senderBank}</ValueText>
-                        </DetailRow>
-                    </Box>
-
-                    <Box sx={{ mb: 4 }}>
-                        <SectionTitle>Recipient Details</SectionTitle>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Account Name</Typography>
-                            <ValueText variant="body2">{recipientName}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Account Number</Typography>
-                            <ValueText variant="body2" sx={{ fontFamily: 'monospace' }}>{recipientAccount}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Bank</Typography>
-                            <ValueText variant="body2">{recipientBank}</ValueText>
-                        </DetailRow>
-                    </Box>
-
-                    <Box sx={{ mb: 4 }}>
-                        <SectionTitle>Transaction Info</SectionTitle>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Date</Typography>
-                            <ValueText variant="body2">{formatNigerianDate(transaction.date || transaction.created_at)}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Type</Typography>
-                            <ValueText variant="body2">{sentenceCase(transaction.type || 'Transfer')}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Gross Amount</Typography>
-                            <ValueText variant="body2">₦{fCurrency(transaction.amount)}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Fee</Typography>
-                            <ValueText variant="body2" sx={{ color: 'error.main' }}>-₦{fCurrency(fee)}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Net Amount</Typography>
-                            <ValueText variant="body2" sx={{ color: 'success.main', fontWeight: 900 }}>₦{fCurrency(netAmount)}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">Old Balance</Typography>
-                            <ValueText variant="body2">₦{fCurrency(oldBalance)}</ValueText>
-                        </DetailRow>
-                        <DetailRow>
-                            <Typography variant="body2" color="text.secondary">New Balance</Typography>
-                            <ValueText variant="body2" sx={{ color: 'primary.main', fontWeight: 900 }}>₦{fCurrency(newBalance)}</ValueText>
-                        </DetailRow>
-                        {transaction.palmpay_reference && (
-                            <DetailRow>
-                                <Typography variant="body2" color="text.secondary">Provider Ref</Typography>
-                                <ValueText variant="body2" sx={{ fontFamily: 'monospace' }}>{transaction.palmpay_reference}</ValueText>
-                            </DetailRow>
-                        )}
-                    </Box>
-
-                    <Box sx={{ textAlign: 'center', mt: 4, pt: 4, borderTop: `1px solid ${theme.palette.divider}` }}>
-                        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 2 }}>
-                            This is an automated transaction receipt generated by {systemName}.
+                <DetailPaper>
+                    {/* Header Section */}
+                    <Box sx={{ textAlign: 'center', mb: 5 }}>
+                        <Typography variant="overline" sx={{ color: 'text.secondary', fontWeight: 800, letterSpacing: 2 }}>
+                            TRANSACTION AMOUNT
                         </Typography>
+                        <Typography variant="h2" sx={{ fontWeight: 900, color: 'text.primary', my: 1 }}>
+                            ₦{fCurrency(amount)}
+                        </Typography>
+                        <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
+                            <Label color={statusColor} sx={{ textTransform: 'uppercase', fontWeight: 900, px: 2, py: 2 }}>
+                                {status || 'PENDING'}
+                            </Label>
+                            <Label color={settlementColor} variant="soft" sx={{ textTransform: 'uppercase', fontWeight: 800 }}>
+                                {settlement_status || 'UNSETTLED'}
+                            </Label>
+                        </Stack>
+                    </Box>
 
-                        <Stack direction="row" spacing={2}>
+                    <Grid container spacing={3}>
+                        {/* Section 1: Transaction Metadata */}
+                        <Grid item xs={12} md={6}>
+                            <SectionBox>
+                                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+                                    <Iconify icon="eva:info-fill" width={20} sx={{ color: 'primary.main' }} />
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Basic Information</Typography>
+                                </Stack>
+                                <InfoRow label="Transaction ID" value={transaction_ref} isCopyable onCopy={handleCopy} />
+                                <InfoRow label="Type" value={sentenceCase(transaction_type || 'transfer')} />
+                                <InfoRow label="Date & Time" value={formatDate(created_at)} />
+                                <InfoRow label="Description" value={description} />
+                            </SectionBox>
+                        </Grid>
+
+                        {/* Section 2: Financials */}
+                        <Grid item xs={12} md={6}>
+                            <SectionBox>
+                                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+                                    <Iconify icon="eva:pie-chart-fill" width={20} sx={{ color: 'success.main' }} />
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Financial Breakdown</Typography>
+                                </Stack>
+                                <InfoRow label="Gross Amount" value={`₦${fCurrency(amount)}`} />
+                                <InfoRow label="Service Fee" value={`₦${fCurrency(fee || 0)}`} />
+                                <Divider sx={{ my: 1.5, borderStyle: 'dashed' }} />
+                                <InfoRow label="Net Amount" value={`₦${fCurrency(net_amount || (amount - fee))}`} />
+                                <InfoRow label="Palmpay Ref" value={palmpay_reference} isCopyable onCopy={handleCopy} />
+                            </SectionBox>
+                        </Grid>
+
+                        {/* Section 3: Sender / Payer */}
+                        <Grid item xs={12} md={6}>
+                            <SectionBox>
+                                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+                                    <Iconify icon="eva:person-fill" width={20} sx={{ color: 'warning.main' }} />
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Payer Information</Typography>
+                                </Stack>
+                                <InfoRow label="Customer Name" value={customer_name} />
+                                <InfoRow label="Session ID" value={session_id} isCopyable onCopy={handleCopy} />
+                                <InfoRow label="Reserved Acc" value={va_account_number} isCopyable onCopy={handleCopy} />
+                                <InfoRow label="Bank" value={va_bank_name || 'PalmPay'} />
+                            </SectionBox>
+                        </Grid>
+
+                        {/* Section 4: Destination / Settlement */}
+                        <Grid item xs={12} md={6}>
+                            <SectionBox>
+                                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+                                    <Iconify icon="eva:diagonal-arrow-right-up-fill" width={20} sx={{ color: 'info.main' }} />
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>Destination Details</Typography>
+                                </Stack>
+                                <InfoRow label="Recipient" value={recipient_account_name || systemName} />
+                                <InfoRow label="Account No" value={recipient_account_number} isCopyable onCopy={handleCopy} />
+                                <InfoRow label="Bank" value={recipient_bank_name} />
+                                <InfoRow label="Settlement Batch" value={settlement_batch_no} isCopyable onCopy={handleCopy} />
+                            </SectionBox>
+                        </Grid>
+                    </Grid>
+
+                    {/* Actions Footer */}
+                    <Box sx={{ mt: 5, pt: 4, borderTop: `1px solid ${theme.palette.divider}`, textAlign: 'center' }}>
+                        <Stack direction="row" spacing={2} justifyContent="center">
                             <Button
-                                fullWidth
                                 variant="contained"
-                                color="primary"
+                                size="large"
                                 startIcon={<Iconify icon="eva:download-fill" />}
-                                onClick={() => {
-                                    // Trigger browser's print dialog which allows saving as PDF
-                                    window.print();
-                                }}
-                                sx={{ borderRadius: 1.5, py: 1.5, fontWeight: 700 }}
+                                onClick={() => window.print()}
+                                sx={{ borderRadius: 1.5, px: 4, py: 1.5, fontWeight: 900 }}
                             >
                                 Download Receipt
                             </Button>
+                            <Button
+                                variant="soft"
+                                color="inherit"
+                                size="large"
+                                onClick={() => navigate('/dashboard/ra-transactions')}
+                                sx={{ borderRadius: 1.5, px: 4, py: 1.5, fontWeight: 700 }}
+                            >
+                                Close Receipt
+                            </Button>
                         </Stack>
+                        <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mt: 3, fontWeight: 600 }}>
+                            This is an official transaction summary generated by {systemName} Business Portal.
+                        </Typography>
                     </Box>
-                </ReceiptPaper>
-
-                {/* Admin/Special Actions */}
-                <Box sx={{ mt: 5, maxWidth: 600, mx: 'auto' }} className="no-print">
-                    <Grid container spacing={2}>
-                        <Grid item xs={6}>
-                            <Button
-                                fullWidth
-                                variant="soft"
-                                color="error"
-                                disabled={refundLoading || !isRefundable}
-                                onClick={handleInitiateRefund}
-                                startIcon={<Iconify icon="eva:refresh-fill" />}
-                                sx={{ py: 1.5, fontWeight: 700 }}
-                            >
-                                {refundLoading ? 'Wait...' : 'Refund'}
-                            </Button>
-                        </Grid>
-                        <Grid item xs={6}>
-                            <Button
-                                fullWidth
-                                variant="soft"
-                                color="info"
-                                disabled={notificationLoading}
-                                onClick={handleResendNotification}
-                                startIcon={<Iconify icon="eva:email-fill" />}
-                                sx={{ py: 1.5, fontWeight: 700 }}
-                            >
-                                {notificationLoading ? 'Wait...' : 'Resend Mail'}
-                            </Button>
-                        </Grid>
-                    </Grid>
-                    {transaction.is_refunded && (
-                        <Alert severity="warning" sx={{ mt: 2, borderRadius: 1.5, fontWeight: 600 }}>
-                            This transaction has been refunded.
-                        </Alert>
-                    )}
-                </Box>
+                </DetailPaper>
             </Container>
         </Page>
     );

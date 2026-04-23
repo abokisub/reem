@@ -17,23 +17,18 @@ export default function TransferChargesInt({ setting }) {
     const [palmPayVaCharge, setPalmPayVaCharge] = useState({ type: 'PERCENT', value: 0, cap: 0 });
 
     const UpdateSchema = Yup.object().shape({
-        // 1. Virtual Account Deposit
-        va_deposit_type:  Yup.string().required(),
-        va_deposit_value: Yup.number().required(),
-        va_deposit_cap:   Yup.number().required(),
-        // 2. Settlement Withdrawal Fee
-        payout_bank_type:  Yup.string().required(),
-        payout_bank_value: Yup.number().required(),
-        payout_bank_cap:   Yup.number().required(),
-        // 3. Pay With Bank Transfer (Dynamic Account)
-        transfer_type:  Yup.string().required(),
-        transfer_value: Yup.number().required(),
-        transfer_cap:   Yup.number().required(),
-        // 4. External Transfer (Other Banks)
-        payout_palmpay_type:  Yup.string().required(),
-        payout_palmpay_value: Yup.number().required(),
-        payout_palmpay_cap:   Yup.number().required(),
-        // Settlement Rules
+        va_deposit_type:      Yup.string().required(),
+        va_deposit_value:     Yup.number().required(),
+        va_deposit_cap:       Yup.number().required(),
+        settlement_fee_type:  Yup.string().required(),
+        settlement_fee_value: Yup.number().required(),
+        settlement_fee_cap:   Yup.number().required(),
+        bank_transfer_type:   Yup.string().required(),
+        bank_transfer_value:  Yup.number().required(),
+        bank_transfer_cap:    Yup.number().required(),
+        external_fee_type:    Yup.string().required(),
+        external_fee_value:   Yup.number().required(),
+        external_fee_cap:     Yup.number().required(),
         auto_settlement_enabled:   Yup.boolean(),
         settlement_delay_hours:    Yup.number().min(0.0167).max(168),
         settlement_skip_weekends:  Yup.boolean(),
@@ -43,22 +38,22 @@ export default function TransferChargesInt({ setting }) {
     });
 
     const defaultValues = useMemo(() => ({
-        // 1. Virtual Account Deposit (from /api/secure/discount/other palmpay_va_charge)
+        // VA Deposit — from service_charges.palmpay_va
         va_deposit_type:  (palmPayVaCharge?.type === 'PERCENT' ? 'PERCENTAGE' : palmPayVaCharge?.type) || 'PERCENTAGE',
         va_deposit_value: palmPayVaCharge?.value || 0,
         va_deposit_cap:   palmPayVaCharge?.cap   || 0,
-        // 2. Settlement Withdrawal Fee
-        payout_bank_type:  setting?.payout_bank_charge_type  || 'FLAT',
-        payout_bank_value: setting?.payout_bank_charge_value || 0,
-        payout_bank_cap:   setting?.payout_bank_charge_cap   || 0,
-        // 3. Pay With Bank Transfer (Dynamic Account) — uses transfer_charge fields
-        transfer_type:  setting?.transfer_charge_type  || 'FLAT',
-        transfer_value: setting?.transfer_charge_value || 0,
-        transfer_cap:   setting?.transfer_charge_cap   || 0,
-        // 4. External Transfer (Other Banks) — uses payout_palmpay fields
-        payout_palmpay_type:  setting?.payout_palmpay_charge_type  || 'FLAT',
-        payout_palmpay_value: setting?.payout_palmpay_charge_value || 0,
-        payout_palmpay_cap:   setting?.payout_palmpay_charge_cap   || 0,
+        // Settlement Withdrawal — DB column: payout_palmpay_charge
+        settlement_fee_type:  setting?.payout_palmpay_charge_type  || 'FLAT',
+        settlement_fee_value: setting?.payout_palmpay_charge_value || 0,
+        settlement_fee_cap:   setting?.payout_palmpay_charge_cap   || 0,
+        // Pay With Bank Transfer — DB column: transfer_charge
+        bank_transfer_type:  setting?.transfer_charge_type  || 'FLAT',
+        bank_transfer_value: setting?.transfer_charge_value || 0,
+        bank_transfer_cap:   setting?.transfer_charge_cap   || 0,
+        // External Transfer (Other Banks) — DB column: payout_bank_charge
+        external_fee_type:  setting?.payout_bank_charge_type  || 'FLAT',
+        external_fee_value: setting?.payout_bank_charge_value || 0,
+        external_fee_cap:   setting?.payout_bank_charge_cap   || 0,
         // Settlement Rules
         auto_settlement_enabled:   setting?.auto_settlement_enabled ?? true,
         settlement_delay_hours:    setting?.settlement_delay_hours != null ? parseFloat(setting.settlement_delay_hours) : 24,
@@ -72,7 +67,6 @@ export default function TransferChargesInt({ setting }) {
     const methods = useForm({ resolver: yupResolver(UpdateSchema), defaultValues });
     const { reset, setError, handleSubmit, formState: { errors, isSubmitting } } = methods;
 
-    // Load VA charge from /other endpoint
     useEffect(() => {
         axios.get('/api/secure/discount/other').then(res => {
             if (res.data.status === 'success') {
@@ -88,18 +82,21 @@ export default function TransferChargesInt({ setting }) {
 
     const onSubmit = async (data) => {
         try {
-            // Save transfer/settlement charges
             await axios.post(`/api/secure/discount/other/${AccessToken}/habukhan/secure`, {
                 id: AccessToken,
-                transfer_type:  data.transfer_type,
-                transfer_value: data.transfer_value,
-                transfer_cap:   data.transfer_cap,
-                payout_bank_type:  data.payout_bank_type,
-                payout_bank_value: data.payout_bank_value,
-                payout_bank_cap:   data.payout_bank_cap,
-                payout_palmpay_type:  data.payout_palmpay_type,
-                payout_palmpay_value: data.payout_palmpay_value,
-                payout_palmpay_cap:   data.payout_palmpay_cap,
+                // Settlement Withdrawal → saves to payout_palmpay_charge columns
+                payout_palmpay_type:  data.settlement_fee_type,
+                payout_palmpay_value: data.settlement_fee_value,
+                payout_palmpay_cap:   data.settlement_fee_cap,
+                // Pay With Bank Transfer → saves to transfer_charge columns
+                transfer_type:  data.bank_transfer_type,
+                transfer_value: data.bank_transfer_value,
+                transfer_cap:   data.bank_transfer_cap,
+                // External Transfer → saves to payout_bank_charge columns
+                payout_bank_type:  data.external_fee_type,
+                payout_bank_value: data.external_fee_value,
+                payout_bank_cap:   data.external_fee_cap,
+                // Settlement Rules
                 auto_settlement_enabled:   data.auto_settlement_enabled,
                 settlement_delay_hours:    data.settlement_delay_hours,
                 settlement_skip_weekends:  data.settlement_skip_weekends,
@@ -108,7 +105,6 @@ export default function TransferChargesInt({ setting }) {
                 settlement_minimum_amount: data.settlement_minimum_amount,
             });
 
-            // Save VA deposit charge separately
             await axios.post(`/api/secure/discount/service/${AccessToken}/habukhan/secure`, {
                 id: AccessToken,
                 palmpay_charge: {
@@ -148,45 +144,23 @@ export default function TransferChargesInt({ setting }) {
             <Grid container spacing={3}>
                 <Grid item xs={12}>
                     {!!errors.afterSubmit && <Alert severity="error">{errors.afterSubmit.message}</Alert>}
-
                     <Grid container spacing={3}>
-                        {/* 1. Virtual Account Deposit */}
-                        <ChargeCard
-                            title="Virtual Account Deposit Fee"
+                        <ChargeCard title="Virtual Account Deposit Fee"
                             subtitle="Fee charged when aggregators receive money via their virtual account"
-                            typeName="va_deposit_type"
-                            valueName="va_deposit_value"
-                            capName="va_deposit_cap"
-                        />
+                            typeName="va_deposit_type" valueName="va_deposit_value" capName="va_deposit_cap" />
 
-                        {/* 2. Settlement Withdrawal Fee */}
-                        <ChargeCard
-                            title="Settlement Withdrawal Fee"
+                        <ChargeCard title="Settlement Withdrawal Fee"
                             subtitle="Fee deducted when settling aggregator wallet balance to their bank"
-                            typeName="payout_bank_type"
-                            valueName="payout_bank_value"
-                            capName="payout_bank_cap"
-                        />
+                            typeName="settlement_fee_type" valueName="settlement_fee_value" capName="settlement_fee_cap" />
 
-                        {/* 3. Pay With Bank Transfer (Dynamic Account) */}
-                        <ChargeCard
-                            title="Pay With Bank Transfer Fee"
+                        <ChargeCard title="Pay With Bank Transfer Fee"
                             subtitle="Fee for dynamic virtual account checkout (one-time account per order)"
-                            typeName="transfer_type"
-                            valueName="transfer_value"
-                            capName="transfer_cap"
-                        />
+                            typeName="bank_transfer_type" valueName="bank_transfer_value" capName="bank_transfer_cap" />
 
-                        {/* 4. External Transfer (Other Banks) */}
-                        <ChargeCard
-                            title="External Transfer (Other Banks)"
+                        <ChargeCard title="External Transfer (Other Banks)"
                             subtitle="Fee charged when aggregators send money to other Nigerian banks"
-                            typeName="payout_palmpay_type"
-                            valueName="payout_palmpay_value"
-                            capName="payout_palmpay_cap"
-                        />
+                            typeName="external_fee_type" valueName="external_fee_value" capName="external_fee_cap" />
 
-                        {/* Settlement Rules */}
                         <Grid item xs={12}>
                             <Card sx={{ p: 3 }}>
                                 <Typography variant="h6" sx={{ mb: 1 }}>Settlement Rules</Typography>
@@ -198,8 +172,7 @@ export default function TransferChargesInt({ setting }) {
                                         <Stack spacing={3}>
                                             <RHFSwitch name="auto_settlement_enabled" label="Enable Auto Settlement" />
                                             <RHFTextField name="settlement_delay_hours" label="Settlement Delay (Hours)" type="number"
-                                                inputProps={{ step: '0.0001' }}
-                                                helperText="0.0167 = 1min, 1 = 1hr, 24 = 1day" />
+                                                inputProps={{ step: '0.0001' }} helperText="0.0167 = 1min, 1 = 1hr, 24 = 1day" />
                                             <RHFTextField name="settlement_time" label="Settlement Time (HH:MM:SS)"
                                                 placeholder="03:00:00" helperText="Time of day to process (e.g. 03:00:00)" />
                                         </Stack>
@@ -216,7 +189,6 @@ export default function TransferChargesInt({ setting }) {
                             </Card>
                         </Grid>
                     </Grid>
-
                     <Stack alignItems="flex-end" sx={{ mt: 3 }}>
                         <LoadingButton size="large" type="submit" variant="contained" loading={isSubmitting}>
                             Save All Charges
