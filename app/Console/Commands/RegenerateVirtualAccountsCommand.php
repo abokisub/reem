@@ -59,15 +59,15 @@ class RegenerateVirtualAccountsCommand extends Command
         $this->newLine();
 
         // Step 1: Verify company
-        $this->task('Verifying company', function () use ($companyId, &$company) {
-            $company = Company::find($companyId);
-            return $company !== null;
-        });
-
+        $this->info('Verifying company...');
+        $company = Company::find($companyId);
+        
         if (!$company) {
             $this->error("Company with ID {$companyId} not found!");
             return 1;
         }
+        
+        $this->info('✓ Company verified');
 
         $this->line("Company: {$company->name}");
         $this->line("Status: {$company->status}");
