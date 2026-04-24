@@ -41,12 +41,18 @@ class KycPoolController extends Controller
         // Company KYC health
         $companies = Company::whereNotNull('director_nin')
             ->orWhereNotNull('director_bvn')
-            ->get(['id', 'name', 'director_nin', 'director_bvn', 'bvn', 'nin', 'status']);
+            ->get(['id', 'name', 'director_nin', 'director_bvn', 'bvn', 'nin', 'status', 'kyc_refreshed_at']);
 
         $companyHealth = $companies->map(function ($c) {
-            $vaCount = VirtualAccount::where('company_id', $c->id)
-                ->whereNotNull('palmpay_account_number')
-                ->count();
+            // Count VAs created since last KYC refresh (or all VAs if never refreshed)
+            $vaQuery = VirtualAccount::where('company_id', $c->id)
+                ->whereNotNull('palmpay_account_number');
+            
+            if ($c->kyc_refreshed_at) {
+                $vaQuery->where('created_at', '>=', $c->kyc_refreshed_at);
+            }
+            
+            $vaCount = $vaQuery->count();
             $maxLimit = 130;
             $pct = $maxLimit > 0 ? round(($vaCount / $maxLimit) * 100) : 0;
 
@@ -70,6 +76,7 @@ class KycPoolController extends Controller
                 'max_limit'    => $maxLimit,
                 'usage_pct'    => $pct,
                 'status'       => $status,
+                'kyc_refreshed_at' => $c->kyc_refreshed_at,
             ];
         });
 
