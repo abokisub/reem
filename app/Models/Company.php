@@ -71,6 +71,9 @@ class Company extends Model
         'verification_data',
         'identity_details',
         'is_active',
+        'kyc_method_blacklist',
+        'kyc_last_updated',
+        'preferred_kyc_method',
     ];
 
     protected $casts = [
