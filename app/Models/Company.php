@@ -74,6 +74,7 @@ class Company extends Model
         'kyc_method_blacklist',
         'kyc_last_updated',
         'preferred_kyc_method',
+        'kyc_refreshed_at',
     ];
 
     protected $casts = [
@@ -97,6 +98,7 @@ class Company extends Model
         'shareholders' => 'array',
         'dns_resolution_issues' => 'array',
         'dns_last_checked_at' => 'datetime',
+        'kyc_refreshed_at' => 'datetime',
     ];
 
     protected $hidden = [

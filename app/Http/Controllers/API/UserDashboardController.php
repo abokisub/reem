@@ -110,6 +110,19 @@ class UserDashboardController extends Controller
         }
         $todayTransactions = $todayTransactionsQuery->count();
 
+        $pendingTransactionsQuery = DB::table('transactions')
+            ->where('status', 'pending');
+
+        if (!$isAdmin) {
+            $pendingTransactionsQuery->where('company_id', $user->active_company_id);
+        }
+
+        if ($startDate && $endDate) {
+            $pendingTransactionsQuery->whereBetween('created_at', [$startDate, $endDate]);
+        }
+
+        $pendingTransactionsCount = (int) $pendingTransactionsQuery->count();
+
         // Filtered revenue (based on selected filter) — use separate queries to avoid clone issues
         $filteredRevenueQuery = DB::table('transactions')
             ->where('type', 'credit')
@@ -284,6 +297,7 @@ class UserDashboardController extends Controller
                 'today_revenue' => $todayRevenue,
                 'total_transactions' => $totalTransactions,
                 'today_transactions' => $todayTransactions,
+                'pending_transactions_count' => $pendingTransactionsCount,
                 'pending_settlement' => $pendingSettlement,
                 'system_wallet_balance' => $totalSystemBalance,
                 'total_companies' => $totalCompanies,
