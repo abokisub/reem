@@ -701,14 +701,18 @@ class VirtualAccountService
             return !in_array($method['method_key'], $blacklistedMethods);
         });
         
-        // If no viable methods (all blacklisted), use all methods (reset blacklist)
+        // If no viable methods (all blacklisted), throw so the caller can escalate to global pool
+        if (empty($availableKycMethods)) {
+            throw new \Exception('No company KYC methods configured');
+        }
+
         if (empty($viableKycMethods)) {
-            Log::warning('VirtualAccount: All KYC methods blacklisted, resetting blacklist', [
+            Log::warning('VirtualAccount: All company KYC methods blacklisted, escalating to global pool', [
                 'company_id' => $companyId,
-                'blacklisted_methods' => $blacklistedMethods
+                'blacklisted_methods' => $blacklistedMethods,
+                'total_available' => count($availableKycMethods),
             ]);
-            $viableKycMethods = $availableKycMethods;
-            $this->resetKycBlacklist($company);
+            throw new \Exception('All company KYC methods are blacklisted');
         }
         
         // Sort by success rate and preference
@@ -858,35 +862,55 @@ class VirtualAccountService
         if (!$company->kyc_method_blacklist) {
             return [];
         }
-        
+
         $blacklist = json_decode($company->kyc_method_blacklist, true) ?? [];
-        
+
+        // Guard: if the stored value is not a proper method=>timestamp map, wipe it
+        // (handles legacy corruption where numeric keys or bare method names were stored)
+        $isValidFormat = !empty($blacklist) && array_keys($blacklist) !== range(0, count($blacklist) - 1);
+        if (!$isValidFormat) {
+            Log::warning('VirtualAccount: Corrupt kyc_method_blacklist detected, clearing', [
+                'company_id' => $company->id,
+                'raw' => $company->kyc_method_blacklist,
+            ]);
+            $company->update(['kyc_method_blacklist' => null]);
+            return [];
+        }
+
         // Remove methods that were blacklisted more than 24 hours ago (auto-recovery)
         $cutoffTime = now()->subHours(24);
         $activeBlacklist = [];
-        
+
         foreach ($blacklist as $method => $timestamp) {
-            if (strtotime($timestamp) > $cutoffTime->timestamp) {
+            $ts = strtotime($timestamp);
+            // Skip entries where timestamp is invalid or expired
+            if ($ts !== false && $ts > $cutoffTime->timestamp) {
                 $activeBlacklist[] = $method;
             }
         }
-        
+
         return $activeBlacklist;
     }
-    
+
     /**
      * Add a KYC method to blacklist (when it fails)
      */
     private function blacklistKycMethod($company, $methodKey, $errorMessage)
     {
-        $blacklist = json_decode($company->kyc_method_blacklist, true) ?? [];
+        // Always start from a clean method=>timestamp map (never numeric-keyed array)
+        $raw = $company->kyc_method_blacklist;
+        $blacklist = $raw ? (json_decode($raw, true) ?? []) : [];
+
+        // Drop any corrupted numeric-keyed entries before adding
+        $blacklist = array_filter($blacklist, fn($v, $k) => is_string($k) && !is_numeric($k), ARRAY_FILTER_USE_BOTH);
+
         $blacklist[$methodKey] = now()->toISOString();
-        
+
         $company->update([
             'kyc_method_blacklist' => json_encode($blacklist),
             'kyc_last_updated' => now()
         ]);
-        
+
         Log::warning('VirtualAccount: KYC method blacklisted', [
             'company_id' => $company->id,
             'method' => $methodKey,
