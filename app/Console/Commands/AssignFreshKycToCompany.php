@@ -133,9 +133,8 @@ class AssignFreshKycToCompany extends Command
 
             DB::beginTransaction();
             try {
-                $company->update([
-                    $fieldName => $selectedKyc->kyc_number
-                ]);
+                $company->$fieldName = $selectedKyc->kyc_number;
+                $company->save();
 
                 $this->info("\n✓ KYC assigned successfully!");
                 

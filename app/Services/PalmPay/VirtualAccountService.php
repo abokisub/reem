@@ -135,8 +135,6 @@ class VirtualAccountService
                 return $existing;
             }
 
-            DB::beginTransaction();
-
             // Fetch company first (needed for KYC logic)
             $company = \App\Models\Company::find($companyId);
             if (!$company) {
@@ -224,6 +222,8 @@ class VirtualAccountService
             // Call PalmPay API with automatic retry on KYC failures + Global KYC tracking
             $response = $this->callPalmPayWithKycFallback($requestData, $company, $companyId, $globalKycId);
 
+            DB::beginTransaction();
+
             // Extract account details from response
             $accountNumber = $response['data']['virtualAccountNo'] ?? null;
             $accountName = $response['data']['virtualAccountName'] ?? $customerNameOnly;
@@ -294,7 +294,9 @@ class VirtualAccountService
             return $virtualAccount;
 
         } catch (\Exception $e) {
-            DB::rollBack();
+            if (\DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
 
             Log::error('Failed to Create Virtual Account', [
                 'company_id' => $companyId,
