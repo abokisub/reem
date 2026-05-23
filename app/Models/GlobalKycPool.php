@@ -137,7 +137,8 @@ class GlobalKycPool extends Model
      */
     public function scopeHighestSuccessFirst($query)
     {
-        return $query->orderByRaw('(success_count / GREATEST(usage_count, 1)) DESC')
+        return $query->orderByRaw('CASE WHEN usage_count = 0 THEN 1 ELSE 0 END DESC')
+            ->orderByRaw('(success_count / GREATEST(usage_count, 1)) DESC')
             ->orderBy('usage_count', 'asc');
     }
 }
