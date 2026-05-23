@@ -186,25 +186,17 @@ class AssignFreshKycToCompany extends Command
 
                 foreach ($companyUsers as $companyUser) {
                     try {
-                        // Get user details
-                        $user = DB::table('users')->find($companyUser->user_id);
-                        if (!$user) {
-                            $failCount++;
-                            $progressBar->advance();
-                            continue;
-                        }
-
-                        // Create virtual account
+                        // Create virtual account using company_user details
                         $customerData = [
-                            'name' => $user->name ?? 'Customer',
-                            'email' => $user->email,
-                            'phone' => $user->phone,
+                            'name' => trim("{$companyUser->first_name} {$companyUser->last_name}"),
+                            'email' => $companyUser->email,
+                            'phone' => $companyUser->phone,
                             'account_type' => 'static'
                         ];
 
                         $virtualAccount = $this->virtualAccountService->createVirtualAccount(
                             $companyId,
-                            $user->id,
+                            $companyUser->uuid,
                             $customerData,
                             '100033',
                             $companyUser->id
@@ -216,7 +208,7 @@ class AssignFreshKycToCompany extends Command
                         $failCount++;
                         Log::error('AssignFreshKyc: Failed to regenerate virtual account', [
                             'company_id' => $companyId,
-                            'user_id' => $companyUser->user_id,
+                            'user_id' => $companyUser->uuid,
                             'error' => $e->getMessage()
                         ]);
                     }
