@@ -47,8 +47,8 @@ class TransferService
             if (!$senderWallet) {
                 throw new Exception("Sender wallet not found.");
             }
-            if ($senderWallet->balance < $amount) {
-                throw new Exception("Insufficient specific funds.");
+            if ($senderWallet->availableBalance() < $amount) {
+                throw new Exception("Insufficient funds." . ($senderWallet->restricted_balance > 0 ? " ₦" . number_format($senderWallet->restricted_balance, 2) . " is restricted." : ""));
             }
 
             // 2. Lock Receiver Wallet
@@ -143,8 +143,8 @@ class TransferService
                 throw new Exception("Wallet not found.");
             }
 
-            if ($wallet->balance < $totalDeduction) {
-                throw new Exception("Insufficient funds for transfer + fee.");
+            if ($wallet->availableBalance() < $totalDeduction) {
+                throw new Exception("Insufficient funds for transfer + fee." . ($wallet->restricted_balance > 0 ? " ₦" . number_format($wallet->restricted_balance, 2) . " is restricted." : ""));
             }
 
             // 3. Create Pending Transaction

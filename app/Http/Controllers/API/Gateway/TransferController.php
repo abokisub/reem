@@ -214,7 +214,8 @@ class TransferController extends Controller
                     'balance' => $wallet->balance,
                     'ledgerBalance' => $wallet->ledger_balance,
                     'pendingBalance' => $wallet->pending_balance,
-                    'availableBalance' => $wallet->balance - $wallet->pending_balance,
+                    'restrictedBalance' => $wallet->restricted_balance,
+                    'availableBalance' => $wallet->availableBalance(),
                     'currency' => $wallet->currency,
                 ]
             ], 200);

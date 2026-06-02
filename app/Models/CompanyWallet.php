@@ -13,12 +13,14 @@ class CompanyWallet extends Model
         'company_id',
         'currency',
         'balance',
+        'restricted_balance',
         'ledger_balance',
         'pending_balance',
     ];
 
     protected $casts = [
         'balance' => 'decimal:2',
+        'restricted_balance' => 'decimal:2',
         'ledger_balance' => 'decimal:2',
         'pending_balance' => 'decimal:2',
     ];
@@ -32,6 +34,16 @@ class CompanyWallet extends Model
     }
 
     /**
+     * Get available balance (total balance minus restricted/frozen amount)
+     * This is the amount the company can actually withdraw.
+     */
+    public function availableBalance(): float
+    {
+        $available = (float) $this->balance - (float) $this->restricted_balance;
+        return max(0, $available);
+    }
+
+    /**
      * Credit the wallet
      */
     public function credit(float $amount): void
@@ -42,10 +54,15 @@ class CompanyWallet extends Model
 
     /**
      * Debit the wallet
+     * Checks against available balance (balance - restricted_balance)
      */
     public function debit(float $amount): void
     {
-        if ($this->balance < $amount) {
+        if ($this->availableBalance() < $amount) {
+            $restricted = (float) $this->restricted_balance;
+            if ($restricted > 0) {
+                throw new \Exception("Insufficient balance. ₦" . number_format($restricted, 2) . " is restricted due to ongoing investigation.");
+            }
             throw new \Exception('Insufficient balance');
         }
 

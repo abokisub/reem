@@ -491,8 +491,8 @@ class MerchantApiController extends Controller
             return $this->respond(false, 'Wallet not found', [], 404);
         }
 
-        if ($companyWallet->balance < $totalDeduction && !$isTest)
-            return $this->respond(false, 'Insufficient balance. Required: ' . $totalDeduction . ' (Amount: ' . $request->amount . ' + Fee: ' . $transferFee . ')', [], 400);
+        if ($companyWallet->availableBalance() < $totalDeduction && !$isTest)
+            return $this->respond(false, 'Insufficient balance. Required: ' . $totalDeduction . ' (Amount: ' . $request->amount . ' + Fee: ' . $transferFee . ')' . ($companyWallet->restricted_balance > 0 ? ' [₦' . number_format($companyWallet->restricted_balance, 2) . ' restricted]' : ''), [], 400);
 
         $internalRef = ($isTest ? 'TS_' : 'PWV_OUT_') . strtoupper(Str::random(10));
 

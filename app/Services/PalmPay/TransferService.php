@@ -80,8 +80,12 @@ class TransferService
                     $fee = (float) $feeResults['fee'];
                     $totalAmount = $amount + $fee;
 
-                    // 2. Strict Balance Check
-                    if ($wallet->balance < $totalAmount) {
+                    // 2. Strict Balance Check (respects restricted_balance for fraud holds)
+                    if ($wallet->availableBalance() < $totalAmount) {
+                        $restricted = (float) $wallet->restricted_balance;
+                        if ($restricted > 0) {
+                            throw new \Exception("Insufficient balance. ₦" . number_format($restricted, 2) . " is restricted due to ongoing investigation.");
+                        }
                         throw new \Exception('Insufficient balance to cover amount and fees');
                     }
 

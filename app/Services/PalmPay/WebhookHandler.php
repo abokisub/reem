@@ -65,7 +65,7 @@ class WebhookHandler
             $webhook->update(['verified' => true]);
 
             // 3. Process within transaction
-            return DB::transaction(function () use ($webhook, $payload) {
+            $result = DB::transaction(function () use ($webhook, $payload) {
                 $result = $this->processWebhook($webhook, $payload);
 
                 $webhook->update([
@@ -77,6 +77,12 @@ class WebhookHandler
 
                 return $result;
             });
+
+            if (isset($result['success']) && $result['success']) {
+                $this->broadcastToKobopoint($payload, $signature);
+            }
+
+            return $result;
 
         } catch (\Exception $e) {
             $retryCount = $webhook->retry_count + 1;
@@ -669,5 +675,39 @@ class WebhookHandler
             'success' => true,
             'message' => 'Event logged but not processed'
         ];
+    }
+
+    /**
+     * Broadcast processed PalmPay webhook to Kobopoint shadow receiver
+     *
+     * @param array $payload
+     * @param string|null $signature
+     * @return void
+     */
+    private function broadcastToKobopoint(array $payload, ?string $signature): void
+    {
+        try {
+            $url = config('services.kobopoint.webhook_url');
+            if (!$url) {
+                return;
+            }
+
+            Log::info('Broadcasting PalmPay webhook from WebhookHandler to Kobopoint shadow', ['url' => $url]);
+
+            \Illuminate\Support\Facades\Http::withHeaders([
+                'X-PalmPay-Signature' => $signature,
+                'Sign' => $signature,
+                'Signature' => $signature,
+                'X-Shadow-Broadcast' => 'true',
+            ])
+            ->timeout(5) // Fast timeout: do not block Pointwave response
+            ->post($url, $payload);
+
+            Log::info('PalmPay Webhook Broadcasted from WebhookHandler to Kobopoint Shadow successfully');
+        } catch (\Exception $e) {
+            Log::error('PalmPay Webhook Broadcast from WebhookHandler to Kobopoint Failed', [
+                'error' => $e->getMessage()
+            ]);
+        }
     }
 }

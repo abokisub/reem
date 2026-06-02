@@ -62,8 +62,8 @@ class UserWithdrawalController extends Controller
             ->where('currency', 'NGN')
             ->first();
 
-        if (!$wallet || $wallet->balance < $request->amount) {
-            return $this->error('Insufficient balance', 400);
+        if (!$wallet || $wallet->availableBalance() < $request->amount) {
+            return $this->error('Insufficient balance' . ($wallet && $wallet->restricted_balance > 0 ? '. ₦' . number_format($wallet->restricted_balance, 2) . ' is restricted.' : ''), 400);
         }
 
         // Initiate transfer using TransferService

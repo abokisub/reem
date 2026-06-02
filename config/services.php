@@ -68,4 +68,13 @@ return [
         'sandbox_mode' => env('VTPASS_SANDBOX', false),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Kobopoint Outbound Broadcast Configuration
+    |--------------------------------------------------------------------------
+    */
+    'kobopoint' => [
+        'webhook_url' => env('KOBOPOINT_WEBHOOK_URL', 'https://app.kobopoint.com/api/v1/webhook/palmpay'),
+    ],
+
 ];
