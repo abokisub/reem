@@ -1004,6 +1004,21 @@ class VirtualAccountService
             // Check if this is a KYC-related error that we can retry with different method
             if ($this->isKycRelatedError($errorMessage) && $attempt < $maxAttempts) {
                 
+                // If it's a global duplicate limit (AC100009), kill it permanently globally
+                if (str_contains($errorMessage, 'AC100009') || str_contains($errorMessage, 'licenseNumber duplicate')) {
+                    $licenseNumberToCheck = $requestData['licenseNumber'] ?? '';
+                    if (!empty($licenseNumberToCheck)) {
+                        DB::table('global_kyc_pool')
+                            ->where('kyc_number', $licenseNumberToCheck)
+                            ->update(['is_active' => false]);
+                        
+                        Log::warning('Global KYC Deactivated due to AC100009 (PalmPay limit reached)', [
+                            'kyc_number' => substr($licenseNumberToCheck, 0, 5) . '***',
+                            'company_id' => $companyId
+                        ]);
+                    }
+                }
+
                 // Blacklist the current KYC method using the FIXED exact source detection
                 $currentKycSource = $this->determineExactKycSource($company, $requestData);
                 if ($currentKycSource) {
