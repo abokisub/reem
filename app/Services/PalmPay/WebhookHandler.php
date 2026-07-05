@@ -43,82 +43,98 @@ class WebhookHandler
      */
     public function handle(array $payload, ?string $signature = null): array
     {
-        // 1. Store webhook (OUTSIDE transaction to persist even if processing fails)
-        $webhook = PalmPayWebhook::create([
-            'event_type' => $payload['eventType'] ?? 'unknown',
-            'palmpay_reference' => $payload['reference'] ?? null,
-            'payload' => $payload,
-            'signature' => $signature,
-            'verified' => false,
-            'processed' => false,
-            'status' => 'pending',
-        ]);
+        // 1. Obtain atomic lock to prevent race conditions from duplicate webhooks
+        $reference = $payload['orderNo'] ?? $payload['reference'] ?? null;
+        $lockName = 'palmpay_webhook_' . ($reference ?? md5(json_encode($payload)));
+        
+        $lock = \Illuminate\Support\Facades\Cache::lock($lockName, 60);
+        
+        if (!$lock->get()) {
+            Log::info('Webhook Ignored: Already being processed (Lock acquired)', ['reference' => $reference]);
+            return ['success' => true, 'message' => 'Webhook already processing'];
+        }
 
         try {
-            // 2. Verify signature
-            if ($signature && !$this->signature->verifyWebhookSignature($payload, $signature)) {
-                $webhook->update(['status' => 'failed', 'processing_error' => 'Invalid signature']);
-                Log::warning('Invalid PalmPay Webhook Signature', ['webhook_id' => $webhook->id]);
-                return ['success' => false, 'message' => 'Invalid signature'];
-            }
+            // 2. Store webhook (OUTSIDE transaction to persist even if processing fails)
+            $webhook = PalmPayWebhook::create([
+                'event_type' => $payload['eventType'] ?? 'unknown',
+                'palmpay_reference' => $payload['reference'] ?? null,
+                'payload' => $payload,
+                'signature' => $signature,
+                'verified' => false,
+                'processed' => false,
+                'status' => 'pending',
+            ]);
 
-            $webhook->update(['verified' => true]);
+            try {
+                // 3. Verify signature
+                if ($signature && !$this->signature->verifyWebhookSignature($payload, $signature)) {
+                    $webhook->update(['status' => 'failed', 'processing_error' => 'Invalid signature']);
+                    Log::warning('Invalid PalmPay Webhook Signature', ['webhook_id' => $webhook->id]);
+                    return ['success' => false, 'message' => 'Invalid signature'];
+                }
 
-            // 3. Process within transaction
-            $result = DB::transaction(function () use ($webhook, $payload) {
-                $result = $this->processWebhook($webhook, $payload);
+                $webhook->update(['verified' => true]);
 
-                $webhook->update([
-                    'processed' => true,
-                    'processed_at' => now(),
-                    'status' => 'processed',
-                    'processing_error' => null,
-                ]);
+                // 4. Process within transaction
+                $result = DB::transaction(function () use ($webhook, $payload) {
+                    $result = $this->processWebhook($webhook, $payload);
+
+                    $webhook->update([
+                        'processed' => true,
+                        'processed_at' => now(),
+                        'status' => 'processed',
+                        'processing_error' => null,
+                    ]);
+
+                    return $result;
+                });
+
+                if (isset($result['success']) && $result['success']) {
+                    $this->broadcastToKobopoint($payload, $signature);
+                }
 
                 return $result;
-            });
 
-            if (isset($result['success']) && $result['success']) {
-                $this->broadcastToKobopoint($payload, $signature);
+            } catch (\Exception $e) {
+                $retryCount = $webhook->retry_count + 1;
+                $nextRetry = now()->addMinutes(pow(2, $retryCount) * 5); // Exponential backoff: 10m, 20m, 40m...
+
+                $webhook->update([
+                    'status' => $retryCount >= 5 ? 'exhausted' : 'failed',
+                    'retry_count' => $retryCount,
+                    'next_retry_at' => $retryCount >= 5 ? null : $nextRetry,
+                    'processing_error' => $e->getMessage(),
+                ]);
+
+                // Log to FailedTransaction for admin visibility if it's a critical error
+                if ($retryCount >= 3) {
+                    \App\Models\FailedTransaction::updateOrCreate(
+                        ['transaction_reference' => $webhook->palmpay_reference],
+                        [
+                            'type' => 'webhook_failure',
+                            'amount' => ($payload['orderAmount'] ?? 0) / 100,
+                            'payload' => $payload,
+                            'failure_reason' => $e->getMessage(),
+                            'status' => 'pending'
+                        ]
+                    );
+                }
+
+                Log::error('Webhook Processing Failed', [
+                    'webhook_id' => $webhook->id,
+                    'error' => $e->getMessage(),
+                    'retry_count' => $retryCount
+                ]);
+
+                return [
+                    'success' => false,
+                    'message' => $e->getMessage()
+                ];
             }
-
-            return $result;
-
-        } catch (\Exception $e) {
-            $retryCount = $webhook->retry_count + 1;
-            $nextRetry = now()->addMinutes(pow(2, $retryCount) * 5); // Exponential backoff: 10m, 20m, 40m...
-
-            $webhook->update([
-                'status' => $retryCount >= 5 ? 'exhausted' : 'failed',
-                'retry_count' => $retryCount,
-                'next_retry_at' => $retryCount >= 5 ? null : $nextRetry,
-                'processing_error' => $e->getMessage(),
-            ]);
-
-            // Log to FailedTransaction for admin visibility if it's a critical error
-            if ($retryCount >= 3) {
-                \App\Models\FailedTransaction::updateOrCreate(
-                    ['transaction_reference' => $webhook->palmpay_reference],
-                    [
-                        'type' => 'webhook_failure',
-                        'amount' => ($payload['orderAmount'] ?? 0) / 100,
-                        'payload' => $payload,
-                        'failure_reason' => $e->getMessage(),
-                        'status' => 'pending'
-                    ]
-                );
-            }
-
-            Log::error('Webhook Processing Failed', [
-                'webhook_id' => $webhook->id,
-                'error' => $e->getMessage(),
-                'retry_count' => $retryCount
-            ]);
-
-            return [
-                'success' => false,
-                'message' => $e->getMessage()
-            ];
+        } finally {
+            // Release the lock
+            $lock->release();
         }
     }
 
@@ -176,7 +192,6 @@ class WebhookHandler
             // --- STRICT IDEMPOTENCY CHECK ---
             // 1. Check if this specific webhook ORDER has already resulted in a successful transaction
             $existingTransaction = Transaction::where('palmpay_reference', $palmpayReference)
-                ->where('provider', 'palmpay')
                 ->first();
 
             if ($existingTransaction) {
