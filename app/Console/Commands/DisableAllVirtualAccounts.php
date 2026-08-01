@@ -37,8 +37,8 @@ class DisableAllVirtualAccounts extends Command
 
         $this->info('Starting mass deactivation of Virtual Accounts...');
 
-        $totalAccounts = VirtualAccount::where('status', 'active')->count();
-        $this->info("Found {$totalAccounts} active virtual accounts to disable.");
+        $totalAccounts = VirtualAccount::count();
+        $this->info("Found {$totalAccounts} virtual accounts to disable on PalmPay.");
 
         if ($totalAccounts === 0) {
             $this->info('No active virtual accounts found. Exiting.');
@@ -51,25 +51,25 @@ class DisableAllVirtualAccounts extends Command
         $successCount = 0;
         $failCount = 0;
 
-        // Process in chunks using chunkById to avoid skipping records while modifying the filtered column
-        VirtualAccount::where('status', 'active')->chunkById(100, function ($accounts) use ($virtualAccountService, $bar, &$successCount, &$failCount) {
+        // Process in chunks using chunkById to avoid skipping records
+        VirtualAccount::chunkById(100, function ($accounts) use ($virtualAccountService, $bar, &$successCount, &$failCount) {
             foreach ($accounts as $va) {
                 try {
                     $accountNumber = $va->palmpay_account_number ?? $va->account_number;
                     
                     if ($accountNumber) {
-                        // Call PalmPay to delete the account
-                        $response = $virtualAccountService->deleteVirtualAccount($accountNumber);
+                        // Call PalmPay to strictly DISABLE the account so NIBSS rejects it
+                        $response = $virtualAccountService->updateVirtualAccountStatus($accountNumber, 'Disabled');
                         
                         if (!$response['success']) {
-                            Log::warning("Failed to delete virtual account on PalmPay: {$accountNumber}", ['response' => $response]);
+                            Log::warning("Failed to disable virtual account on PalmPay: {$accountNumber}", ['response' => $response]);
                         }
                     }
 
                     // Always update local database status to inactive to prevent deposits
                     $va->update([
                         'status' => 'inactive',
-                        'palmpay_status' => 'inactive'
+                        'palmpay_status' => 'Disabled'
                     ]);
 
                     $successCount++;
