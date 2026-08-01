@@ -51,8 +51,8 @@ class DisableAllVirtualAccounts extends Command
         $successCount = 0;
         $failCount = 0;
 
-        // Process in chunks to avoid memory exhaustion
-        VirtualAccount::where('status', 'active')->chunk(100, function ($accounts) use ($virtualAccountService, $bar, &$successCount, &$failCount) {
+        // Process in chunks using chunkById to avoid skipping records while modifying the filtered column
+        VirtualAccount::where('status', 'active')->chunkById(100, function ($accounts) use ($virtualAccountService, $bar, &$successCount, &$failCount) {
             foreach ($accounts as $va) {
                 try {
                     $accountNumber = $va->palmpay_account_number ?? $va->account_number;
